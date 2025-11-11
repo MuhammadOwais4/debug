@@ -3,9 +3,6 @@ import axios from "axios"
 const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 // const API_BASE_URL = "https://stock-management-system-lime.vercel.app/api"
 
-
-
-
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
