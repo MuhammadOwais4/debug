@@ -99,6 +99,8 @@ export default function TrialBalance() {
   const [searchTerm, setSearchTerm] = useState("")
   const [accounts, setAccounts] = useState([])
   const [error, setError] = useState(null)
+  const [salesData, setSalesData] = useState([])
+  const [purchasesData, setPurchasesData] = useState([])
 
   // Excel data states
   const [showExcelData, setShowExcelData] = useState(false)
@@ -112,13 +114,14 @@ export default function TrialBalance() {
 
   useEffect(() => {
     loadAccounts()
+    loadSalesandPurchases()
   }, [])
 
   useEffect(() => {
-    if (accounts.length > 0) {
+    if (accounts.length > 0 && salesData.length > 0 && purchasesData.length > 0) {
       calculateTrialBalance()
     }
-  }, [startDate, endDate, accounts])
+  }, [startDate, endDate, accounts, salesData, purchasesData])
 
   useEffect(() => {
     const onVoucherChanged = (e) => {
@@ -132,7 +135,7 @@ export default function TrialBalance() {
         window.removeEventListener("voucher:changed", onVoucherChanged)
       }
     }
-  }, [startDate, endDate, accounts])
+  }, [startDate, endDate, accounts, salesData, purchasesData])
 
   useEffect(() => {
     if (saveSuccess) {
@@ -198,22 +201,31 @@ export default function TrialBalance() {
     }
   }
 
-const loadSalesandProducts = async () => {
-  try {
-    const [salesResponse, productsResponse] = await Promise.all([
-      ApiHandler.getSales(),
-      ApiHandler.getProducts(),
-    ])
+  const loadSalesandPurchases = async () => {
+    try {
+      const [salesResponse, purchasesResponse] = await Promise.all([
+        ApiHandler.getSales(),
+        ApiHandler.getProducts(),
+      ])
 
-    console.log(salesResponse.data)
-    console.log(productsResponse.data)
-  } catch (error) {
-    console.log("Error loading sales:", error)
+      setSalesData(salesResponse.data || [])
+      setPurchasesData(purchasesResponse.data || [])
+      
+      console.log("=== SALES DATA ===")
+      console.log("Total sales:", salesResponse.data?.length)
+      if (salesResponse.data && salesResponse.data.length > 0) {
+        console.log("Sample sale:", salesResponse.data[0])
+      }
+      
+      console.log("\n=== PURCHASES DATA ===")
+      console.log("Total purchases:", purchasesResponse.data?.length)
+      if (purchasesResponse.data && purchasesResponse.data.length > 0) {
+        console.log("Sample purchase:", purchasesResponse.data[0])
+      }
+    } catch (error) {
+      console.log("Error loading sales and purchases:", error)
+    }
   }
-}
-
-loadSalesandProducts()
-
 
   const calculateTrialBalance = async () => {
     if (!startDate || !endDate || accounts.length === 0) return
@@ -319,7 +331,7 @@ loadSalesandProducts()
         return {
           code: account.code,
           name: account.name,
-          category: account.category,
+
           openingDebit: displayOpeningDebit,
           openingCredit: displayOpeningCredit,
           currentDebit,
@@ -332,8 +344,112 @@ loadSalesandProducts()
 
       // Filter to show only accounts with activity
       const activeAccounts = trialBalanceEntries.filter((entry) => entry.hasActivity)
-      setTrialBalanceData(activeAccounts)
-      console.log(`Found ${activeAccounts.length} accounts with activity`)
+
+      // Add sales data
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      
+      const salesEntries = []
+      salesData
+        .filter(sale => {
+          const saleDate = new Date(sale.saleDate || sale.date || sale.createdAt)
+          return saleDate >= start && saleDate <= end
+        })
+        .forEach(sale => {
+          const amount = Number.parseFloat(sale.totalAmount || sale.amount || 0)
+          const grnNumber = sale.grn || sale.grnNumber || sale.invoiceNumber || sale.id
+          
+          // Create debit entry (Customer/Receivable)
+          salesEntries.push({
+            code: grnNumber,
+            name: sale.customerName ,
+            openingDebit: 0,
+            openingCredit: 0,
+            currentDebit: amount,
+            currentCredit: 0,
+            closingDebit: 0,
+            closingCredit: 0,
+            hasActivity: true,
+            isSale: true,
+           
+            saleDate: sale.saleDate || sale.date || sale.createdAt,
+          })
+          
+          // Create credit entry (Revenue)
+          salesEntries.push({
+            code: grnNumber,
+            name: sale.saleType ,     
+            openingDebit: 0,
+            openingCredit: 0,
+            currentDebit: 0,
+            currentCredit: amount,
+            closingDebit: 0,
+            closingCredit: 0,
+            hasActivity: true,
+            isSale: true,
+            customerName: sale.customerName ,
+            saleDate: sale.saleDate || sale.date || sale.createdAt,
+          })
+        })
+
+      // Add purchase data - Show all products separately
+      const purchaseEntries = []
+      purchasesData
+        .filter(purchase => {
+          const purchaseDate = new Date(purchase.purchaseDate || purchase.date || purchase.createdAt)
+          return purchaseDate >= start && purchaseDate <= end
+        })
+        .forEach(purchase => {
+          const grnNumber = purchase.grn || purchase.grnNumber || purchase.id
+          const amount = Number.parseFloat(purchase.total || purchase.totalAmount || purchase.amount || 0)
+          const quantity = Number.parseFloat(purchase.quantity || 0)
+          const rate = Number.parseFloat(purchase.purchaseRate || purchase.rate || purchase.price || 0)
+          const calculatedAmount = quantity > 0 && rate > 0 ? quantity * rate : amount
+          
+          // Create debit entry (Purchase Type/Expense)
+          purchaseEntries.push({
+            code: grnNumber,
+            name: purchase.purchaseType?.name || purchase.purchaseType ,
+           
+            openingDebit: 0,
+            openingCredit: 0,
+            currentDebit: calculatedAmount,
+            currentCredit: 0,
+            closingDebit: 0,
+            closingCredit: 0,
+            hasActivity: true,
+            isPurchase: true,
+            vendorName: purchase.vendorName?.name || purchase.vendorName,
+            productName: purchase.name || purchase.productName,
+            quantity: quantity,
+            rate: rate,
+            purchaseDate: purchase.purchaseDate || purchase.date || purchase.createdAt,
+          })
+          
+          // Create credit entry (Vendor/Payable)
+          purchaseEntries.push({
+            code: grnNumber,
+            name: purchase.vendorName?.name || purchase.vendorName ,
+           
+            openingDebit: 0,
+            openingCredit: 0,
+            currentDebit: 0,
+            currentCredit: calculatedAmount,
+            closingDebit: 0,
+            closingCredit: 0,
+            hasActivity: true,
+            isPurchase: true,
+            purchaseType: purchase.purchaseType?.name || purchase.purchaseType ,
+            productName: purchase.name || purchase.productName ,
+            quantity: quantity,
+            rate: rate,
+            purchaseDate: purchase.purchaseDate || purchase.date || purchase.createdAt,
+          })
+        })
+
+      const combinedData = [...activeAccounts, ...salesEntries, ...purchaseEntries]
+      setTrialBalanceData(combinedData)
+      console.log(`Found ${combinedData.length} entries (${activeAccounts.length} accounts, ${salesEntries.length} sales, ${purchaseEntries.length} purchases)`)
     } catch (error) {
       console.error("Error calculating trial balance:", error)
       setError("Failed to calculate trial balance. " + error.message)
@@ -381,7 +497,7 @@ loadSalesandProducts()
                 h &&
                 (h.toString().toLowerCase().includes("description") || h.toString().toLowerCase().includes("name")),
             ),
-            category: headers.findIndex((h) => h && h.toString().toLowerCase().includes("category")),
+            
             openingDebit: headers.findIndex(
               (h) =>
                 h && h.toString().toLowerCase().includes("opening") && h.toString().toLowerCase().includes("debit"),
@@ -432,7 +548,6 @@ loadSalesandProducts()
             processedData.push({
               code: code,
               name: name,
-              category: row[columnMap.category]?.toString().trim() || "Unknown",
               openingDebit: Number.parseFloat(row[columnMap.openingDebit]) || 0,
               openingCredit: Number.parseFloat(row[columnMap.openingCredit]) || 0,
               currentDebit: Number.parseFloat(row[columnMap.currentDebit]) || 0,
@@ -540,25 +655,27 @@ loadSalesandProducts()
 
   const filteredData = trialBalanceData.filter(
     (row) =>
-      row.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      (row.code && row.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (row.name && row.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (typeof row.currentDebit === 'string' && row.currentDebit && row.currentDebit.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (typeof row.currentCredit === 'string' && row.currentCredit && row.currentCredit.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   const filteredExcelData = excelData.filter(
     (row) =>
-      row.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      (row.code && row.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (row.name && row.name.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
   // Calculate totals for system data
   const totals = filteredData.reduce(
     (acc, row) => ({
-      openingDebit: acc.openingDebit + row.openingDebit,
-      openingCredit: acc.openingCredit + row.openingCredit,
-      currentDebit: acc.currentDebit + row.currentDebit,
-      currentCredit: acc.currentCredit + row.currentCredit,
-      closingDebit: acc.closingDebit + row.closingDebit,
-      closingCredit: acc.closingCredit + row.closingCredit,
+      openingDebit: acc.openingDebit + (typeof row.openingDebit === 'number' ? row.openingDebit : 0),
+      openingCredit: acc.openingCredit + (typeof row.openingCredit === 'number' ? row.openingCredit : 0),
+      currentDebit: acc.currentDebit + (typeof row.currentDebit === 'number' ? row.currentDebit : 0),
+      currentCredit: acc.currentCredit + (typeof row.currentCredit === 'number' ? row.currentCredit : 0),
+      closingDebit: acc.closingDebit + (typeof row.closingDebit === 'number' ? row.closingDebit : 0),
+      closingCredit: acc.closingCredit + (typeof row.closingCredit === 'number' ? row.closingCredit : 0),
     }),
     {
       openingDebit: 0,
@@ -615,13 +732,12 @@ loadSalesandProducts()
       ...dataToExport.map((row) => [
         row.code,
         row.name,
-        row.category,
-        row.openingDebit,
-        row.openingCredit,
-        row.currentDebit,
-        row.currentCredit,
-        row.closingDebit,
-        row.closingCredit,
+        typeof row.openingDebit === 'number' ? row.openingDebit : 0,
+        typeof row.openingCredit === 'number' ? row.openingCredit : 0,
+        typeof row.currentDebit === 'number' ? row.currentDebit : row.currentDebit,
+        typeof row.currentCredit === 'number' ? row.currentCredit : row.currentCredit,
+        typeof row.closingDebit === 'number' ? row.closingDebit : 0,
+        typeof row.closingCredit === 'number' ? row.closingCredit : 0,
       ]),
       // Empty row
       [],
@@ -761,7 +877,7 @@ loadSalesandProducts()
               <>{filteredExcelData.length} accounts from Excel file</>
             ) : (
               <>
-                {filteredData.length} accounts with activity | Total accounts: {accounts.length}
+                {filteredData.length} entries | Total accounts: {accounts.length}
               </>
             )}
           </div>
@@ -827,7 +943,7 @@ loadSalesandProducts()
             <table className="min-w-full table-auto border-collapse print-table">
               <thead className="sticky top-0 bg-gradient-to-r from-blue-100 to-blue-200">
                 <tr>
-                  <th className="text-left px-4 py-3 border border-gray-300 font-semibold text-gray-700">Acc Code</th>
+                  <th className="text-left px-4 py-3 border border-gray-300 font-semibold text-gray-700">Acc Code / GRN</th>
                   <th className="text-left px-4 py-3 border border-gray-300 font-semibold text-gray-700">
                     Account Description
                   </th>
@@ -873,47 +989,70 @@ loadSalesandProducts()
                       <td className="px-4 py-3 text-sm text-gray-700 border border-gray-300 font-mono">{row.code}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 border border-gray-300">
                         {row.name}
-                        <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                          {row.category}
-                        </span>
+                        {row.quantity && row.rate && (
+                          <div className="text-xs text-blue-600 mt-1">
+                          </div>
+                        )}
+                        {row.productName && (
+                          <div className="text-xs text-gray-600 mt-1">
+                           <></>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          
+                          {row.isSale && row.saleType && (
+                            <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                              Type: {row.saleType}
+                            </span>
+                          )}
+                          {row.isSale && row.customerName && (
+                            <></>
+                          )}
+                          {row.isPurchase && row.purchaseType && (
+                            <></>
+                          )}
+                          {row.isPurchase && row.vendorName && (
+                          <></>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.openingDebit > 0 ? (
+                        {typeof row.openingDebit === 'number' && row.openingDebit > 0 ? (
                           <span className="text-green-600 font-semibold">{format(row.openingDebit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.openingCredit > 0 ? (
+                        {typeof row.openingCredit === 'number' && row.openingCredit > 0 ? (
                           <span className="text-red-600 font-semibold">{format(row.openingCredit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.currentDebit > 0 ? (
+                        {typeof row.currentDebit === 'number' && row.currentDebit > 0 ? (
                           <span className="text-green-600 font-semibold">{format(row.currentDebit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.currentCredit > 0 ? (
+                        {typeof row.currentCredit === 'number' && row.currentCredit > 0 ? (
                           <span className="text-red-600 font-semibold">{format(row.currentCredit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.closingDebit > 0 ? (
+                        {typeof row.closingDebit === 'number' && row.closingDebit > 0 ? (
                           <span className="text-green-600 font-bold">{format(row.closingDebit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.closingCredit > 0 ? (
+                        {typeof row.closingCredit === 'number' && row.closingCredit > 0 ? (
                           <span className="text-red-600 font-bold">{format(row.closingCredit)}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -986,7 +1125,7 @@ loadSalesandProducts()
               <span className="text-gray-600">
                 {showExcelData
                   ? "* Data loaded from Excel file"
-                  : "* All amounts are calculated from actual voucher entries"}
+                  : "* All amounts are calculated from actual voucher entries. Sales/Purchases show names instead of amounts."}
               </span>
               <div className="font-medium text-gray-700">
                 <span className="mr-4">

@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { RefreshCw, ArrowLeft } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
-
 export default function GeneralLedger() {
   const [fromDate, setFromDate] = useState(() => {
     const today = new Date()
@@ -31,6 +30,7 @@ export default function GeneralLedger() {
   const [openingBalance, setOpeningBalance] = useState(0)
   const [closingBalance, setClosingBalance] = useState(0)
 
+  // Add print styles to document head
   useEffect(() => {
     const style = document.createElement("style")
     style.innerHTML = `
@@ -60,10 +60,12 @@ export default function GeneralLedger() {
     }
   }, [])
 
+  // Load all accounts from chart of accounts
   const loadAllAccounts = async () => {
     try {
       setLoadingAccounts(true)
 
+      // Fetch all account types in parallel
       const [assetsRes, equityRes, expensesRes, liabilitiesRes, revenueRes] = await Promise.all([
         ApiHandler.getAssets().catch(() => ({ data: [] })),
         ApiHandler.getEquity().catch(() => ({ data: [] })),
@@ -72,7 +74,9 @@ export default function GeneralLedger() {
         ApiHandler.getRevenue().catch(() => ({ data: [] })),
       ])
 
+      // Combine all accounts with category labels
       const allAccounts = [
+        // Assets
         ...(assetsRes.data || []).map((account) => ({
           code: account.code,
           name: account.name,
@@ -80,6 +84,7 @@ export default function GeneralLedger() {
           category: "Assets",
           normalBalance: "debit",
         })),
+        // Equity
         ...(equityRes.data || []).map((account) => ({
           code: account.code,
           name: account.name,
@@ -87,6 +92,7 @@ export default function GeneralLedger() {
           category: "Equity",
           normalBalance: "credit",
         })),
+        // Expenses
         ...(expensesRes.data || []).map((account) => ({
           code: account.code,
           name: account.name,
@@ -94,6 +100,7 @@ export default function GeneralLedger() {
           category: "Expenses",
           normalBalance: "debit",
         })),
+        // Liabilities
         ...(liabilitiesRes.data || []).map((account) => ({
           code: account.code,
           name: account.name,
@@ -101,6 +108,7 @@ export default function GeneralLedger() {
           category: "Liabilities",
           normalBalance: "credit",
         })),
+        // Revenue
         ...(revenueRes.data || []).map((account) => ({
           code: account.code,
           name: account.name,
@@ -110,6 +118,7 @@ export default function GeneralLedger() {
         })),
       ]
 
+      // Sort accounts by code
       allAccounts.sort((a, b) => a.code.localeCompare(b.code))
       setAccountOptions(allAccounts)
     } catch (error) {
@@ -124,9 +133,6 @@ export default function GeneralLedger() {
       const response = await ApiHandler.getSales()
       const sales = response.data || []
 
-      const revenueResponse = await ApiHandler.getRevenue()
-      const revenueAccounts = revenueResponse.data || []
-
       const salesEntries = []
       const processedSaleIds = new Set()
 
@@ -137,52 +143,31 @@ export default function GeneralLedger() {
 
         if (saleDate >= from && saleDate <= to) {
           const customerName = sale.customerName || ""
-          if (
-            customerName.includes("Test") ||
-            customerName.includes("TEST") ||
-            customerName.includes("TEST-CUSTOMER")
-          ) {
-            return
+          if (customerName.includes("Test") || customerName.includes("TEST") || customerName.includes("TEST-CUSTOMER")) {
+            return // Skip this entry
           }
 
           const amount = Number.parseFloat(sale.totalAmount || 0)
           const saleId = `sale-${sale._id}`
 
+          // Only process each sale once
           if (!processedSaleIds.has(saleId)) {
             processedSaleIds.add(saleId)
-
-            let saleTypeAccount = sale.saleType || ""
-
-            const matchingRevenueAccount = revenueAccounts.find((account) => {
-              const accountName = account.name || ""
-              const accountFullName = `${account.code || ""} - ${accountName}`.trim()
-
-              return (
-                accountName.includes(saleTypeAccount) ||
-                accountFullName.includes(saleTypeAccount) ||
-                accountName === saleTypeAccount
-              )
-            })
-
-            if (matchingRevenueAccount) {
-              saleTypeAccount =
-                matchingRevenueAccount.code && matchingRevenueAccount.name
-                  ? `${matchingRevenueAccount.code} - ${matchingRevenueAccount.name}`
-                  : matchingRevenueAccount.name || sale.saleType
-            }
-
+            
+            // DEBIT ENTRY - Customer Account (Accounts Receivable increases)
             salesEntries.push({
               id: `${saleId}-customer`,
               date: sale.createdAt || sale.updatedAt,
               voucherNo: sale.grn || "N/A",
               voucherType: "Sale",
-              description: `${saleTypeAccount} - ${sale.notes || "Sale"}`,
-              debit: amount,
+              description: `${sale.saleType} - ${sale.notes || "Sale"}`,
+              debit: amount, // DEBIT - Customer owes us money
               credit: 0,
-              account: sale.customerName,
+              account: sale.customerName, // Customer account
               entryType: "RECEIVABLE",
             })
 
+            // CREDIT ENTRY - Sales/Revenue Account (Revenue increases)
             salesEntries.push({
               id: `${saleId}-revenue`,
               date: sale.createdAt || sale.updatedAt,
@@ -190,15 +175,15 @@ export default function GeneralLedger() {
               voucherType: "Sale",
               description: `Sale to ${sale.customerName} - ${sale.notes || "Sale transaction"}`,
               debit: 0,
-              credit: amount,
-              account: saleTypeAccount,
+              credit: amount, // CREDIT - Revenue earned
+              account: sale.saleType, // Sale Type account (e.g., Sale - Domestic, Sale - International)
               entryType: "REVENUE",
             })
 
             if (amount > 0) {
               console.log(`[DOUBLE ENTRY] Sale ${sale.grn}:`, {
-                debit: `${sale.customerName} (Customer/Vendor Ledger)`,
-                credit: `${saleTypeAccount} (Revenue Account)`,
+                debit: `${sale.customerName} (Customer)`,
+                credit: `${sale.saleType} (Revenue)`,
                 amount: amount,
                 balanced: true,
               })
@@ -214,6 +199,7 @@ export default function GeneralLedger() {
     }
   }
 
+  // Load on component mount
   useEffect(() => {
     loadAllAccounts()
   }, [])
@@ -223,6 +209,7 @@ export default function GeneralLedger() {
       setLoading(true)
       console.log("Loading ledger entries for:", { account, fromDate, toDate })
 
+      // Fetch products with proper pagination to get ALL records
       let allProducts = []
       let currentPage = 1
       let hasMoreProducts = true
@@ -238,6 +225,7 @@ export default function GeneralLedger() {
             allProducts = [...allProducts, ...productsResponse.data]
             currentPage++
 
+            // Check if there are more pages
             if (productsResponse.data.length < 100) {
               hasMoreProducts = false
             }
@@ -263,14 +251,17 @@ export default function GeneralLedger() {
       console.log("Total products loaded:", allProducts.length)
       console.log("Total sales entries:", salesEntries.length)
 
+      // Filter entries for the selected account and date range
       const filteredEntries = []
       let runningBalance = 0
       const addedEntryIds = new Set()
 
+      // Get selected account info
       const selectedAccountInfo = accountOptions.find((acc) => acc.fullName === account || acc.name === account)
       const accountName = account.split(" - ")[1] || account
       const accountCode = account.split(" - ")[0] || ""
 
+      // Process voucher entries
       allVouchers.sort((a, b) => new Date(a.voucherDate) - new Date(b.voucherDate))
 
       allVouchers.forEach((voucher) => {
@@ -280,15 +271,21 @@ export default function GeneralLedger() {
 
         if (voucherDate >= from && voucherDate <= to) {
           voucher.entries?.forEach((entry) => {
+            // Improved account matching - check multiple patterns
             const entryAccount = entry.account || ""
 
+            // Try to match in different ways
             const accountMatches =
+              // Exact match
               entryAccount === account ||
               entryAccount === accountName ||
               entryAccount === accountCode ||
+              // Partial match with code
               entryAccount.includes(accountCode) ||
               entryAccount.includes(accountName) ||
+              // Full name format match
               entryAccount === `${accountCode} - ${accountName}` ||
+              // Reverse checks
               account.includes(entryAccount) ||
               accountName.includes(entryAccount)
 
@@ -296,6 +293,7 @@ export default function GeneralLedger() {
               const debitAmount = Number.parseFloat(entry.debitAmount || 0)
               const creditAmount = Number.parseFloat(entry.creditAmount || 0)
 
+              // Calculate running balance based on account type
               if (selectedAccountInfo?.normalBalance === "debit") {
                 runningBalance += debitAmount - creditAmount
               } else {
@@ -348,6 +346,7 @@ export default function GeneralLedger() {
         }
       })
 
+      // Process product/purchase entries - INDIVIDUAL ENTRIES (not aggregated)
       console.log("\n📦 PROCESSING PRODUCTS...")
       allProducts.forEach((product, index) => {
         console.log(`\n--- Product ${index + 1}/${allProducts.length} ---`)
@@ -355,6 +354,7 @@ export default function GeneralLedger() {
         console.log("GRN:", product.grn)
         console.log("Date:", product.createdAt || product.updatedAt)
 
+        // Normalize dates to start of day for proper comparison
         const productDateStr = (product.createdAt || product.updatedAt).split("T")[0]
         const productDate = new Date(productDateStr + "T00:00:00")
         const from = new Date(fromDate + "T00:00:00")
@@ -365,6 +365,7 @@ export default function GeneralLedger() {
 
         if (productDate >= from && productDate <= to) {
           console.log("✅ Product is in date range, checking matches...")
+          // Get purchase type info
           const purchaseTypeCode = product.purchaseType?.code || ""
           const purchaseTypeName = product.purchaseType?.name || ""
           const purchaseTypeFullName =
@@ -372,10 +373,12 @@ export default function GeneralLedger() {
               ? `${purchaseTypeCode} - ${purchaseTypeName}`
               : purchaseTypeName || purchaseTypeCode
 
+          // Get vendor info
           const vendorCode = product.vendorName?.code || ""
           const vendorName = product.vendorName?.name || ""
           const vendorFullName = vendorCode && vendorName ? `${vendorCode} - ${vendorName}` : vendorName || vendorCode
 
+          // Check if purchaseType matches selected account (flexible matching)
           const purchaseTypeMatch =
             purchaseTypeCode === accountCode ||
             purchaseTypeName === accountName ||
@@ -385,6 +388,7 @@ export default function GeneralLedger() {
             purchaseTypeCode.includes(accountCode) ||
             purchaseTypeName.includes(accountName)
 
+          // Check if vendor matches selected account (flexible matching)
           const vendorMatch =
             vendorCode === accountCode ||
             vendorName === accountName ||
@@ -402,6 +406,7 @@ export default function GeneralLedger() {
           console.log("purchaseTypeMatch:", purchaseTypeMatch)
           console.log("vendorMatch:", vendorMatch)
 
+          // Debug logging for product matching
           if (!purchaseTypeMatch && !vendorMatch) {
             console.log("❌ NO MATCH - Skipping this product")
             console.log("Comparison details:")
@@ -414,8 +419,10 @@ export default function GeneralLedger() {
             console.log("  Vendor name:", vendorName)
           }
 
-          if (purchaseTypeMatch) {
+         if (purchaseTypeMatch) {
             console.log("✅ Creating DEBIT entry (Purchase Type matched)")
+            // PurchaseType account - show as DEBIT (individual entry per product)
+            // Show the VENDOR in description (the other side of transaction)
             if (selectedAccountInfo?.normalBalance === "debit") {
               runningBalance += amount
             } else {
@@ -423,21 +430,25 @@ export default function GeneralLedger() {
             }
 
             const vendorDisplay = vendorFullName || vendorName || "Vendor"
+            const grnNumber = product.grn || "N/A"
 
             filteredEntries.push({
               id: `product-${product._id}-purchaseType`,
               date: product.createdAt || product.updatedAt,
-              voucherNo: product.grn || "N/A",
+              voucherNo: grnNumber,
               voucherType: "Purchase",
-              description: `${vendorDisplay} - ${product.name || "Product"}: ${product.quantity || 0} units @ Rs. ${product.purchaseRate || 0}`,
+              description: `Purchase from ${vendorDisplay} - ${product.name || "Product"}: ${product.quantity || 0} units @ Rs. ${product.purchaseRate || 0}`,
               debit: amount,
               credit: 0,
               balance: runningBalance,
+              grn: grnNumber,
             })
           }
 
           if (vendorMatch) {
             console.log("✅ Creating CREDIT entry (Vendor matched)")
+            // Vendor account - show as CREDIT (individual entry per product)
+            // Show the PURCHASE TYPE in description (the other side of transaction)
             if (selectedAccountInfo?.normalBalance === "debit") {
               runningBalance -= amount
             } else {
@@ -445,16 +456,18 @@ export default function GeneralLedger() {
             }
 
             const purchaseTypeDisplay = purchaseTypeFullName || purchaseTypeName || "Purchase"
+            const grnNumber = product.grn || "N/A"
 
             filteredEntries.push({
               id: `product-${product._id}-vendor`,
               date: product.createdAt || product.updatedAt,
-              voucherNo: product.grn || "N/A",
+              voucherNo: grnNumber,
               voucherType: "Purchase",
               description: `${purchaseTypeDisplay} - ${product.name || "Product"}: ${product.quantity || 0} units @ Rs. ${product.purchaseRate || 0}`,
               debit: 0,
               credit: amount,
               balance: runningBalance,
+              grn: grnNumber,
             })
           }
         } else {
@@ -462,8 +475,10 @@ export default function GeneralLedger() {
         }
       })
 
+      // Sort all entries by date
       filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date))
 
+      // Recalculate running balance after sorting
       runningBalance = 0
       filteredEntries.forEach((entry) => {
         if (selectedAccountInfo?.normalBalance === "debit") {
@@ -522,8 +537,11 @@ export default function GeneralLedger() {
     return Number.parseFloat(amount || 0).toFixed(2)
   }
 
+  // Calculate totals
   const totalDebits = ledgerEntries.reduce((sum, entry) => sum + entry.debit, 0)
   const totalCredits = ledgerEntries.reduce((sum, entry) => sum + entry.credit, 0)
+
+  // ========================= LEDGER VIEW =========================
 
   if (showLedger) {
     return (
@@ -531,6 +549,7 @@ export default function GeneralLedger() {
         id="print-area"
         className="min-h-screen w-full p-6 bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50 print:bg-white print:shadow-none print:p-6 print:pb-24"
       >
+        {/* Header */}
         <div className="relative mb-6">
           <div className="flex items-center justify-between mb-4 print:hidden">
             <Button variant="outline" onClick={handleClose} className="flex items-center gap-2 bg-transparent">
@@ -569,6 +588,7 @@ export default function GeneralLedger() {
           </div>
         )}
 
+        {/* Ledger Table */}
         <Card className="shadow-lg print:shadow-none print:border-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -598,8 +618,7 @@ export default function GeneralLedger() {
                       <td className="border border-gray-300 p-3 text-sm">{formatDate(entry.date)}</td>
                       <td className="border border-gray-300 p-3 text-sm font-mono">{entry.voucherNo}</td>
                       <td className="border border-gray-300 p-3 text-sm font-mono">
-                        {(entry.voucherType === "Purchase" || entry.voucherType === "Sale") &&
-                        entry.voucherNo !== "N/A" ? (
+                        {entry.voucherType === "Purchase" && entry.voucherNo !== "N/A" ? (
                           <span className="text-purple-600 font-medium">{entry.voucherNo}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -653,6 +672,7 @@ export default function GeneralLedger() {
                   </tr>
                 )}
 
+                {/* Totals row */}
                 {ledgerEntries.length > 0 && (
                   <tr className="bg-gradient-to-r from-gray-100 to-gray-200 font-bold border-t-2 border-gray-400">
                     <td className="border border-gray-300 p-3 text-sm" colSpan="6">
@@ -676,6 +696,7 @@ export default function GeneralLedger() {
           </div>
         </Card>
 
+        {/* Print/Export Actions */}
         {ledgerEntries.length > 0 && (
           <div className="flex justify-center gap-4 mt-6 print:hidden">
             <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 text-white">
@@ -684,6 +705,7 @@ export default function GeneralLedger() {
             <Button
               variant="outline"
               onClick={() => {
+                // Simple CSV export
                 const csvContent = [
                   ["Sr#", "Date", "Voucher No", "GRN", "Type", "Description", "Debit", "Credit", "Balance"].join(","),
                   ...ledgerEntries.map((entry, index) =>
@@ -725,6 +747,7 @@ export default function GeneralLedger() {
     )
   }
 
+  // Group accounts by category for better display
   const groupedAccounts = accountOptions.reduce((groups, account) => {
     if (!groups[account.category]) {
       groups[account.category] = []
@@ -732,6 +755,8 @@ export default function GeneralLedger() {
     groups[account.category].push(account)
     return groups
   }, {})
+
+  // ========================= FORM VIEW =========================
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50">
@@ -755,6 +780,7 @@ export default function GeneralLedger() {
         </CardHeader>
 
         <CardContent className="p-8 space-y-8 bg-white">
+          {/* Date Selection */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
             <div className="flex flex-col gap-2">
               <Label htmlFor="fromDate" className="font-semibold text-gray-700">
@@ -788,6 +814,7 @@ export default function GeneralLedger() {
             </div>
           </div>
 
+          {/* Account Selection */}
           <div className="space-y-4">
             <Label className="text-lg font-semibold text-gray-700">
               Select Account ({accountOptions.length} available)
@@ -831,6 +858,7 @@ export default function GeneralLedger() {
             </div>
           </div>
 
+          {/* Report Type */}
           <div className="space-y-4">
             <Label className="text-lg font-semibold text-gray-700">Report Type</Label>
             <RadioGroup value={reportType} onValueChange={setReportType} className="flex gap-8">
@@ -849,6 +877,7 @@ export default function GeneralLedger() {
             </RadioGroup>
           </div>
 
+          {/* Info Card */}
           {accountOptions.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="text-sm text-blue-800">
@@ -864,6 +893,7 @@ export default function GeneralLedger() {
             </div>
           )}
 
+          {/* Action Buttons */}
           <div className="flex justify-center gap-4 pt-6">
             <Button
               onClick={() => {
