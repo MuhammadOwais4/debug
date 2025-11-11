@@ -10,7 +10,7 @@ app.use(
   cors({
   //  origin: ["http://localhost:5173"],
   //  origin: ["https://stock-management-system-sccp.vercel.app"],
-    origin: ["https://debug-henna.vercel.app/"],
+    origin: ["https://debug-henna.vercel.app"],
 
     credentials: true,
   }),
