@@ -339,9 +339,27 @@ export default function GeneralLedger() {
             runningBalance += creditAmount - debitAmount
           }
 
+          // Get the corresponding account name for description
+          let correspondingAccount = ""
+          if (saleEntry.entryType === "RECEIVABLE") {
+            // This is the customer debit entry, show the revenue account in description
+            correspondingAccount = saleEntry.account // This is customer name
+          } else if (saleEntry.entryType === "REVENUE") {
+            // This is the revenue credit entry, show the customer in description
+            const matchingSale = salesEntries.find(
+              entry => entry.voucherNo === saleEntry.voucherNo && 
+              entry.entryType === "RECEIVABLE"
+            )
+            correspondingAccount = matchingSale ? matchingSale.account : "Customer"
+          }
+
           filteredEntries.push({
             ...saleEntry,
             balance: runningBalance,
+            // Update description to show the other side of the transaction
+            description: saleEntry.entryType === "RECEIVABLE" 
+              ? `Sale to ${saleEntry.account} - ${saleEntry.description.split(' - ')[1] || saleEntry.description}`
+              : `Sale from ${correspondingAccount} - ${saleEntry.description.split(' - ')[1] || saleEntry.description}`
           })
         }
       })
