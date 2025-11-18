@@ -2,6 +2,13 @@ const mongoose = require("mongoose")
 
 const SaleSchema = new mongoose.Schema(
   {
+    // Invoice field - auto-generated unique number
+    invoice: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
     date: {
       type: Date,
       required: [true, "Date is required"],
@@ -76,19 +83,10 @@ const SaleSchema = new mongoose.Schema(
     profit: {
       type: Number,
     },
-    // Customer Information - linked to Receivables (Asset model)
+    // Customer Information
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Asset",
-      validate: {
-        validator: async function(value) {
-          if (!value) return true
-          const Asset = mongoose.model("Asset")
-          const asset = await Asset.findById(value)
-          return asset && asset.type === "RECEIVABLES"
-        },
-        message: "Customer must be a valid Receivables account",
-      },
     },
     customerName: {
       type: String,
@@ -99,27 +97,11 @@ const SaleSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
-      validate: {
-        validator: (phone) => {
-          if (!phone) return true
-          return /^\+?[1-9]\d{1,14}$/.test(phone)
-        },
-        message: "Please enter a valid phone number",
-      },
     },
-    // Sale Account Information - linked to Revenue model
+    // Sale Account Information
     saleAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Revenue",
-      validate: {
-        validator: async function(value) {
-          if (!value) return true
-          const Revenue = mongoose.model("Revenue")
-          const revenue = await Revenue.findById(value)
-          return revenue && revenue.type === "SALE ACCOUNT"
-        },
-        message: "Sale account must be a valid Sale Account from Revenue",
-      },
     },
     saleAccountName: {
       type: String,
@@ -148,9 +130,42 @@ const SaleSchema = new mongoose.Schema(
   },
 )
 
-// Pre-save middleware to calculate all values and populate references
+// ENHANCED Pre-save middleware with better invoice generation
 SaleSchema.pre("save", async function (next) {
   try {
+    // AUTO-GENERATE INVOICE NUMBER FOR NEW SALES
+    if (this.isNew && !this.invoice) {
+      try {
+        // Use a more robust query to find the last invoice
+        const lastSale = await this.constructor
+          .findOne({ 
+            invoice: { $exists: true, $ne: null, $regex: /^INV-\d+$/ } 
+          })
+          .sort({ invoice: -1, createdAt: -1 })
+          .select("invoice")
+          .lean()
+
+        let invoiceNumber = 1
+
+        if (lastSale && lastSale.invoice) {
+          // Extract number from invoice (e.g., "INV-0001" -> 1)
+          const match = lastSale.invoice.match(/INV-(\d+)/)
+          if (match && match[1]) {
+            invoiceNumber = parseInt(match[1], 10) + 1
+          }
+        }
+
+        // Generate new invoice with leading zeros (INV-0001, INV-0002, etc.)
+        this.invoice = `INV-${String(invoiceNumber).padStart(4, "0")}`
+        console.log(`✅ Generated invoice: ${this.invoice} for sale: ${this._id}`)
+      } catch (invoiceError) {
+        console.error("❌ Error generating invoice:", invoiceError)
+        // Fallback to timestamp-based invoice if error occurs
+        this.invoice = `INV-${Date.now()}`
+        console.log(`⚠️ Using fallback invoice: ${this.invoice}`)
+      }
+    }
+
     // Calculate purchase stock value
     this.purchaseStockValue = this.purchaseQuantity * this.purchaseRate
 
@@ -159,7 +174,7 @@ SaleSchema.pre("save", async function (next) {
 
     // Calculate balance values
     this.balanceQuantity = this.purchaseQuantity - this.saleQuantity
-    this.balanceRate = this.purchaseRate // Use purchase rate as balance rate
+    this.balanceRate = this.purchaseRate
     this.balanceStockValue = this.balanceQuantity * this.balanceRate
 
     // Legacy calculations for backward compatibility
@@ -167,26 +182,34 @@ SaleSchema.pre("save", async function (next) {
     this.salePrice = this.saleRate
     this.totalAmount = this.saleQuantity * this.saleRate
 
-    // Populate customer name from Receivables (Asset model)
+    // Populate customer name from Asset model
     if (this.customer && (this.isNew || this.isModified("customer"))) {
-      const Asset = mongoose.model("Asset")
-      const receivable = await Asset.findById(this.customer)
-      if (receivable && receivable.type === "RECEIVABLES") {
-        this.customerName = receivable.name
+      try {
+        const Asset = mongoose.model("Asset")
+        const receivable = await Asset.findById(this.customer)
+        if (receivable && receivable.type === "RECEIVABLES") {
+          this.customerName = receivable.name || receivable.accountName
+        }
+      } catch (err) {
+        console.warn("Could not populate customer name:", err.message)
       }
     }
 
     // Populate sale account information from Revenue model
     if (this.saleAccount && (this.isNew || this.isModified("saleAccount"))) {
-      const Revenue = mongoose.model("Revenue")
-      const revenueAccount = await Revenue.findById(this.saleAccount)
-      if (revenueAccount && revenueAccount.type === "SALE ACCOUNT") {
-        this.saleAccountName = revenueAccount.name
-        this.saleType = revenueAccount.type
+      try {
+        const Revenue = mongoose.model("Revenue")
+        const revenueAccount = await Revenue.findById(this.saleAccount)
+        if (revenueAccount && revenueAccount.type === "SALE ACCOUNT") {
+          this.saleAccountName = revenueAccount.name || revenueAccount.accountName
+          this.saleType = revenueAccount.type
+        }
+      } catch (err) {
+        console.warn("Could not populate sale account:", err.message)
       }
     }
 
-    // Find the product to calculate profit and get item name
+    // Calculate profit and populate product details
     if (this.isNew || this.isModified("product") || this.isModified("saleQuantity") || this.isModified("saleRate")) {
       const Product = mongoose.model("Product")
       const product = await Product.findById(this.product)
@@ -220,11 +243,22 @@ SaleSchema.pre("save", async function (next) {
 
     next()
   } catch (error) {
+    console.error("❌ Error in pre-save hook:", error)
     next(error)
   }
 })
 
-// Index for better query performance
+// Post-save hook to verify invoice was created
+SaleSchema.post("save", function (doc, next) {
+  if (doc.invoice) {
+    console.log(`✅ Sale saved successfully with invoice: ${doc.invoice}`)
+  } else {
+    console.warn(`⚠️ Sale saved but invoice is missing: ${doc._id}`)
+  }
+  next()
+})
+
+// Indexes for better query performance
 SaleSchema.index({ date: -1 })
 SaleSchema.index({ product: 1 })
 SaleSchema.index({ itemName: 1 })
@@ -232,11 +266,33 @@ SaleSchema.index({ createdAt: -1 })
 SaleSchema.index({ category: 1 })
 SaleSchema.index({ customer: 1 })
 SaleSchema.index({ saleAccount: 1 })
+SaleSchema.index({ invoice: 1 })
 
 // Virtual for net stock movement
 SaleSchema.virtual("netStockMovement").get(function () {
   return this.purchaseQuantity - this.saleQuantity
 })
+
+// Static method to get next invoice number
+SaleSchema.statics.getNextInvoiceNumber = async function () {
+  const lastSale = await this.findOne({ 
+    invoice: { $exists: true, $ne: null, $regex: /^INV-\d+$/ } 
+  })
+    .sort({ invoice: -1, createdAt: -1 })
+    .select("invoice")
+    .lean()
+
+  let invoiceNumber = 1
+
+  if (lastSale && lastSale.invoice) {
+    const match = lastSale.invoice.match(/INV-(\d+)/)
+    if (match && match[1]) {
+      invoiceNumber = parseInt(match[1], 10) + 1
+    }
+  }
+
+  return `INV-${String(invoiceNumber).padStart(4, "0")}`
+}
 
 // Method to calculate stock summary
 SaleSchema.statics.getStockSummary = async function (filters = {}) {
@@ -285,12 +341,10 @@ SaleSchema.statics.getSalesWithReferences = async function (filters = {}) {
     .populate({
       path: "customer",
       select: "name code type balance",
-      match: { type: "RECEIVABLES" }
     })
     .populate({
       path: "saleAccount",
       select: "name code type balance",
-      match: { type: "SALE ACCOUNT" }
     })
     .populate("product")
     .sort({ date: -1 })

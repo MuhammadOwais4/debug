@@ -115,6 +115,7 @@ exports.createSale = async (req, res) => {
       customerPhone,
       notes,
       saleType,
+      saleAccount,
     } = req.body
 
     // Use new field names if available, fallback to old ones
@@ -154,9 +155,10 @@ exports.createSale = async (req, res) => {
       })
     }
 
+    // Create sale (invoice will be auto-generated in pre-save hook)
     const sale = await Sale.create({
       product: productId,
-      itemName: itemName || product.name, // Ensure itemName is set
+      itemName: itemName || product.name,
       saleQuantity: Number.parseInt(finalQuantity),
       saleRate: Number.parseFloat(finalSaleRate),
       // Legacy fields for backward compatibility
@@ -167,6 +169,7 @@ exports.createSale = async (req, res) => {
       customerPhone: customerPhone || "",
       notes: notes || "",
       saleType: saleType || "",
+      saleAccount: saleAccount || null,
     })
 
     // Update product stock
@@ -176,12 +179,12 @@ exports.createSale = async (req, res) => {
     // Populate the sale with product details for response
     const populatedSale = await Sale.findById(sale._id).populate("product", "name purchaseRate saleRate")
 
-    // Create notification for sale
+    // Create notification for sale with invoice number
     try {
       await Notification.create({
         type: "sale",
         title: "Sale Recorded",
-        message: `Sale recorded: ${finalQuantity} ${product.name} for PKR ${(finalQuantity * finalSaleRate).toFixed(2)}`,
+        message: `Sale ${sale.invoice || "recorded"}: ${finalQuantity} ${product.name} for PKR ${(finalQuantity * finalSaleRate).toFixed(2)}`,
         priority: "medium",
         relatedId: sale._id,
         relatedModel: "Sale",
@@ -210,10 +213,19 @@ exports.createSale = async (req, res) => {
     res.status(201).json({
       success: true,
       data: populatedSale,
-      message: "Sale recorded successfully",
+      message: `Sale recorded successfully with Invoice: ${sale.invoice}`,
     })
   } catch (error) {
     console.error("Error in createSale:", error)
+
+    // Handle duplicate key error specifically
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate invoice number. Please try again.",
+      })
+    }
+
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((val) => val.message)
       return res.status(400).json({
@@ -239,7 +251,20 @@ exports.createSale = async (req, res) => {
 // Update sale
 exports.updateSale = async (req, res) => {
   try {
-    const { product: productId, quantity, salePrice, date, customerName, customerPhone, notes, saleType } = req.body
+    const {
+      product: productId,
+      quantity,
+      saleQuantity,
+      salePrice,
+      saleRate,
+      date,
+      customerName,
+      customerPhone,
+      notes,
+      saleType,
+      saleAccount,
+    } = req.body
+
     const sale = await Sale.findById(req.params.id)
 
     if (!sale) {
@@ -249,8 +274,12 @@ exports.updateSale = async (req, res) => {
       })
     }
 
+    // Use new field names if available, fallback to old ones
+    const finalQuantity = saleQuantity || quantity
+    const finalSaleRate = saleRate || salePrice
+
     // If product or quantity is being updated, we need to adjust stock
-    if ((productId && productId !== sale.product.toString()) || (quantity && quantity !== sale.quantity)) {
+    if ((productId && productId !== sale.product.toString()) || (finalQuantity && finalQuantity !== sale.quantity)) {
       // Restore original product stock
       const originalProduct = await Product.findById(sale.product)
       if (originalProduct) {
@@ -274,7 +303,7 @@ exports.updateSale = async (req, res) => {
           })
         }
 
-        const requiredQuantity = quantity || sale.quantity
+        const requiredQuantity = finalQuantity || sale.quantity
         if (newProduct.quantity < requiredQuantity) {
           // Restore the stock we just added back
           if (originalProduct) {
@@ -289,10 +318,10 @@ exports.updateSale = async (req, res) => {
 
         newProduct.quantity -= requiredQuantity
         await newProduct.save()
-      } else if (quantity && quantity !== sale.quantity) {
+      } else if (finalQuantity && finalQuantity !== sale.quantity) {
         // If only quantity is being updated
         const product = await Product.findById(sale.product)
-        const quantityDifference = quantity - sale.quantity
+        const quantityDifference = finalQuantity - sale.quantity
 
         if (product.quantity < quantityDifference) {
           // Restore the stock we just added back
@@ -314,13 +343,20 @@ exports.updateSale = async (req, res) => {
     // Update the sale
     const updateData = {}
     if (productId) updateData.product = productId
-    if (quantity) updateData.quantity = Number.parseInt(quantity)
-    if (salePrice) updateData.salePrice = Number.parseFloat(salePrice)
+    if (finalQuantity) {
+      updateData.quantity = Number.parseInt(finalQuantity)
+      updateData.saleQuantity = Number.parseInt(finalQuantity)
+    }
+    if (finalSaleRate) {
+      updateData.salePrice = Number.parseFloat(finalSaleRate)
+      updateData.saleRate = Number.parseFloat(finalSaleRate)
+    }
     if (date) updateData.date = date
     if (customerName !== undefined) updateData.customerName = customerName
     if (customerPhone !== undefined) updateData.customerPhone = customerPhone
     if (notes !== undefined) updateData.notes = notes
     if (saleType !== undefined) updateData.saleType = saleType
+    if (saleAccount !== undefined) updateData.saleAccount = saleAccount
 
     const updatedSale = await Sale.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
@@ -575,11 +611,9 @@ exports.getSalesByProduct = async (req, res) => {
               },
               2,
             ],
-          },
-        },
-      },
-      { $sort: { totalAmount: -1 } },
-    ])
+          },},
+           $sort: { totalAmount: -1 } },
+        ])
 
     res.status(200).json({
       success: true,

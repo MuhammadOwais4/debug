@@ -36,6 +36,7 @@ import {
   ShoppingCart,
   Warehouse,
   Printer,
+  FileText,
 } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
 
@@ -170,6 +171,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       setLoadingCustomer(false)
     }
   }
+
   const loadSaleTypes = async () => {
     try {
       setLoadingSaleTypes(true)
@@ -189,6 +191,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     loadCustomer()
     loadSaleTypes()
   }, [])
+
   // Fetch sales data from API
   const fetchSales = async () => {
     try {
@@ -344,7 +347,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     }
   }
 
-  // FIXED: Handle form submission with correct field names
+  // Handle form submission with correct field names
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -400,6 +403,17 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         result = await ApiHandler.createSale(saleData)
         const newSale = result.data
         setSales((prevSales) => (Array.isArray(prevSales) ? [...prevSales, newSale] : [newSale]))
+        
+        // Show success message with invoice number
+        if (newSale.invoice && onNotification) {
+          onNotification({
+            id: Date.now(),
+            type: "sale",
+            title: "Sale Recorded",
+            message: `Sale Invoice ${newSale.invoice}: ${formData.quantity} ${product.name} for PKR ${(formData.salePrice * formData.quantity).toFixed(2)}`,
+            date: new Date().toISOString(),
+          })
+        }
       }
 
       // Refresh all data to get updated stock and entries
@@ -407,17 +421,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         await Promise.all([fetchProducts(), fetchStockEntries()])
       } catch (refreshError) {
         console.warn("Failed to refresh data:", refreshError)
-      }
-
-      // The backend automatically creates notifications, so we just need to notify the parent
-      if (onNotification) {
-        onNotification({
-          id: Date.now(),
-          type: "sale",
-          title: "Sale Recorded",
-          message: `Sale recorded: ${formData.quantity} ${product.name} for PKR ${(formData.salePrice * formData.quantity).toFixed(2)}`,
-          date: new Date().toISOString(),
-        })
       }
 
       // Reset form
@@ -502,17 +505,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   // Export data
   const handleExport = () => {
     const csvContent = [
-      ["Date", "Product", "Customer", "Sale Qty", "Sale Rate", "Stock Qty", "Stock Rate", "Total", "Profit"],
+      ["Invoice", "Date", "Product", "Customer", "Sale Qty", "Sale Rate", "Total", "Profit"],
       ...filteredSales.map((sale) => {
-        const stockEntry = getStockEntryForSale(sale)
         return [
+          sale.invoice || "N/A",
           sale.date,
           sale.product?.name || sale.productName || "Unknown",
           sale.customerName || "",
           sale.quantity,
           sale.salePrice || sale.saleRate,
-          stockEntry?.quantity || stockEntry?.stockQuantity || sale.product?.stock || 0,
-          stockEntry?.purchaseRate || stockEntry?.purchasePrice || sale.product?.purchasePrice || 0,
           sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate),
           sale.profit || 0,
         ]
@@ -557,11 +558,13 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           const dateStr = new Date(sale.date).toLocaleDateString()
           const productName = sale.product?.name || sale.productName || getProductNameById(sale.productId) || "Unknown"
           const customer = sale.customerName || ""
+          const invoice = sale.invoice || "N/A"
           const qty = sale.quantity || 0
           const unit = sale.salePrice || sale.saleRate || 0
           const total = sale.totalAmount || qty * unit
           const profit = sale.profit || 0
           return `<tr>
+            <td class="mono">${escapeHtml(invoice)}</td>
             <td>${dateStr}</td>
             <td>${escapeHtml(productName)}</td>
             <td>${escapeHtml(customer)}</td>
@@ -621,6 +624,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         tbody td { padding: 8px; border-bottom: 1px solid var(--line); }
         tfoot td { padding: 8px; font-weight: 600; }
         .num { text-align: right; white-space: nowrap; }
+        .mono { font-family: 'Courier New', monospace; font-weight: 600; }
         .pos { color: var(--pos); }
         .neg { color: var(--neg); }
         footer {
@@ -655,7 +659,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </section>
 
             <section class="summary">
-              <div class="card">
+              <div<div class="card">
                 <div class="label">Total Sales</div>
                 <div class="value">${fmt(totalSales || 0)}</div>
               </div>
@@ -680,6 +684,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <table>
               <thead>
                 <tr>
+                  <th>Invoice</th>
                   <th>Date</th>
                   <th>Product</th>
                   <th>Customer</th>
@@ -690,11 +695,11 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 </tr>
               </thead>
               <tbody>
-                ${rowsHtml || '<tr><td colspan="7" style="text-align:center; color:#6b7280; padding:12px;">No data available</td></tr>'}
+                ${rowsHtml || '<tr><td colspan="8" style="text-align:center; color:#6b7280; padding:12px;">No data available</td></tr>'}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="5" class="num">Totals:</td>
+                  <td colspan="6" class="num">Totals:</td>
                   <td class="num">${fmt(totalSales || 0)}</td>
                   <td class="num ${(totalProfit || 0) >= 0 ? "pos" : "neg"}">${fmt(totalProfit || 0)}</td>
                 </tr>
@@ -741,9 +746,11 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     // Get product name for search
     const productName = sale.product?.name || sale.productName || ""
     const customerName = sale.customerName || ""
+    const invoice = sale.invoice || ""
     const matchesSearch =
       productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customerName.toLowerCase().includes(searchTerm.toLowerCase())
+      customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.toLowerCase().includes(searchTerm.toLowerCase())
 
     return inDateRange && matchesProduct && (searchTerm === "" || matchesSearch)
   })
@@ -759,6 +766,9 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     } else if (sortBy === "productName") {
       aValue = a.product?.name || a.productName || ""
       bValue = b.product?.name || b.productName || ""
+    } else if (sortBy === "invoice") {
+      aValue = a.invoice || ""
+      bValue = b.invoice || ""
     }
 
     if (sortOrder === "asc") {
@@ -1024,7 +1034,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search products or customers..."
+                  placeholder="Search invoice, product, or customer..."
                   className="w-full p-2 pl-8 border rounded-md"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -1044,6 +1054,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 disabled={isLoading}
               >
                 <option value="date">Date</option>
+                <option value="invoice">Invoice</option>
                 <option value="productName">Product</option>
                 <option value="totalAmount">Total Amount</option>
                 <option value="profit">Profit</option>
@@ -1133,10 +1144,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <div className="bg-indigo-50 p-4 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-indigo-600">Stock Entries</p>
-                  <p className="text-2xl font-bold text-indigo-900">{stockEntries.length}</p>
+                  <p className="text-sm font-medium text-indigo-600">Invoices</p>
+                  <p className="text-2xl font-bold text-indigo-900">{filteredSales.length}</p>
                 </div>
-                <Warehouse className="h-8 w-8 text-indigo-600" />
+                <FileText className="h-8 w-8 text-indigo-600" />
               </div>
             </div>
           </div>
@@ -1169,11 +1180,14 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <div className="h-64">{renderChart()}</div>
           </div>
 
-          {/* Enhanced Sales Table with Stock Data */}
+          {/* Enhanced Sales Table with Invoice Number */}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Invoice
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
@@ -1193,7 +1207,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                     Sale Rate
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                   Sale Amount
+                    Sale Amount
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Profit
@@ -1206,9 +1220,11 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedSales.length > 0 ? (
                   paginatedSales.map((sale) => {
-                    const stockEntry = getStockEntryForSale(sale)
                     return (
                       <tr key={sale._id || sale.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-mono font-semibold">
+                          {sale.invoice || "N/A"}
+                        </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(sale.date).toLocaleDateString()}
                         </td>
@@ -1227,8 +1243,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                           {formatCurrency(sale.salePrice || sale.saleRate)}
                         </td>
-                       
-
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-semibold">
                           {formatCurrency(sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate))}
                         </td>
@@ -1270,7 +1284,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="11" className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan="10" className="px-6 py-4 text-center text-sm text-gray-500">
                       {availableProducts.length === 0
                         ? "No products available in stock. Add products to start recording sales."
                         : "No sales found for the selected period."}
@@ -1281,7 +1295,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               {paginatedSales.length > 0 && (
                 <tfoot className="bg-gray-50">
                   <tr>
-                    <td colSpan="8" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">
+                    <td colSpan="7" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">
                       Totals:
                     </td>
                     <td className="px-4 py-4 text-sm font-medium text-gray-900 text-right">
@@ -1314,17 +1328,29 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 >
                   Previous
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 border rounded ${
-                      currentPage === page ? "bg-blue-500 text-white" : "bg-white"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let pageNum
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 border rounded ${
+                        currentPage === pageNum ? "bg-blue-500 text-white" : "bg-white"
+                      }`}
+                    >
+                      {pageNum}
+</button>
+                  )
+                })}
                 <button
                   onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                   disabled={currentPage === totalPages}
@@ -1556,7 +1582,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         </div>
       )}
 
-      {/* Enhanced Sale Details Modal */}
+      {/* Enhanced Sale Details Modal with Invoice */}
       {showSaleDetails && selectedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-lg">
@@ -1572,6 +1598,14 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </div>
 
             <div className="space-y-4">
+              {/* Invoice Number - Highlighted */}
+              {selectedSale.invoice && (
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                  <label className="block text-sm font-medium text-blue-700">Invoice Number</label>
+                  <p className="text-lg font-bold text-blue-900 font-mono">{selectedSale.invoice}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Date</label>
@@ -1666,8 +1700,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
 
               {selectedSale.customerPhone && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">customerPhone</label>
+                  <label className="block text-sm font-medium text-gray-700">Customer Phone</label>
                   <p className="text-sm text-gray-900">{selectedSale.customerPhone}</p>
+                </div>
+              )}
+
+              {selectedSale.saleType && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Sale Type</label>
+                  <p className="text-sm text-gray-900">{selectedSale.saleType}</p>
                 </div>
               )}
 
