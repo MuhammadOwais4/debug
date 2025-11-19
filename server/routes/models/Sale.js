@@ -196,18 +196,20 @@ SaleSchema.pre("save", async function (next) {
     }
 
     // Populate sale account information from Revenue model
-    if (this.saleAccount && (this.isNew || this.isModified("saleAccount"))) {
-      try {
-        const Revenue = mongoose.model("Revenue")
-        const revenueAccount = await Revenue.findById(this.saleAccount)
-        if (revenueAccount && revenueAccount.type === "SALE ACCOUNT") {
-          this.saleAccountName = revenueAccount.name || revenueAccount.accountName
-          this.saleType = revenueAccount.type
-        }
-      } catch (err) {
-        console.warn("Could not populate sale account:", err.message)
-      }
+   // Populate sale account information from Revenue model
+if (this.saleAccount && (this.isNew || this.isModified("saleAccount"))) {
+  try {
+    const Revenue = mongoose.model("Revenue")
+    const revenueAccount = await Revenue.findById(this.saleAccount)
+    if (revenueAccount && revenueAccount.type === "SALE ACCOUNT") {
+      this.saleAccountName = revenueAccount.name || revenueAccount.accountName
+      // this.saleType should retain the value selected by the user
     }
+  } catch (err) {
+    console.warn("Could not populate sale account:", err.message)
+  }
+}
+
 
     // Calculate profit and populate product details
     if (this.isNew || this.isModified("product") || this.isModified("saleQuantity") || this.isModified("saleRate")) {

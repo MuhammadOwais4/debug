@@ -158,7 +158,7 @@ export default function GeneralLedger() {
             salesEntries.push({
               id: `${saleId}-customer`,
               date: sale.createdAt || sale.updatedAt,
-              voucherNo: sale.grn || "N/A",
+              voucherNo: sale.invoice || "N/A",
               voucherType: "Sale",
               description: `${sale.saleType} - ${sale.notes || "Sale"}`,
               debit: amount, // DEBIT - Customer owes us money
@@ -171,7 +171,7 @@ export default function GeneralLedger() {
             salesEntries.push({
               id: `${saleId}-revenue`,
               date: sale.createdAt || sale.updatedAt,
-              voucherNo: sale.grn || "N/A",
+              voucherNo: sale.invoice || "N/A",
               voucherType: "Sale",
               description: `Sale to ${sale.customerName} - ${sale.notes || "Sale transaction"}`,
               debit: 0,
@@ -181,7 +181,7 @@ export default function GeneralLedger() {
             })
 
             if (amount > 0) {
-              console.log(`[DOUBLE ENTRY] Sale ${sale.grn}:`, {
+              console.log(`[DOUBLE ENTRY] Sale ${sale.invoice}:`, {
                 debit: `${sale.customerName} (Customer)`,
                 credit: `${sale.saleType} (Revenue)`,
                 amount: amount,
