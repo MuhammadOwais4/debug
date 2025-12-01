@@ -13,13 +13,21 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { AlertTriangle, TrendingUp, TrendingDown, DollarSign, Package, CreditCard, Bell, RefreshCw } from 'lucide-react'
+import { 
+  AlertTriangle, 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Package, 
+  Bell, 
+  RefreshCw,
+  ShoppingCart,
+  ShoppingBag,
+} from 'lucide-react'
 import ApiHandler from "@/Api/apihandle"
 
-// Colors for charts
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658"]
 
-// Helper functions for dates
 function getCurrentDate() {
   return new Date().toISOString().split("T")[0]
 }
@@ -32,12 +40,13 @@ function getFirstDayOfMonth() {
 const Dashboard = ({ onTabChange }) => {
   const [startDate, setStartDate] = useState(getFirstDayOfMonth())
   const [endDate, setEndDate] = useState(getCurrentDate())
-  const [dashboardData, setDashboardData] = useState(null)
+  const [sales, setSales] = useState([])
+  const [products, setProducts] = useState([])
+  const [vouchers, setVouchers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Fetch dashboard data
   const fetchDashboardData = async (showRefreshLoader = false) => {
     try {
       if (showRefreshLoader) {
@@ -47,61 +56,70 @@ const Dashboard = ({ onTabChange }) => {
       }
       setError(null)
 
-      const filters = {
-        startDate,
-        endDate,
+      const filters = { startDate, endDate }
+
+      const [salesResponse, productsResponse, vouchersResponse] = await Promise.allSettled([
+        ApiHandler.getSales(filters),
+        ApiHandler.getProducts(),
+        ApiHandler.getVouchers(filters),
+      ])
+
+      if (salesResponse.status === "fulfilled") {
+        const response = salesResponse.value
+        let salesData = []
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            salesData = response.data
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            salesData = response.data.data
+          }
+        }
+        setSales(salesData)
       }
 
-      const response = await ApiHandler.getDashboardData(filters)
-
-      if (response.success) {
-        setDashboardData(response.data)
-      } else {
-        throw new Error(response.message || "Failed to fetch dashboard data")
+      if (productsResponse.status === "fulfilled") {
+        const response = productsResponse.value
+        let productsData = []
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            productsData = response.data
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            productsData = response.data.data
+          }
+        }
+        setProducts(productsData)
       }
+
+      if (vouchersResponse.status === "fulfilled") {
+        const response = vouchersResponse.value
+        let vouchersData = []
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            vouchersData = response.data
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            vouchersData = response.data.data
+          }
+        }
+        setVouchers(vouchersData)
+      }
+
     } catch (err) {
       console.error("Dashboard fetch error:", err)
       setError(err.message || "Failed to load dashboard data")
-
-      // Fallback to empty data structure
-      setDashboardData({
-        kpis: {
-          totalStockValue: 0,
-          lowStockCount: 0,
-          totalSales: 0,
-          totalExpenses: 0,
-          totalProfit: 0,
-          netProfit: 0,
-        },
-        charts: {
-          topProducts: [],
-          expensesData: [],
-          dailyData: [],
-        },
-        recentData: {
-          lowStockItems: [],
-          recentExpenses: [],
-          recentSales: [],
-          notifications: [],
-        },
-      })
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
   }
 
-  // Fetch data on component mount and when date range changes
   useEffect(() => {
     fetchDashboardData()
   }, [startDate, endDate])
 
-  // Manual refresh
   const handleRefresh = () => {
     fetchDashboardData(true)
   }
 
-  // Format currency
   const formatCurrency = (value) => {
     return new Intl.NumberFormat("en-PK", {
       style: "currency",
@@ -117,13 +135,130 @@ const Dashboard = ({ onTabChange }) => {
     }
   }
 
-  // Format chart data for display
-  const formatChartData = (data) => {
-    return data.map((item) => ({
-      ...item,
-      date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+  // Calculate KPIs
+  const calculateKPIs = () => {
+    const totalStockValue = products.reduce((sum, p) => 
+      sum + ((p.purchaseRate || 0) * (p.quantity || 0)), 0
+    )
+    
+    const lowStockCount = products.filter(p => 
+      (p.quantity || 0) <= (p.lowStockThreshold || 5)
+    ).length
+
+    const totalSales = sales.reduce((sum, s) => 
+      sum + (s.totalAmount || s.quantity * s.salePrice || 0), 0
+    )
+
+    const totalProfit = sales.reduce((sum, s) => 
+      sum + (s.profit || 0), 0
+    )
+
+    const purchaseVouchers = vouchers.filter(v => v.type === "CPV" || v.type === "BPV")
+    const totalPurchases = purchaseVouchers.reduce((sum, v) => {
+      const voucherTotal = v.entries?.reduce((s, e) => s + (e.debit || 0), 0) || 0
+      return sum + voucherTotal
+    }, 0)
+
+    return {
+      totalStockValue,
+      lowStockCount,
+      totalSales,
+      totalProfit,
+      totalPurchases,
+      netProfit: totalProfit,
+    }
+  }
+
+  // Get top selling products
+  const getTopProducts = () => {
+    const productSales = {}
+    sales.forEach(sale => {
+      const productName = sale.product?.name || sale.productName || "Unknown"
+      if (!productSales[productName]) {
+        productSales[productName] = 0
+      }
+      productSales[productName] += sale.totalAmount || (sale.quantity * sale.salePrice) || 0
+    })
+
+    return Object.entries(productSales)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+  }
+
+  // Get daily performance data
+  const getDailyData = () => {
+    const dailyStats = {}
+    
+    sales.forEach(sale => {
+      const date = sale.date?.split("T")[0]
+      if (!dailyStats[date]) {
+        dailyStats[date] = { sales: 0, profit: 0 }
+      }
+      dailyStats[date].sales += sale.totalAmount || (sale.quantity * sale.salePrice) || 0
+      dailyStats[date].profit += sale.profit || 0
+    })
+
+    return Object.keys(dailyStats)
+      .sort()
+      .slice(-7)
+      .map(date => ({
+        date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        sales: dailyStats[date].sales,
+        profit: dailyStats[date].profit,
+      }))
+  }
+
+  // Get low stock items with categories
+  const getLowStockItems = () => {
+    return products
+      .filter(p => (p.quantity || 0) <= (p.lowStockThreshold || 5))
+      .sort((a, b) => (a.quantity || 0) - (b.quantity || 0))
+      .slice(0, 5)
+      .map(p => ({
+        id: p._id || p.id,
+        name: p.name,
+        quantity: p.quantity || 0,
+        category: p.category || "Uncategorized",
+      }))
+  }
+
+  // Get recent sales
+  const getRecentSales = () => {
+    return [...sales]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5)
+      .map(s => ({
+        id: s._id || s.id,
+        productName: s.product?.name || s.productName || "Unknown",
+        date: new Date(s.date).toLocaleDateString(),
+        quantity: s.quantity || 0,
+        totalAmount: s.totalAmount || (s.quantity * s.salePrice) || 0,
+      }))
+  }
+
+  // Get recent purchases
+  const getRecentPurchases = () => {
+    const purchaseVouchers = vouchers
+      .filter(v => v.type === "CPV" || v.type === "BPV")
+      .sort((a, b) => new Date(b.voucherDate || b.date) - new Date(a.voucherDate || a.date))
+      .slice(0, 5)
+
+    return purchaseVouchers.map(v => ({
+      id: v._id || v.id,
+      voucherNo: v.voucherNo || "N/A",
+      date: new Date(v.voucherDate || v.date).toLocaleDateString(),
+      description: v.description || v.entries?.[0]?.accountName || "Purchase",
+      amount: v.entries?.reduce((sum, e) => sum + (e.debit || 0), 0) || 0,
     }))
   }
+
+  const kpis = calculateKPIs()
+  const topProducts = getTopProducts()
+  const dailyData = getDailyData()
+  const lowStockItems = getLowStockItems()
+  const recentSales = getRecentSales()
+  const recentPurchases = getRecentPurchases()
 
   if (isLoading) {
     return (
@@ -136,25 +271,6 @@ const Dashboard = ({ onTabChange }) => {
     )
   }
 
-  if (error && !dashboardData) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <AlertTriangle className="h-8 w-8 mx-auto mb-4 text-red-500" />
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={() => fetchDashboardData()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const { kpis, charts, recentData } = dashboardData
-
   return (
     <div className="space-y-6 p-6">
       {/* Header with Date Range Filter */}
@@ -165,7 +281,7 @@ const Dashboard = ({ onTabChange }) => {
           {error && (
             <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1 rounded-md">
               <AlertTriangle className="h-4 w-4" />
-              <span className="text-sm">Using cached data</span>
+              <span className="text-sm">{error}</span>
             </div>
           )}
 
@@ -231,21 +347,18 @@ const Dashboard = ({ onTabChange }) => {
           </div>
           <p className="text-2xl font-bold mt-2">{formatCurrency(kpis.totalSales)}</p>
           <div className="mt-2 flex items-center text-sm">
-            <span className="text-gray-500">Selected period</span>
+            <span className="text-gray-500">{sales.length} transactions</span>
           </div>
         </div>
 
-        <div
-          className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => handleTabChange("expenses")}
-        >
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start">
-            <h3 className="text-lg font-medium text-gray-500">Total Expenses</h3>
-            <CreditCard className="h-6 w-6 text-red-500" />
+            <h3 className="text-lg font-medium text-gray-500">Total Purchases</h3>
+            <ShoppingBag className="h-6 w-6 text-purple-500" />
           </div>
-          <p className="text-2xl font-bold mt-2">{formatCurrency(kpis.totalExpenses)}</p>
+          <p className="text-2xl font-bold mt-2">{formatCurrency(kpis.totalPurchases)}</p>
           <div className="mt-2 flex items-center text-sm">
-            <span className="text-gray-500">Selected period</span>
+            <span className="text-gray-500">{vouchers.filter(v => v.type === "CPV" || v.type === "BPV").length} vouchers</span>
           </div>
         </div>
 
@@ -276,39 +389,38 @@ const Dashboard = ({ onTabChange }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Daily Performance Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium mb-4">Daily Performance</h3>
+          <h3 className="text-lg font-medium mb-4">Daily Performance (Last 7 Days)</h3>
           <div className="h-64">
-            {charts.dailyData.length > 0 ? (
+            {dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={formatChartData(charts.dailyData)}>
+                <LineChart data={dailyData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                   <Line type="monotone" dataKey="sales" stroke="#82ca9d" name="Sales" strokeWidth={2} />
-                  <Line type="monotone" dataKey="expenses" stroke="#ff7300" name="Expenses" strokeWidth={2} />
                   <Line type="monotone" dataKey="profit" stroke="#8884d8" name="Profit" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">No performance data available</div>
+              <div className="flex items-center justify-center h-full text-gray-500">No sales data available</div>
             )}
           </div>
         </div>
 
         {/* Top Products Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium mb-4">Top Selling Products</h3>
+          <h3 className="text-lg font-medium mb-4">Top 5 Selling Products</h3>
           <div className="h-64">
-            {charts.topProducts.length > 0 ? (
+            {topProducts.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={charts.topProducts}>
+                <BarChart data={topProducts}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
                   <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                   <Bar dataKey="value" fill="#8884d8">
-                    {charts.topProducts.map((entry, index) => (
+                    {topProducts.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>
@@ -337,12 +449,17 @@ const Dashboard = ({ onTabChange }) => {
               View All
             </button>
           </div>
-          {recentData.lowStockItems.length > 0 ? (
+          {lowStockItems.length > 0 ? (
             <ul className="divide-y">
-              {recentData.lowStockItems.map((item) => (
-                <li key={item.id} className="py-3 flex justify-between">
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-red-600">{item.quantity} left</span>
+              {lowStockItems.map((item) => (
+                <li key={item.id} className="py-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-medium">{item.name}</span>
+                      <p className="text-sm text-gray-500">{item.category}</p>
+                    </div>
+                    <span className="text-red-600 font-semibold">{item.quantity} left</span>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -351,42 +468,11 @@ const Dashboard = ({ onTabChange }) => {
           )}
         </div>
 
-        {/* Recent Expenses */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-red-500" />
-              <h3 className="text-lg font-medium">Recent Expenses</h3>
-            </div>
-            <button
-              onClick={() => handleTabChange("expenses")}
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              View All
-            </button>
-          </div>
-          {recentData.recentExpenses.length > 0 ? (
-            <ul className="divide-y">
-              {recentData.recentExpenses.map((expense) => (
-                <li key={expense.id} className="py-3 flex justify-between">
-                  <div>
-                    <span className="font-medium">{expense.category}</span>
-                    <p className="text-sm text-gray-500">{expense.date}</p>
-                  </div>
-                  <span className="text-red-600">{formatCurrency(expense.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center py-4 text-gray-500">No recent expenses.</p>
-          )}
-        </div>
-
         {/* Recent Sales */}
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-500" />
+              <ShoppingCart className="h-5 w-5 text-green-500" />
               <h3 className="text-lg font-medium">Recent Sales</h3>
             </div>
             <button
@@ -396,17 +482,19 @@ const Dashboard = ({ onTabChange }) => {
               View All
             </button>
           </div>
-          {recentData.recentSales.length > 0 ? (
+          {recentSales.length > 0 ? (
             <ul className="divide-y">
-              {recentData.recentSales.map((sale) => (
-                <li key={sale.id} className="py-3 flex justify-between">
-                  <div>
-                    <span className="font-medium">{sale.productName}</span>
-                    <p className="text-sm text-gray-500">
-                      {sale.date} · {sale.quantity} units
-                    </p>
+              {recentSales.map((sale) => (
+                <li key={sale.id} className="py-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-medium">{sale.productName}</span>
+                      <p className="text-sm text-gray-500">
+                        {sale.date} · {sale.quantity} units
+                      </p>
+                    </div>
+                    <span className="text-green-600 font-semibold">{formatCurrency(sale.totalAmount)}</span>
                   </div>
-                  <span className="text-green-600">{formatCurrency(sale.totalAmount)}</span>
                 </li>
               ))}
             </ul>
@@ -414,41 +502,36 @@ const Dashboard = ({ onTabChange }) => {
             <p className="text-center py-4 text-gray-500">No recent sales.</p>
           )}
         </div>
-      </div>
 
-      {/* Notifications */}
-      {recentData.notifications.length > 0 && (
+        {/* Recent Purchases */}
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-amber-500" />
-              <h3 className="text-lg font-medium">Recent Notifications</h3>
+              <ShoppingBag className="h-5 w-5 text-purple-500" />
+              <h3 className="text-lg font-medium">Recent Purchases</h3>
             </div>
-            <button
-              onClick={() => handleTabChange("notifications")}
-              className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              View All
-            </button>
           </div>
-          <div className="space-y-2">
-            {recentData.notifications.map((notification) => (
-              <div
-                key={notification.id}
-                className={`p-4 rounded-md ${
-                  notification.type === "lowStock" || notification.type === "monthlyExpense"
-                    ? "bg-red-50 text-red-700"
-                    : notification.type === "sale"
-                      ? "bg-green-50 text-green-700"
-                      : "bg-blue-50 text-blue-700"
-                }`}
-              >
-                <span>{notification.message}</span>
-              </div>
-            ))}
-          </div>
+          {recentPurchases.length > 0 ? (
+            <ul className="divide-y">
+              {recentPurchases.map((purchase) => (
+                <li key={purchase.id} className="py-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="font-medium">{purchase.voucherNo}</span>
+                      <p className="text-sm text-gray-500">
+                        {purchase.date} · {purchase.description}
+                      </p>
+                    </div>
+                    <span className="text-purple-600 font-semibold">{formatCurrency(purchase.amount)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-center py-4 text-gray-500">No recent purchases.</p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

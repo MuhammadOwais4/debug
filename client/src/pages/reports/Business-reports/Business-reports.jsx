@@ -14,24 +14,27 @@ import {
   PieChart,
   Pie,
   Cell,
+  AreaChart,
+  Area,
+  ComposedChart,
 } from "recharts"
 import {
   TrendingUp,
-  Package,
+  TrendingDown,
   DollarSign,
-  AlertTriangle,
   Download,
-  BarChart3,
-  PieChartIcon,
-  FileText,
   RefreshCw,
+  FileText,
+  ShoppingCart,
+  ShoppingBag,
+  Calendar,
+  AlertCircle,
+  Package,
 } from "lucide-react"
 import ApiHandler from "../../../Api/apihandle"
 
-// Colors for charts
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658"]
+const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"]
 
-// Helper functions for dates
 function getCurrentDate() {
   return new Date().toISOString().split("T")[0]
 }
@@ -41,99 +44,76 @@ function getFirstDayOfMonth() {
   return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split("T")[0]
 }
 
-function getFirstDayOfYear() {
-  const date = new Date()
-  return new Date(date.getFullYear(), 0, 1).toISOString().split("T")[0]
-}
-
 const Reports = () => {
-  // State for data
-  const [products, setProducts] = useState([])
   const [sales, setSales] = useState([])
-  const [expenses, setExpenses] = useState([])
-  const [salesStats, setSalesStats] = useState(null)
+  const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  // State for date filters
   const [startDate, setStartDate] = useState(getFirstDayOfMonth())
   const [endDate, setEndDate] = useState(getCurrentDate())
-  const [reportPeriod, setReportPeriod] = useState("month") // month, quarter, year, custom
+  const [reportPeriod, setReportPeriod] = useState("month")
 
-  // State for chart types
-  const [salesChartType, setSalesChartType] = useState("bar")
-  const [expenseChartType, setExpenseChartType] = useState("pie")
-
-  // Fetch all data
   const fetchData = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const filters = {
-        startDate,
+      const filters = { 
+        startDate, 
         endDate,
       }
 
-      // Fetch all data in parallel with better error handling
-      const [productsResponse, salesResponse, expensesResponse, statsResponse] = await Promise.allSettled([
-        ApiHandler.getProducts(),
+      console.log("Fetching data with filters:", filters)
+
+      const [salesResponse, productsResponse] = await Promise.allSettled([
         ApiHandler.getSales(filters),
-        // Try to fetch expenses, but don't fail if endpoint doesn't exist
-        ApiHandler.getExpenses ? ApiHandler.getExpenses(filters) : Promise.resolve({ data: [] }),
-        ApiHandler.getSalesStats(filters),
+        ApiHandler.getProducts(),
       ])
 
-      // Handle products
-      if (productsResponse.status === "fulfilled") {
-        const productsData = productsResponse.value?.data || []
-        setProducts(Array.isArray(productsData) ? productsData : [])
-      } else {
-        console.error("Failed to fetch products:", productsResponse.reason)
-        setProducts([])
-      }
-
-      // Handle sales
       if (salesResponse.status === "fulfilled") {
-        const salesData = salesResponse.value?.data || []
-        setSales(Array.isArray(salesData) ? salesData : [])
+        const response = salesResponse.value
+        let salesData = []
+        
+        // Handle different response structures
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            salesData = response.data
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            salesData = response.data.data
+          }
+        } else if (Array.isArray(response)) {
+          salesData = response
+        }
+        
+        console.log("Sales data received:", salesData)
+        setSales(salesData)
       } else {
         console.error("Failed to fetch sales:", salesResponse.reason)
         setSales([])
       }
 
-      // Handle expenses - gracefully handle if endpoint doesn't exist
-      if (expensesResponse.status === "fulfilled") {
-        const expensesData = expensesResponse.value?.data || []
-        setExpenses(Array.isArray(expensesData) ? expensesData : [])
+      if (productsResponse.status === "fulfilled") {
+        const response = productsResponse.value
+        let productsData = []
+        
+        // Handle different response structures
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            productsData = response.data
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            productsData = response.data.data
+          }
+        } else if (Array.isArray(response)) {
+          productsData = response
+        }
+        
+        console.log("Products data received:", productsData)
+        setProducts(productsData)
       } else {
-        console.warn("Expenses endpoint not available or failed:", expensesResponse.reason)
-        // Create mock expense data for demonstration
-        setExpenses([
-          {
-            id: 1,
-            date: getCurrentDate(),
-            category: "Office Supplies",
-            amount: 500,
-            description: "Sample expense data",
-          },
-          {
-            id: 2,
-            date: getFirstDayOfMonth(),
-            category: "Marketing",
-            amount: 1200,
-            description: "Sample marketing expense",
-          },
-        ])
+        console.error("Failed to fetch products:", productsResponse.reason)
+        setProducts([])
       }
 
-      // Handle stats
-      if (statsResponse.status === "fulfilled") {
-        setSalesStats(statsResponse.value?.data || null)
-      } else {
-        console.error("Failed to fetch sales stats:", statsResponse.reason)
-        setSalesStats(null)
-      }
     } catch (error) {
       console.error("Error fetching report data:", error)
       setError(error.message)
@@ -142,7 +122,6 @@ const Reports = () => {
     }
   }
 
-  // Update date range based on period selection
   const handlePeriodChange = (period) => {
     setReportPeriod(period)
     const now = new Date()
@@ -163,23 +142,21 @@ const Reports = () => {
         setEndDate(getCurrentDate())
         break
       case "year":
-        setStartDate(getFirstDayOfYear())
+        const yearStart = new Date(now.getFullYear(), 0, 1)
+        setStartDate(yearStart.toISOString().split("T")[0])
         setEndDate(getCurrentDate())
         break
       default:
-        // custom - don't change dates
         break
     }
   }
 
-  // Initial data fetch
   useEffect(() => {
     fetchData()
   }, [startDate, endDate])
 
-  // Calculate metrics
+  // Calculate metrics from real data
   const calculateMetrics = () => {
-    // Filter sales by date
     const filteredSales = sales.filter((sale) => {
       const saleDate = new Date(sale.date)
       const start = new Date(startDate)
@@ -188,157 +165,141 @@ const Reports = () => {
       return saleDate >= start && saleDate <= end
     })
 
-    // Filter expenses by date
-    const filteredExpenses = expenses.filter((expense) => {
-      const expenseDate = new Date(expense.date)
-      const start = new Date(startDate)
-      const end = new Date(endDate)
-      end.setHours(23, 59, 59)
-      return expenseDate >= start && expenseDate <= end
-    })
+    // Calculate total sales
+    const totalSales = filteredSales.reduce(
+      (sum, sale) => sum + (sale.totalAmount || sale.quantity * sale.salePrice || 0), 0
+    )
+    
+    const totalProfit = filteredSales.reduce(
+      (sum, sale) => sum + (sale.profit || 0), 0
+    )
 
-    // Stock metrics
-    const totalProducts = products.length
-    const lowStockItems = products.filter((p) => (p.quantity || 0) <= (p.lowStockThreshold || 5))
-    const outOfStockItems = products.filter((p) => (p.quantity || 0) === 0)
-    const totalStockValue = products.reduce((sum, product) => {
-      return sum + (product.purchaseRate || 0) * (product.quantity || 0)
+    // Calculate total purchase value from products (stock value)
+    const totalPurchaseValue = products.reduce((sum, product) => {
+      return sum + ((product.purchaseRate || 0) * (product.quantity || 0))
     }, 0)
 
-    // Sales metrics
-    const totalSales = filteredSales.reduce(
-      (sum, sale) => sum + (sale.totalAmount || sale.quantity * sale.salePrice),
-      0,
-    )
-    const totalProfit = filteredSales.reduce((sum, sale) => sum + (sale.profit || 0), 0)
-    const totalOrders = filteredSales.length
-
-    // Expense metrics
-    const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0)
-
-    // Net profit
-    const netProfit = totalSales - totalExpenses
-    const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0
+    // Calculate purchase cost from sold items
+    const totalPurchaseCost = filteredSales.reduce((sum, sale) => {
+      // Find the product to get purchase rate
+      const product = products.find(p => 
+        p._id === sale.product?._id || 
+        p._id === sale.productId || 
+        p.name === sale.product?.name
+      )
+      
+      if (product) {
+        return sum + ((product.purchaseRate || 0) * (sale.quantity || 0))
+      }
+      
+      // If product not found, estimate from sale price and profit
+      const estimatedCost = (sale.totalAmount || sale.quantity * sale.salePrice) - (sale.profit || 0)
+      return sum + estimatedCost
+    }, 0)
 
     return {
-      stock: {
-        totalProducts,
-        lowStockItems: lowStockItems.length,
-        outOfStockItems: outOfStockItems.length,
-        totalStockValue,
-        lowStockProducts: lowStockItems,
-        outOfStockProducts: outOfStockItems,
-      },
       sales: {
-        totalSales,
-        totalProfit,
-        totalOrders,
-        averageOrderValue: totalOrders > 0 ? totalSales / totalOrders : 0,
-        profitMargin,
+        total: totalSales,
+        count: filteredSales.length,
+        profit: totalProfit,
+        average: filteredSales.length > 0 ? totalSales / filteredSales.length : 0,
       },
-      expenses: {
-        totalExpenses,
+      purchases: {
+        totalStockValue: totalPurchaseValue,
+        totalCostOfSales: totalPurchaseCost,
+        productCount: products.length,
+        averageProductValue: products.length > 0 ? totalPurchaseValue / products.length : 0,
       },
-      overall: {
-        netProfit,
-        grossMargin: totalSales > 0 ? ((totalSales - totalExpenses) / totalSales) * 100 : 0,
-      },
+      netProfit: totalProfit,
+      grossProfit: totalSales - totalPurchaseCost,
     }
   }
 
   const metrics = calculateMetrics()
 
-  // Group sales by product for chart
+  // Group sales by product
   const salesByProduct = {}
   sales.forEach((sale) => {
-    const productName = sale.product?.name || "Unknown Product"
+    const productName = sale.product?.name || sale.productName || "Unknown"
     if (!salesByProduct[productName]) {
-      salesByProduct[productName] = {
-        name: productName,
-        value: 0,
-        quantity: 0,
-      }
+      salesByProduct[productName] = { name: productName, value: 0, quantity: 0 }
     }
-    salesByProduct[productName].value += sale.totalAmount || sale.quantity * sale.salePrice
-    salesByProduct[productName].quantity += sale.quantity
+    salesByProduct[productName].value += sale.totalAmount || sale.quantity * sale.salePrice || 0
+    salesByProduct[productName].quantity += sale.quantity || 0
   })
 
   const salesChartData = Object.values(salesByProduct)
     .sort((a, b) => b.value - a.value)
     .slice(0, 10)
 
-  // Group expenses by category for chart
-  const expensesByCategory = {}
-  expenses.forEach((expense) => {
-    const category = expense.category || "Other"
-    if (!expensesByCategory[category]) {
-      expensesByCategory[category] = 0
+  // Group products by category for purchase analysis
+  const purchasesByCategory = {}
+  products.forEach((product) => {
+    const category = product.category || "Uncategorized"
+    if (!purchasesByCategory[category]) {
+      purchasesByCategory[category] = 0
     }
-    expensesByCategory[category] += expense.amount || 0
+    purchasesByCategory[category] += (product.purchaseRate || 0) * (product.quantity || 0)
   })
 
-  const expenseChartData = Object.entries(expensesByCategory).map(([name, value]) => ({
-    name,
-    value,
-  }))
+  const purchaseChartData = Object.entries(purchasesByCategory)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10)
 
-  // Sales trend data (by date)
+  // Top products by stock value
+  const topProductsByValue = products
+    .map(product => ({
+      name: product.name,
+      value: (product.purchaseRate || 0) * (product.quantity || 0),
+      quantity: product.quantity || 0,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10)
+
+  // Sales trend by date
   const salesByDate = {}
   sales.forEach((sale) => {
-    const date = sale.date
+    const date = sale.date?.split("T")[0] || sale.date
     if (!salesByDate[date]) {
       salesByDate[date] = 0
     }
-    salesByDate[date] += sale.totalAmount || sale.quantity * sale.salePrice
+    salesByDate[date] += sale.totalAmount || sale.quantity * sale.salePrice || 0
   })
 
-  const salesTrendData = Object.keys(salesByDate)
-    .sort()
-    .map((date) => ({
-      date,
-      amount: salesByDate[date],
-    }))
+  const allDates = Object.keys(salesByDate).sort()
+  const combinedTrendData = allDates.map(date => ({
+    date,
+    sales: salesByDate[date] || 0,
+  }))
 
-  // Format currency
   const formatCurrency = (value) => {
     return new Intl.NumberFormat("en-PK", {
       style: "currency",
       currency: "PKR",
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
     }).format(value)
   }
 
-  // Export report
   const handleExport = () => {
-    const reportData = {
-      period: `${startDate} to ${endDate}`,
-      metrics,
-      salesByProduct: Object.values(salesByProduct),
-      expensesByCategory: Object.entries(expensesByCategory),
-    }
-
     const csvContent = [
-      ["Business Report", `Period: ${startDate} to ${endDate}`],
-      [],
-      ["STOCK SUMMARY"],
-      ["Total Products", metrics.stock.totalProducts],
-      ["Low Stock Items", metrics.stock.lowStockItems],
-      ["Out of Stock Items", metrics.stock.outOfStockItems],
-      ["Total Stock Value", formatCurrency(metrics.stock.totalStockValue)],
+      ["Sales & Purchase Report", `Period: ${startDate} to ${endDate}`],
       [],
       ["SALES SUMMARY"],
-      ["Total Sales", formatCurrency(metrics.sales.totalSales)],
-      ["Total Profit", formatCurrency(metrics.sales.totalProfit)],
-      ["Total Orders", metrics.sales.totalOrders],
-      ["Average Order Value", formatCurrency(metrics.sales.averageOrderValue)],
-      ["Profit Margin", `${metrics.sales.profitMargin.toFixed(2)}%`],
+      ["Total Sales", formatCurrency(metrics.sales.total)],
+      ["Total Orders", metrics.sales.count],
+      ["Average Order", formatCurrency(metrics.sales.average)],
+      ["Total Profit", formatCurrency(metrics.sales.profit)],
       [],
-      ["EXPENSE SUMMARY"],
-      ["Total Expenses", formatCurrency(metrics.expenses.totalExpenses)],
+      ["INVENTORY SUMMARY"],
+      ["Total Stock Value", formatCurrency(metrics.purchases.totalStockValue)],
+      ["Cost of Goods Sold", formatCurrency(metrics.purchases.totalCostOfSales)],
+      ["Total Products", metrics.purchases.productCount],
+      ["Avg Product Value", formatCurrency(metrics.purchases.averageProductValue)],
       [],
-      ["OVERALL SUMMARY"],
-      ["Net Profit", formatCurrency(metrics.overall.netProfit)],
-      ["Gross Margin", `${metrics.overall.grossMargin.toFixed(2)}%`],
+      ["PROFITABILITY"],
+      ["Net Profit", formatCurrency(metrics.netProfit)],
+      ["Gross Profit", formatCurrency(metrics.grossProfit)],
     ]
       .map((row) => row.join(","))
       .join("\n")
@@ -347,7 +308,7 @@ const Reports = () => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `business-report-${getCurrentDate()}.csv`
+    a.download = `sales-purchase-report-${getCurrentDate()}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -366,17 +327,17 @@ const Reports = () => {
   }
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow">
+    <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h2 className="text-xl font-semibold mb-4 md:mb-0 flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Business Reports
+        <h2 className="text-2xl font-bold mb-4 md:mb-0 flex items-center gap-2 text-gray-800">
+          <FileText className="h-6 w-6" />
+          Sales & Inventory Report
         </h2>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={fetchData}
-            className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center gap-2"
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center gap-2 transition-colors"
             disabled={isLoading}
           >
             <RefreshCw className="h-4 w-4" />
@@ -384,40 +345,42 @@ const Reports = () => {
           </button>
           <button
             onClick={handleExport}
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center gap-2"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
           >
             <Download className="h-4 w-4" />
-            Export Report
+            Export CSV
           </button>
         </div>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-red-600" />
           <p className="text-red-700">{error}</p>
         </div>
       )}
 
-      {/* Info about expense data */}
-      {expenses.length <= 2 && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+      {/* No Data Warning */}
+      {!isLoading && sales.length === 0 && products.length === 0 && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-blue-700">
-            <strong>Note:</strong> Expense tracking is not fully implemented yet. The report shows sample data for
-            demonstration. To get real expense data, implement the expense management endpoints in your backend.
+            <strong>No data available.</strong> Add products and create sales to see reports.
           </p>
         </div>
       )}
 
       {/* Period Selection */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+      <div className="mb-6 p-4 bg-white rounded-lg shadow-sm">
         <div className="flex flex-wrap gap-2 mb-4">
           {["week", "month", "quarter", "year", "custom"].map((period) => (
             <button
               key={period}
               onClick={() => handlePeriodChange(period)}
-              className={`px-3 py-1 rounded-md text-sm ${
-                reportPeriod === period ? "bg-blue-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                reportPeriod === period
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
               {period.charAt(0).toUpperCase() + period.slice(1)}
@@ -428,19 +391,19 @@ const Reports = () => {
         {reportPeriod === "custom" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
                 type="date"
-                className="w-full p-2 border rounded-md"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
               <input
                 type="date"
-                className="w-full p-2 border rounded-md"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
@@ -448,280 +411,222 @@ const Reports = () => {
           </div>
         )}
 
-        <div className="mt-2 text-sm text-gray-600">
-          Report Period: {startDate} to {endDate}
+        <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+          <Calendar className="h-4 w-4" />
+          <span>Report Period: <strong>{startDate}</strong> to <strong>{endDate}</strong></span>
         </div>
       </div>
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-blue-50 p-4 rounded-lg">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-600">Total Sales</p>
-              <p className="text-2xl font-bold text-blue-900">{formatCurrency(metrics.sales.totalSales)}</p>
+              <p className="text-sm opacity-90 mb-1">Total Sales</p>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.sales.total)}</p>
+              <p className="text-xs opacity-80 mt-1">{metrics.sales.count} orders</p>
             </div>
-            <DollarSign className="h-8 w-8 text-blue-600" />
+            <ShoppingCart className="h-12 w-12 opacity-80" />
           </div>
         </div>
 
-        <div className="bg-green-50 p-4 rounded-lg">
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-green-600">Net Profit</p>
-              <p className="text-2xl font-bold text-green-900">{formatCurrency(metrics.overall.netProfit)}</p>
+              <p className="text-sm opacity-90 mb-1">Stock Value</p>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.purchases.totalStockValue)}</p>
+              <p className="text-xs opacity-80 mt-1">{metrics.purchases.productCount} products</p>
             </div>
-            <TrendingUp className="h-8 w-8 text-green-600" />
+            <Package className="h-12 w-12 opacity-80" />
           </div>
         </div>
 
-        <div className="bg-purple-50 p-4 rounded-lg">
+        <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-purple-600">Total Products</p>
-              <p className="text-2xl font-bold text-purple-900">{metrics.stock.totalProducts}</p>
+              <p className="text-sm opacity-90 mb-1">Net Profit</p>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.netProfit)}</p>
+              <p className="text-xs opacity-80 mt-1">Total profit</p>
             </div>
-            <Package className="h-8 w-8 text-purple-600" />
+            <TrendingUp className="h-12 w-12 opacity-80" />
           </div>
         </div>
 
-        <div className="bg-orange-50 p-4 rounded-lg">
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-xl shadow-lg text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-orange-600">Low Stock Items</p>
-              <p className="text-2xl font-bold text-orange-900">{metrics.stock.lowStockItems}</p>
+              <p className="text-sm opacity-90 mb-1">Avg Order Value</p>
+              <p className="text-2xl font-bold">{formatCurrency(metrics.sales.average)}</p>
+              <p className="text-xs opacity-80 mt-1">Per transaction</p>
             </div>
-            <AlertTriangle className="h-8 w-8 text-orange-600" />
+            <DollarSign className="h-12 w-12 opacity-80" />
           </div>
         </div>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Sales by Product Chart */}
-        <div className="bg-white p-4 rounded-lg border">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium">Sales by Product</h3>
-            <div className="flex gap-2">
-              <button
-                className={`p-2 rounded ${salesChartType === "bar" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`}
-                onClick={() => setSalesChartType("bar")}
-              >
-                <BarChart3 className="h-4 w-4" />
-              </button>
-              <button
-                className={`p-2 rounded ${salesChartType === "pie" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`}
-                onClick={() => setSalesChartType("pie")}
-              >
-                <PieChartIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          <div className="h-64">
+        {/* Sales by Product */}
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Top 10 Products by Sales</h3>
+          <div className="h-80">
             {salesChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                {salesChartType === "pie" ? (
-                  <PieChart>
-                    <Pie
-                      data={salesChartData.slice(0, 6)}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {salesChartData.slice(0, 6).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                  </PieChart>
-                ) : (
-                  <BarChart data={salesChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Bar dataKey="value" fill="#8884d8">
-                      {salesChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                )}
+                <BarChart data={salesChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={100} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip 
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                  />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]}>
+                    {salesChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
+              <div className="flex items-center justify-center h-full text-gray-400">
                 <p>No sales data available</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Expenses by Category Chart */}
-        <div className="bg-white p-4 rounded-lg border">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium">Expenses by Category</h3>
-            <div className="flex gap-2">
-              <button
-                className={`p-2 rounded ${expenseChartType === "bar" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`}
-                onClick={() => setExpenseChartType("bar")}
-              >
-                <BarChart3 className="h-4 w-4" />
-              </button>
-              <button
-                className={`p-2 rounded ${expenseChartType === "pie" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`}
-                onClick={() => setExpenseChartType("pie")}
-              >
-                <PieChartIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          <div className="h-64">
-            {expenseChartData.length > 0 ? (
+        {/* Stock Value by Category */}
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Stock Value by Category</h3>
+          <div className="h-80">
+            {purchaseChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                {expenseChartType === "pie" ? (
-                  <PieChart>
-                    <Pie
-                      data={expenseChartData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {expenseChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                  </PieChart>
-                ) : (
-                  <BarChart data={expenseChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Bar dataKey="value" fill="#FF8042" />
-                  </BarChart>
-                )}
+                <PieChart>
+                  <Pie
+                    data={purchaseChartData.slice(0, 6)}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {purchaseChartData.slice(0, 6).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <p>No expense data available</p>
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p>No inventory data available</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Sales Trend Chart */}
-      <div className="bg-white p-4 rounded-lg border mb-6">
-        <h3 className="text-lg font-medium mb-4">Sales Trend</h3>
-        <div className="h-64">
-          {salesTrendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesTrendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Line type="monotone" dataKey="amount" stroke="#82ca9d" activeDot={{ r: 8 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <p>No sales trend data available</p>
-            </div>
-          )}
+      {/* Sales Trend & Top Products by Stock Value */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Sales Trend */}
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Sales Trend</h3>
+          <div className="h-80">
+            {combinedTrendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={combinedTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip 
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                  />
+                  <Area type="monotone" dataKey="sales" fill="#3b82f6" stroke="#3b82f6" fillOpacity={0.6} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p>No sales trend data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Products by Stock Value */}
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Top 10 Products by Stock Value</h3>
+          <div className="h-80">
+            {topProductsByValue.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topProductsByValue} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                  />
+                  <Bar dataKey="value" fill="#8b5cf6" radius={[0, 8, 8, 0]}>
+                    {topProductsByValue.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p>No product data available</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Detailed Summary Tables */}
+      {/* Summary Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Stock Summary */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-medium mb-4">Stock Summary</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Products:</span>
-              <span className="font-medium">{metrics.stock.totalProducts}</span>
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Sales Summary</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Total Sales:</span>
+              <span className="font-semibold text-green-600">{formatCurrency(metrics.sales.total)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Low Stock Items:</span>
-              <span className="font-medium text-orange-600">{metrics.stock.lowStockItems}</span>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Total Orders:</span>
+              <span className="font-semibold">{metrics.sales.count}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Out of Stock:</span>
-              <span className="font-medium text-red-600">{metrics.stock.outOfStockItems}</span>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Average Order:</span>
+              <span className="font-semibold">{formatCurrency(metrics.sales.average)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Stock Value:</span>
-              <span className="font-medium">{formatCurrency(metrics.stock.totalStockValue)}</span>
+            <div className="flex justify-between py-2">
+              <span className="text-gray-600">Net Profit:</span>
+              <span className="font-semibold text-green-600">{formatCurrency(metrics.netProfit)}</span>
             </div>
-
-            {metrics.stock.lowStockProducts.length > 0 && (
-              <div className="pt-4 border-t">
-                <h4 className="font-medium mb-2 text-orange-600">Low Stock Alert</h4>
-                <ul className="space-y-1 max-h-32 overflow-y-auto">
-                  {metrics.stock.lowStockProducts.map((product) => (
-                    <li key={product._id || product.id} className="flex justify-between text-sm">
-                      <span>{product.name}</span>
-                      <span className="text-orange-600">{product.quantity || 0} remaining</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Financial Summary */}
-        <div className="bg-white p-6 rounded-lg border">
-          <h3 className="text-lg font-medium mb-4">Financial Summary</h3>
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Sales:</span>
-              <span className="font-medium text-green-600">{formatCurrency(metrics.sales.totalSales)}</span>
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Inventory Summary</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Total Stock Value:</span>
+              <span className="font-semibold text-blue-600">{formatCurrency(metrics.purchases.totalStockValue)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Expenses:</span>
-              <span className="font-medium text-red-600">{formatCurrency(metrics.expenses.totalExpenses)}</span>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Cost of Goods Sold:</span>
+              <span className="font-semibold text-red-600">{formatCurrency(metrics.purchases.totalCostOfSales)}</span>
             </div>
-            <div className="flex justify-between border-t pt-2">
-              <span className="text-gray-600 font-medium">Net Profit:</span>
-              <span className={`font-medium ${metrics.overall.netProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                {formatCurrency(metrics.overall.netProfit)}
-              </span>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">Total Products:</span>
+              <span className="font-semibold">{metrics.purchases.productCount}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Profit Margin:</span>
-              <span className="font-medium">{metrics.sales.profitMargin.toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Average Order Value:</span>
-              <span className="font-medium">{formatCurrency(metrics.sales.averageOrderValue)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Total Orders:</span>
-              <span className="font-medium">{metrics.sales.totalOrders}</span>
-            </div>
-
-            <div className="pt-4 border-t">
-              <h4 className="font-medium mb-2">Profit Margin Visualization</h4>
-              <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${metrics.sales.profitMargin > 0 ? "bg-green-500" : "bg-red-500"}`}
-                  style={{ width: `${Math.min(Math.abs(metrics.sales.profitMargin), 100)}%` }}
-                ></div>
-              </div>
-              <div className="text-center mt-2 text-sm text-gray-600">
-                {metrics.sales.profitMargin.toFixed(2)}% Profit Margin
-              </div>
+            <div className="flex justify-between py-2">
+              <span className="text-gray-600">Gross Profit:</span>
+              <span className="font-semibold text-green-600">{formatCurrency(metrics.grossProfit)}</span>
             </div>
           </div>
         </div>

@@ -911,7 +911,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 Balance Quantity
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Balance Stock Value
+                Purchaes Amount
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Expected Sale Rate

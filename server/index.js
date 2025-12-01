@@ -8,9 +8,9 @@ const app = express()
 // Middleware
 app.use(
   cors({
-  //  origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173"],
   //  origin: ["https://stock-management-system-sccp.vercel.app"],
-    origin: ["https://debug-henna.vercel.app"],
+    // origin: ["https://debug-henna.vercel.app"],
 
     credentials: true,
   }),
@@ -35,6 +35,7 @@ app.use("/api/chart-of-accounts/expenses", require("./routes/chart-of-accounts/e
 app.use("/api/vouchers", require("./routes/vouchersRoute"))
 app.use("/api/accounts", require("./routes/accountsRoute"))
 app.use("/api/trial-balance", require("./routes/trial-balance-route"))
+app.use("/api/ledgers", require("./routes/ledgerRoutes"))
 
 // Error handling middleware
 app.use((err, req, res, next) => {
