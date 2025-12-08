@@ -1,12 +1,13 @@
 import axios from "axios"
 
-const API_BASE_URL = "https://debug-nxby.vercel.app/api"
+// const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 // const API_BASE_URL = "https://stock-management-system-lime.vercel.app/api"
+const API_BASE_URL = "http://localhost:5000/api"
 
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000, // Increased timeout
+  timeout: 55000, // Increased timeout
   headers: {
     "Content-Type": "application/json",
   },
@@ -1309,6 +1310,23 @@ const ApiHandler = {
       throw new Error(error.response?.data?.message || error.message || "Failed to get next chart expense code")
     }
   },
+
+
+getAllAccounts: async () => {
+  const response = await apiClient.get("/ledgers/accounts")  
+  return response.data
+},
+
+getAccountLedger: async ({ accountCode, accountName, fromDate, toDate }) => {
+  const params = new URLSearchParams({
+    accountCode: accountCode || "",
+    accountName: accountName || "",
+    fromDate,
+    toDate,
+  })
+  const response = await apiClient.get(`/ledgers/account-ledger?${params}`) 
+  return response.data
+},
 
   // ============ VOUCHER ENDPOINTS ============
 

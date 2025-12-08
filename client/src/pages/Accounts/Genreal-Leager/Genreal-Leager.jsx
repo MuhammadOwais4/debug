@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { RefreshCw, ArrowLeft } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
+
 export default function GeneralLedger() {
   const [fromDate, setFromDate] = useState(() => {
     const today = new Date()
@@ -60,142 +61,26 @@ export default function GeneralLedger() {
     }
   }, [])
 
-  // Load all accounts from chart of accounts
+  // ========== LOAD ACCOUNTS FROM BACKEND API ==========
   const loadAllAccounts = async () => {
     try {
       setLoadingAccounts(true)
+      console.log("📊 Fetching accounts from backend API...")
 
-      // Fetch all account types in parallel
-      const [assetsRes, equityRes, expensesRes, liabilitiesRes, revenueRes] = await Promise.all([
-        ApiHandler.getAssets().catch(() => ({ data: [] })),
-        ApiHandler.getEquity().catch(() => ({ data: [] })),
-        ApiHandler.getChartExpenses().catch(() => ({ data: [] })),
-        ApiHandler.getLiabilities().catch(() => ({ data: [] })),
-        ApiHandler.getRevenue().catch(() => ({ data: [] })),
-      ])
+      const response = await ApiHandler.getAllAccounts()
 
-      // Combine all accounts with category labels
-      const allAccounts = [
-        // Assets
-        ...(assetsRes.data || []).map((account) => ({
-          code: account.code,
-          name: account.name,
-          fullName: `${account.code} - ${account.name}`,
-          category: "Assets",
-          normalBalance: "debit",
-        })),
-        // Equity
-        ...(equityRes.data || []).map((account) => ({
-          code: account.code,
-          name: account.name,
-          fullName: `${account.code} - ${account.name}`,
-          category: "Equity",
-          normalBalance: "credit",
-        })),
-        // Expenses
-        ...(expensesRes.data || []).map((account) => ({
-          code: account.code,
-          name: account.name,
-          fullName: `${account.code} - ${account.name}`,
-          category: "Expenses",
-          normalBalance: "debit",
-        })),
-        // Liabilities
-        ...(liabilitiesRes.data || []).map((account) => ({
-          code: account.code,
-          name: account.name,
-          fullName: `${account.code} - ${account.name}`,
-          category: "Liabilities",
-          normalBalance: "credit",
-        })),
-        // Revenue
-        ...(revenueRes.data || []).map((account) => ({
-          code: account.code,
-          name: account.name,
-          fullName: `${account.code} - ${account.name}`,
-          category: "Revenue",
-          normalBalance: "credit",
-        })),
-      ]
-
-      // Sort accounts by code
-      allAccounts.sort((a, b) => a.code.localeCompare(b.code))
-      setAccountOptions(allAccounts)
+      if (response.success) {
+        setAccountOptions(response.data)
+        console.log(`✅ Loaded ${response.count} accounts from backend`)
+      } else {
+        console.error("Failed to load accounts:", response)
+        alert("Failed to load accounts. Please try again.")
+      }
     } catch (error) {
       console.error("Error loading accounts:", error)
+      alert(`Failed to load accounts: ${error.message}`)
     } finally {
       setLoadingAccounts(false)
-    }
-  }
-
-  const loadSalesData = async (fromDate, toDate) => {
-    try {
-      const response = await ApiHandler.getSales()
-      const sales = response.data || []
-
-      const salesEntries = []
-      const processedSaleIds = new Set()
-
-      sales.forEach((sale) => {
-        const saleDate = new Date(sale.createdAt || sale.updatedAt)
-        const from = new Date(fromDate + "T00:00:00")
-        const to = new Date(toDate + "T23:59:59")
-
-        if (saleDate >= from && saleDate <= to) {
-          const customerName = sale.customerName || ""
-          if (customerName.includes("Test") || customerName.includes("TEST") || customerName.includes("TEST-CUSTOMER")) {
-            return // Skip this entry
-          }
-
-          const amount = Number.parseFloat(sale.totalAmount || 0)
-          const saleId = `sale-${sale._id}`
-
-          // Only process each sale once
-          if (!processedSaleIds.has(saleId)) {
-            processedSaleIds.add(saleId)
-            
-            // DEBIT ENTRY - Customer Account (Accounts Receivable increases)
-            salesEntries.push({
-              id: `${saleId}-customer`,
-              date: sale.createdAt || sale.updatedAt,
-              voucherNo: sale.invoice || "N/A",
-              voucherType: "Sale",
-              description: `${sale.saleType} - ${sale.notes || "Sale"}`,
-              debit: amount, // DEBIT - Customer owes us money
-              credit: 0,
-              account: sale.customerName, // Customer account
-              entryType: "RECEIVABLE",
-            })
-
-            // CREDIT ENTRY - Sales/Revenue Account (Revenue increases)
-            salesEntries.push({
-              id: `${saleId}-revenue`,
-              date: sale.createdAt || sale.updatedAt,
-              voucherNo: sale.invoice || "N/A",
-              voucherType: "Sale",
-              description: `Sale to ${sale.customerName} - ${sale.notes || "Sale transaction"}`,
-              debit: 0,
-              credit: amount, // CREDIT - Revenue earned
-              account: sale.saleType, // Sale Type account (e.g., Sale - Domestic, Sale - International)
-              entryType: "REVENUE",
-            })
-
-            if (amount > 0) {
-              console.log(`[DOUBLE ENTRY] Sale ${sale.invoice}:`, {
-                debit: `${sale.customerName} (Customer)`,
-                credit: `${sale.saleType} (Revenue)`,
-                amount: amount,
-                balanced: true,
-              })
-            }
-          }
-        }
-      })
-
-      return salesEntries
-    } catch (error) {
-      console.error("Error loading sales:", error)
-      return []
     }
   }
 
@@ -204,315 +89,36 @@ export default function GeneralLedger() {
     loadAllAccounts()
   }, [])
 
+  // ========== LOAD LEDGER ENTRIES FROM BACKEND API ==========
   const loadLedgerEntries = async (account, fromDate, toDate) => {
     try {
       setLoading(true)
-      console.log("Loading ledger entries for:", { account, fromDate, toDate })
+      console.log("📊 Loading ledger entries from backend API for:", { account, fromDate, toDate })
 
-      // Fetch products with proper pagination to get ALL records
-      let allProducts = []
-      let currentPage = 1
-      let hasMoreProducts = true
+      // Extract account code and name from full name
+      const accountParts = account.split(" - ")
+      const accountCode = accountParts[0]
+      const accountName = accountParts.length > 1 ? accountParts.slice(1).join(" - ") : accountParts[0]
 
-      while (hasMoreProducts) {
-        try {
-          const productsResponse = await ApiHandler.getProducts({
-            page: currentPage,
-            limit: 100,
-          })
+      const response = await ApiHandler.getAccountLedger({
+        accountCode,
+        accountName,
+        fromDate,
+        toDate,
+      })
 
-          if (productsResponse.data && productsResponse.data.length > 0) {
-            allProducts = [...allProducts, ...productsResponse.data]
-            currentPage++
-
-            // Check if there are more pages
-            if (productsResponse.data.length < 100) {
-              hasMoreProducts = false
-            }
-          } else {
-            hasMoreProducts = false
-          }
-        } catch (error) {
-          console.error("Error fetching products page:", currentPage, error)
-          hasMoreProducts = false
-        }
+      if (response.success) {
+        setLedgerEntries(response.data.entries)
+        setOpeningBalance(response.data.summary.openingBalance)
+        setClosingBalance(response.data.summary.closingBalance)
+        console.log(`✅ Loaded ${response.count} ledger entries from backend`)
+      } else {
+        alert("Failed to load ledger entries")
+        setLedgerEntries([])
       }
-
-      const vouchersResponse = await ApiHandler.getVouchers({
-        fromDate: fromDate,
-        toDate: toDate,
-      })
-
-      const salesEntries = await loadSalesData(fromDate, toDate)
-
-      const allVouchers = vouchersResponse.data || []
-
-      console.log("Total vouchers:", allVouchers.length)
-      console.log("Total products loaded:", allProducts.length)
-      console.log("Total sales entries:", salesEntries.length)
-
-      // Filter entries for the selected account and date range
-      const filteredEntries = []
-      let runningBalance = 0
-      const addedEntryIds = new Set()
-
-      // Get selected account info
-      const selectedAccountInfo = accountOptions.find((acc) => acc.fullName === account || acc.name === account)
-      const accountName = account.split(" - ")[1] || account
-      const accountCode = account.split(" - ")[0] || ""
-
-      // Process voucher entries
-      allVouchers.sort((a, b) => new Date(a.voucherDate) - new Date(b.voucherDate))
-
-      allVouchers.forEach((voucher) => {
-        const voucherDate = new Date(voucher.voucherDate)
-        const from = new Date(fromDate)
-        const to = new Date(toDate)
-
-        if (voucherDate >= from && voucherDate <= to) {
-          voucher.entries?.forEach((entry) => {
-            // Improved account matching - check multiple patterns
-            const entryAccount = entry.account || ""
-
-            // Try to match in different ways
-            const accountMatches =
-              // Exact match
-              entryAccount === account ||
-              entryAccount === accountName ||
-              entryAccount === accountCode ||
-              // Partial match with code
-              entryAccount.includes(accountCode) ||
-              entryAccount.includes(accountName) ||
-              // Full name format match
-              entryAccount === `${accountCode} - ${accountName}` ||
-              // Reverse checks
-              account.includes(entryAccount) ||
-              accountName.includes(entryAccount)
-
-            if (accountMatches) {
-              const debitAmount = Number.parseFloat(entry.debitAmount || 0)
-              const creditAmount = Number.parseFloat(entry.creditAmount || 0)
-
-              // Calculate running balance based on account type
-              if (selectedAccountInfo?.normalBalance === "debit") {
-                runningBalance += debitAmount - creditAmount
-              } else {
-                runningBalance += creditAmount - debitAmount
-              }
-
-              filteredEntries.push({
-                id: `${voucher._id}-${entry.id || Math.random()}`,
-                date: voucher.voucherDate,
-                voucherNo: voucher.voucherNo,
-                voucherType: voucher.voucherType,
-                description: entry.description || voucher.narration || "No description",
-                debit: debitAmount,
-                credit: creditAmount,
-                balance: runningBalance,
-              })
-            }
-          })
-        }
-      })
-
-      salesEntries.forEach((saleEntry) => {
-        const saleAccount = saleEntry.account || ""
-
-        const accountMatches =
-          saleAccount === account ||
-          saleAccount === accountName ||
-          saleAccount === accountCode ||
-          saleAccount.includes(accountCode) ||
-          saleAccount.includes(accountName) ||
-          account.includes(saleAccount) ||
-          accountName.includes(saleAccount)
-
-        if (accountMatches && !addedEntryIds.has(saleEntry.id)) {
-          addedEntryIds.add(saleEntry.id)
-
-          const debitAmount = saleEntry.debit
-          const creditAmount = saleEntry.credit
-
-          if (selectedAccountInfo?.normalBalance === "debit") {
-            runningBalance += debitAmount - creditAmount
-          } else {
-            runningBalance += creditAmount - debitAmount
-          }
-
-          // Get the corresponding account name for description
-          let correspondingAccount = ""
-          if (saleEntry.entryType === "RECEIVABLE") {
-            // This is the customer debit entry, show the revenue account in description
-            correspondingAccount = saleEntry.account // This is customer name
-          } else if (saleEntry.entryType === "REVENUE") {
-            // This is the revenue credit entry, show the customer in description
-            const matchingSale = salesEntries.find(
-              entry => entry.voucherNo === saleEntry.voucherNo && 
-              entry.entryType === "RECEIVABLE"
-            )
-            correspondingAccount = matchingSale ? matchingSale.account : "Customer"
-          }
-
-          filteredEntries.push({
-            ...saleEntry,
-            balance: runningBalance,
-            // Update description to show the other side of the transaction
-            description: saleEntry.entryType === "RECEIVABLE" 
-              ? `Sale to ${saleEntry.account} - ${saleEntry.description.split(' - ')[1] || saleEntry.description}`
-              : `Sale from ${correspondingAccount} - ${saleEntry.description.split(' - ')[1] || saleEntry.description}`
-          })
-        }
-      })
-
-      // Process product/purchase entries - INDIVIDUAL ENTRIES (not aggregated)
-      console.log("\n📦 PROCESSING PRODUCTS...")
-      allProducts.forEach((product, index) => {
-        console.log(`\n--- Product ${index + 1}/${allProducts.length} ---`)
-        console.log("Name:", product.name)
-        console.log("GRN:", product.grn)
-        console.log("Date:", product.createdAt || product.updatedAt)
-
-        // Normalize dates to start of day for proper comparison
-        const productDateStr = (product.createdAt || product.updatedAt).split("T")[0]
-        const productDate = new Date(productDateStr + "T00:00:00")
-        const from = new Date(fromDate + "T00:00:00")
-        const to = new Date(toDate + "T23:59:59")
-
-        const inDateRange = productDate >= from && productDate <= to
-        console.log("In date range?", inDateRange, `(${productDateStr})`)
-
-        if (productDate >= from && productDate <= to) {
-          console.log("✅ Product is in date range, checking matches...")
-          // Get purchase type info
-          const purchaseTypeCode = product.purchaseType?.code || ""
-          const purchaseTypeName = product.purchaseType?.name || ""
-          const purchaseTypeFullName =
-            purchaseTypeCode && purchaseTypeName
-              ? `${purchaseTypeCode} - ${purchaseTypeName}`
-              : purchaseTypeName || purchaseTypeCode
-
-          // Get vendor info
-          const vendorCode = product.vendorName?.code || ""
-          const vendorName = product.vendorName?.name || ""
-          const vendorFullName = vendorCode && vendorName ? `${vendorCode} - ${vendorName}` : vendorName || vendorCode
-
-          // Check if purchaseType matches selected account (flexible matching)
-          const purchaseTypeMatch =
-            purchaseTypeCode === accountCode ||
-            purchaseTypeName === accountName ||
-            purchaseTypeFullName === account ||
-            account.includes(purchaseTypeCode) ||
-            account.includes(purchaseTypeName) ||
-            purchaseTypeCode.includes(accountCode) ||
-            purchaseTypeName.includes(accountName)
-
-          // Check if vendor matches selected account (flexible matching)
-          const vendorMatch =
-            vendorCode === accountCode ||
-            vendorName === accountName ||
-            vendorFullName === account ||
-            account.includes(vendorCode) ||
-            account.includes(vendorName) ||
-            vendorCode.includes(accountCode) ||
-            vendorName.includes(accountName)
-
-          const amount = Number.parseFloat(product.purchaseRate || 0) * Number.parseFloat(product.quantity || 0)
-
-          console.log("Purchase Type:", purchaseTypeFullName)
-          console.log("Vendor:", vendorFullName)
-          console.log("Amount:", amount)
-          console.log("purchaseTypeMatch:", purchaseTypeMatch)
-          console.log("vendorMatch:", vendorMatch)
-
-          // Debug logging for product matching
-          if (!purchaseTypeMatch && !vendorMatch) {
-            console.log("❌ NO MATCH - Skipping this product")
-            console.log("Comparison details:")
-            console.log("  Selected account:", account)
-            console.log("  Account code:", accountCode)
-            console.log("  Account name:", accountName)
-            console.log("  Purchase type code:", purchaseTypeCode)
-            console.log("  Purchase type name:", purchaseTypeName)
-            console.log("  Vendor code:", vendorCode)
-            console.log("  Vendor name:", vendorName)
-          }
-
-         if (purchaseTypeMatch) {
-            console.log("✅ Creating DEBIT entry (Purchase Type matched)")
-            // PurchaseType account - show as DEBIT (individual entry per product)
-            // Show the VENDOR in description (the other side of transaction)
-            if (selectedAccountInfo?.normalBalance === "debit") {
-              runningBalance += amount
-            } else {
-              runningBalance -= amount
-            }
-
-            const vendorDisplay = vendorFullName || vendorName || "Vendor"
-            const grnNumber = product.grn || "N/A"
-
-            filteredEntries.push({
-              id: `product-${product._id}-purchaseType`,
-              date: product.createdAt || product.updatedAt,
-              voucherNo: grnNumber,
-              voucherType: "Purchase",
-              description: `Purchase from ${vendorDisplay} - ${product.name || "Product"}: ${product.quantity || 0} units @ Rs. ${product.purchaseRate || 0}`,
-              debit: amount,
-              credit: 0,
-              balance: runningBalance,
-              grn: grnNumber,
-            })
-          }
-
-          if (vendorMatch) {
-            console.log("✅ Creating CREDIT entry (Vendor matched)")
-            // Vendor account - show as CREDIT (individual entry per product)
-            // Show the PURCHASE TYPE in description (the other side of transaction)
-            if (selectedAccountInfo?.normalBalance === "debit") {
-              runningBalance -= amount
-            } else {
-              runningBalance += amount
-            }
-
-            const purchaseTypeDisplay = purchaseTypeFullName || purchaseTypeName || "Purchase"
-            const grnNumber = product.grn || "N/A"
-
-            filteredEntries.push({
-              id: `product-${product._id}-vendor`,
-              date: product.createdAt || product.updatedAt,
-              voucherNo: grnNumber,
-              voucherType: "Purchase",
-              description: `${purchaseTypeDisplay} - ${product.name || "Product"}: ${product.quantity || 0} units @ Rs. ${product.purchaseRate || 0}`,
-              debit: 0,
-              credit: amount,
-              balance: runningBalance,
-              grn: grnNumber,
-            })
-          }
-        } else {
-          console.log("⏭️ Product outside date range - skipping")
-        }
-      })
-
-      // Sort all entries by date
-      filteredEntries.sort((a, b) => new Date(a.date) - new Date(b.date))
-
-      // Recalculate running balance after sorting
-      runningBalance = 0
-      filteredEntries.forEach((entry) => {
-        if (selectedAccountInfo?.normalBalance === "debit") {
-          runningBalance += entry.debit - entry.credit
-        } else {
-          runningBalance += entry.credit - entry.debit
-        }
-        entry.balance = runningBalance
-      })
-
-      setLedgerEntries(filteredEntries)
-      setClosingBalance(runningBalance)
-
-      console.log(`Found ${filteredEntries.length} entries for account: ${account}`)
     } catch (error) {
       console.error("Error loading ledger entries:", error)
+      alert(`Failed to load ledger entries: ${error.message}`)
       setLedgerEntries([])
     } finally {
       setLoading(false)
@@ -636,8 +242,8 @@ export default function GeneralLedger() {
                       <td className="border border-gray-300 p-3 text-sm">{formatDate(entry.date)}</td>
                       <td className="border border-gray-300 p-3 text-sm font-mono">{entry.voucherNo}</td>
                       <td className="border border-gray-300 p-3 text-sm font-mono">
-                        {entry.voucherType === "Purchase" && entry.voucherNo !== "N/A" ? (
-                          <span className="text-purple-600 font-medium">{entry.voucherNo}</span>
+                        {entry.voucherType === "Purchase" && entry.grn ? (
+                          <span className="text-purple-600 font-medium">{entry.grn}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
@@ -664,7 +270,7 @@ export default function GeneralLedger() {
                       </td>
                       <td className="border border-gray-300 p-3 text-right text-sm font-mono">
                         <span className={`font-semibold ${entry.balance >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                          {formatCurrency(Math.abs(entry.balance))}
+                          {formatCurrency(entry.balance)}
                         </span>
                       </td>
                     </tr>
@@ -704,7 +310,7 @@ export default function GeneralLedger() {
                     </td>
                     <td className="border border-gray-300 p-3 text-right text-sm font-mono">
                       <span className={`text-lg font-bold ${closingBalance >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                        {formatCurrency(Math.abs(closingBalance))}
+                        {formatCurrency(closingBalance)}
                       </span>
                     </td>
                   </tr>
@@ -731,7 +337,7 @@ export default function GeneralLedger() {
                       index + 1,
                       formatDate(entry.date),
                       entry.voucherNo,
-                      entry.voucherType === "Purchase" && entry.voucherNo !== "N/A" ? entry.voucherNo : "-",
+                      entry.voucherType === "Purchase" && entry.grn ? entry.grn : "-",
                       entry.voucherType,
                       `"${entry.description}"`,
                       formatCurrency(entry.debit),
