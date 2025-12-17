@@ -908,16 +908,16 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 Purchase Rate
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Balance Quantity
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Purchaes Amount
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Expected Sale Rate
+                Balance Quantity
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Balance Amount
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Expected Sale Rate
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Potential Profit
@@ -946,17 +946,16 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     {formatCurrency(entry.purchaseRate)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                    {entry.balanceQuantity}
+                   {formatCurrency(entry.balanceStockValue)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                    {formatCurrency(entry.balanceStockValue)}
+                     {entry.balanceQuantity}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                    {formatCurrency(entry.saleRate)}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                     {formatCurrency(entry.balanceAmount)}
                   </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+                    {formatCurrency(entry.saleRate)}                  </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-medium">
                     <span className={entry.profit >= 0 ? "text-green-600" : "text-red-600"}>
                       {formatCurrency(entry.profit)}
