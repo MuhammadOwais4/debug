@@ -272,7 +272,7 @@ const getAccountLedger = async (req, res) => {
     console.log(`✅ Found ${products.length} products`)
 
     products.forEach((product) => {
-      const amount = parseFloat(product.purchaseRate || 0) * parseFloat(product.quantity || 0)
+      const amount = parseFloat(product.purchaseQuantity || 0) * parseFloat(product.purchaseRate || 0)
 
       if (amount <= 0) return
 
@@ -299,7 +299,7 @@ const getAccountLedger = async (req, res) => {
           date: product.createdAt,
           voucherNo: product.grn || "N/A",
           voucherType: "Purchase",
-          description: `Purchase from ${vendorDisplay} - ${product.name}: ${product.quantity} units @ Rs. ${product.purchaseRate}`,
+          description: `Purchase from ${vendorDisplay} - ${product.name}: ${product.purchaseRate} units @ Rs. ${product.purchaseQuantity}`,
           debit: amount,
           credit: 0,
           balance: runningBalance,
@@ -323,7 +323,7 @@ const getAccountLedger = async (req, res) => {
           date: product.createdAt,
           voucherNo: product.grn || "N/A",
           voucherType: "Purchase",
-          description: `${purchaseTypeDisplay} - ${product.name}: ${product.quantity} units @ Rs. ${product.purchaseRate}`,
+          description: `${purchaseTypeDisplay} - ${product.name}: ${product.purchaseRate} units @ Rs. ${product.purchaseQuantity}`,
           debit: 0,
           credit: amount,
           balance: runningBalance,
