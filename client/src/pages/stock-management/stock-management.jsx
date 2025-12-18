@@ -79,9 +79,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       setLoadingVendors(true)
       const response = await ApiHandler.getLiabilities()
       const liabilities = response.data || []
-      console.log("[v0] Liabilities data:", liabilities)
+      console.log("[GRN] Liabilities data:", liabilities)
       const vendorList = liabilities.filter((liability) => liability.type === "PAYABLES")
-      console.log("[v0] Filtered vendors:", vendorList)
+      console.log("[GRN] Filtered vendors:", vendorList)
       setVendors(vendorList)
     } catch (err) {
       console.error("Error loading vendors:", err)
@@ -96,9 +96,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       setLoadingPurchases(true)
       const response = await ApiHandler.getAssets()
       const assets = response.data || []
-      console.log("[v0] Assets data:", assets)
+      console.log("[GRN] Assets data:", assets)
       const purchasesList = assets.filter((asset) => asset.type === "Purchases")
-      console.log("[v0] Filtered purchases accounts:", purchasesList)
+      console.log("[GRN] Filtered purchases accounts:", purchasesList)
       setPurchasesAccounts(purchasesList)
     } catch (err) {
       console.error("Error loading purchases accounts:", err)
@@ -122,6 +122,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         productsData = Array.isArray(productsResponse.data) ? productsResponse.data : []
       }
 
+      console.log("[GRN] Products Response:", productsData)
+
       const entries = productsData.map((product) => {
         const vendorObj =
           typeof product.vendorName === "object"
@@ -135,27 +137,57 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             : purchasesAccounts.find((p) => p._id === product.purchaseType)
         const purchaseTypeStr = purchaseTypeObj?.name || ""
 
-        const balanceAmount = product.quantity * product.purchaseRate
+        // GRN Tracking Fields
+        const purchaseQuantity = product.purchaseQuantity || product.quantity || 0
+        const purchaseAmount = product.purchaseAmount || (purchaseQuantity * product.purchaseRate) || 0
+        const balanceQuantity = product.quantity || 0
+        const balanceAmount = product.balanceAmount || (balanceQuantity * product.purchaseRate) || 0
+        const totalSoldQuantity = product.totalSoldQuantity || 0
+
+        console.log("[GRN] Product Mapping:", {
+          name: product.name,
+          purchaseQuantity,
+          purchaseAmount,
+          balanceQuantity,
+          balanceAmount,
+          totalSoldQuantity
+        })
 
         return {
           id: product._id,
           date: product.createdAt ? formatDateToDDMMYYYY(product.createdAt) : formatDateToDDMMYYYY(new Date()),
           itemName: product.name,
           category: product.category,
-          purchaseQuantity: product.quantity,
-          purchaseRate: product.purchaseRate,
-          purchaseStockValue: product.quantity * product.purchaseRate,
-          saleRate: product.saleRate,
-          saleStockValue: product.quantity * product.saleRate,
-          balanceQuantity: product.quantity,
-          balanceRate: product.purchaseRate,
-          balanceStockValue: product.quantity * product.purchaseRate,
+          
+          // GRN Fields - Purchase (Original/Unchangeable)
+          purchaseQuantity: purchaseQuantity,
+          purchaseAmount: purchaseAmount,
+          
+          // Current Balance
+          balanceQuantity: balanceQuantity,
           balanceAmount: balanceAmount,
+          
+          // Sales Tracking
+          totalSoldQuantity: totalSoldQuantity,
+          
+          // Rates
+          purchaseRate: product.purchaseRate,
+          saleRate: product.saleRate,
+          
+          // Calculated Values
+          purchaseStockValue: purchaseAmount,
+          saleStockValue: balanceQuantity * product.saleRate,
+          balanceStockValue: balanceAmount,
+          
+          // Profit Calculations
+          profit: (product.saleRate - product.purchaseRate) * balanceQuantity,
+          potentialProfit: (product.saleRate - product.purchaseRate) * balanceQuantity,
+          totalAmount: balanceQuantity * product.saleRate,
+          
+          // Other Fields
           customerName: "",
           vendorPhone: product.vendorPhone || "",
           notes: product.notes || "",
-          profit: (product.saleRate - product.purchaseRate) * product.quantity,
-          totalAmount: product.quantity * product.saleRate,
           serialNumber: product.serialNumber || "",
           vendorName: vendorNameStr,
           vendorBillNumber: product.vendorBillNumber || "",
@@ -166,6 +198,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         }
       })
 
+      console.log("[GRN] Final Entries:", entries)
       setStockEntries(entries)
       setProducts(productsData)
 
@@ -331,7 +364,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       }
 
       const totalPurchaseAmount = qty * purchaseRate
-      console.log("[v0] Purchase Amount Calculation:", {
+      console.log("[GRN] Purchase Amount Calculation:", {
         quantity: qty,
         purchaseRate: purchaseRate,
         totalAmount: totalPurchaseAmount,
@@ -428,7 +461,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             ],
           }
 
-          console.log("[v0] Creating Voucher with entries:", voucherData)
+          console.log("[GRN] Creating Voucher with entries:", voucherData)
 
           const voucherResponse = await ApiHandler.createVoucher(voucherData)
 
@@ -436,15 +469,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             throw new Error("Failed to create voucher - no ID returned")
           }
 
-          console.log("[v0] Voucher created successfully:", voucherResponse.data._id)
+          console.log("[GRN] Voucher created successfully:", voucherResponse.data._id)
 
-          // Link the voucher to the product
           await ApiHandler.updateProduct(response._id, {
             ...productData,
             voucherId: voucherResponse.data._id,
           })
 
-          console.log("[v0] Product linked to voucher successfully")
+          console.log("[GRN] Product linked to voucher successfully")
           emitVoucherChangedEvent()
 
           await createNotification(
@@ -455,7 +487,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             response._id,
           )
         } catch (voucherErr) {
-          console.error("[v0] Error creating voucher entry:", voucherErr)
+          console.error("[GRN] Error creating voucher entry:", voucherErr)
           await createNotification(
             "warning",
             "Stock Entry Created (Voucher Failed)",
@@ -463,14 +495,13 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             "high",
             response._id,
           )
-          throw voucherErr
         }
       }
 
       resetForm()
       await fetchStockEntries()
     } catch (err) {
-      console.error("[v0] Detailed error:", err)
+      console.error("[GRN] Detailed error:", err)
       if (err.message.includes("All fields are required")) {
         setError(
           "Please fill in all required fields: Name, Category, Purchase Rate, Sale Rate, Quantity, Vendor, and Purchases Type",
@@ -495,7 +526,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       date: dateForForm,
       name: entry.itemName,
       category: entry.category,
-      quantity: entry.purchaseQuantity.toString(),
+      quantity: entry.balanceQuantity.toString(),
       purchaseRate: entry.purchaseRate.toString(),
       saleRate: entry.saleRate.toString(),
       customerName: entry.customerName || "",
@@ -587,14 +618,12 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     printWindow.document.write("<th>GRN No.</th>")
     printWindow.document.write("<th>Product Name</th>")
     printWindow.document.write("<th>Category</th>")
-    printWindow.document.write("<th>Serial No.</th>")
     printWindow.document.write("<th>Vendor</th>")
-    printWindow.document.write("<th>Purchase Type</th>")
-    printWindow.document.write("<th>Vendor Bill No.</th>")
-    printWindow.document.write('<th class="text-right">Qty</th>')
-    printWindow.document.write('<th class="text-right">Purchase Rate</th>')
+    printWindow.document.write('<th class="text-right">Purchase Qty</th>')
+    printWindow.document.write('<th class="text-right">Purchase Amount</th>')
+    printWindow.document.write('<th class="text-right">Balance Qty</th>')
+    printWindow.document.write('<th class="text-right">Balance Amount</th>')
     printWindow.document.write('<th class="text-right">Sale Rate</th>')
-    printWindow.document.write('<th class="text-right">Stock Value</th>')
     printWindow.document.write('<th class="text-right">Profit</th>')
     printWindow.document.write("</tr></thead><tbody>")
 
@@ -604,14 +633,12 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       printWindow.document.write(`<td>${entry.grn || "-"}</td>`)
       printWindow.document.write(`<td>${entry.itemName}</td>`)
       printWindow.document.write(`<td>${entry.category}</td>`)
-      printWindow.document.write(`<td>${entry.serialNumber || "-"}</td>`)
       printWindow.document.write(`<td>${entry.vendorName || "-"}</td>`)
-      printWindow.document.write(`<td>${entry.purchaseType || "-"}</td>`)
-      printWindow.document.write(`<td>${entry.vendorBillNumber || "-"}</td>`)
       printWindow.document.write(`<td class="text-right">${entry.purchaseQuantity}</td>`)
-      printWindow.document.write(`<td class="text-right">${formatCurrency(entry.purchaseRate)}</td>`)
+      printWindow.document.write(`<td class="text-right">${formatCurrency(entry.purchaseAmount)}</td>`)
+      printWindow.document.write(`<td class="text-right">${entry.balanceQuantity}</td>`)
+      printWindow.document.write(`<td class="text-right">${formatCurrency(entry.balanceAmount)}</td>`)
       printWindow.document.write(`<td class="text-right">${formatCurrency(entry.saleRate)}</td>`)
-      printWindow.document.write(`<td class="text-right">${formatCurrency(entry.balanceStockValue)}</td>`)
       printWindow.document.write(
         `<td class="text-right ${entry.profit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(entry.profit)}</td>`,
       )
@@ -619,8 +646,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     })
 
     printWindow.document.write('<tr class="totals">')
-    printWindow.document.write('<td colspan="11" class="text-right">Totals:</td>')
-    printWindow.document.write(`<td class="text-right">${formatCurrency(subtotals.balanceStockValue)}</td>`)
+    printWindow.document.write('<td colspan="6" class="text-right">Totals:</td>')
+    printWindow.document.write(`<td class="text-right">${formatCurrency(subtotals.purchaseAmount)}</td>`)
+    printWindow.document.write(`<td class="text-right">${subtotals.balanceQuantity}</td>`)
+    printWindow.document.write(`<td class="text-right">${formatCurrency(subtotals.balanceAmount)}</td>`)
+    printWindow.document.write(`<td class="text-right"></td>`)
     printWindow.document.write(
       `<td class="text-right ${subtotals.totalProfit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(subtotals.totalProfit)}</td>`,
     )
@@ -639,16 +669,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         "GRN No.",
         "Item Name",
         "Category",
-        "Serial Number",
         "Vendor",
-        "Purchase Type",
-        "Vendor Bill No.",
         "Purchase Qty",
         "Purchase Rate",
-        "Purchase Value",
+        "Purchase Amount",
+        "Balance Qty",
+        "Balance Amount",
         "Sale Rate",
-        "Sale Value",
-        "Stock Value",
+        
         "Profit",
       ],
       ...filteredEntries.map((entry) => [
@@ -656,16 +684,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         entry.grn || "-",
         entry.itemName,
         entry.category,
-        entry.serialNumber || "-",
         entry.vendorName || "-",
-        entry.purchaseType || "-",
-        entry.vendorBillNumber || "-",
         entry.purchaseQuantity,
         entry.purchaseRate,
-        entry.purchaseStockValue,
+        entry.purchaseAmount,
+        entry.balanceQuantity,
+        entry.balanceAmount,
         entry.saleRate,
-        entry.saleStockValue,
-        entry.balanceStockValue,
+        entry.totalSoldQuantity,
         entry.profit,
       ]),
     ]
@@ -676,7 +702,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `stock-ledger-${formatDateToDDMMYYYY(new Date())}.csv`
+    a.download = `stock-ledger-grn-${formatDateToDDMMYYYY(new Date())}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -700,12 +726,21 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
   const subtotals = filteredEntries.reduce(
     (acc, entry) => ({
-      purchaseStockValue: acc.purchaseStockValue + entry.purchaseStockValue,
-      saleStockValue: acc.saleStockValue + entry.saleStockValue,
-      balanceStockValue: acc.balanceStockValue + entry.balanceStockValue,
+      purchaseQuantity: acc.purchaseQuantity + entry.purchaseQuantity,
+      purchaseAmount: acc.purchaseAmount + entry.purchaseAmount,
+      balanceQuantity: acc.balanceQuantity + entry.balanceQuantity,
+      balanceAmount: acc.balanceAmount + entry.balanceAmount,
+      totalSoldQuantity: acc.totalSoldQuantity + entry.totalSoldQuantity,
       totalProfit: acc.totalProfit + (entry.profit || 0),
     }),
-    { purchaseStockValue: 0, saleStockValue: 0, balanceStockValue: 0, totalProfit: 0 },
+    { 
+      purchaseQuantity: 0, 
+      purchaseAmount: 0, 
+      balanceQuantity: 0, 
+      balanceAmount: 0,
+      totalSoldQuantity: 0,
+      totalProfit: 0 
+    },
   )
 
   const formatCurrency = (value) => {
@@ -770,7 +805,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             onClick={() => setShowForm(true)}
           >
             <Plus className="h-4 w-4" />
-            Record New Purchases
+            Record New Purchase
           </button>
         </div>
       </div>
@@ -780,8 +815,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-600">Total Purchase Value</p>
-              <p className="text-xl font-bold text-blue-900">{formatCurrency(subtotals.purchaseStockValue)}</p>
+              <p className="text-sm font-medium text-blue-600">Total Purchase Amount</p>
+              <p className="text-xl font-bold text-blue-900">{formatCurrency(subtotals.purchaseAmount)}</p>
             </div>
             <TrendingUp className="h-8 w-8 text-blue-600" />
           </div>
@@ -789,8 +824,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-green-600">Total Sale Value</p>
-              <p className="text-xl font-bold text-green-900">{formatCurrency(subtotals.saleStockValue)}</p>
+              <p className="text-sm font-medium text-green-600">Total Balance Amount</p>
+              <p className="text-xl font-bold text-green-900">{formatCurrency(subtotals.balanceAmount)}</p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-600" />
           </div>
@@ -798,8 +833,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         <div className="bg-purple-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-purple-600">Total Stock Value</p>
-              <p className="text-xl font-bold text-purple-900">{formatCurrency(subtotals.balanceStockValue)}</p>
+              <p className="text-sm font-medium text-purple-600">Total Balance Quantity</p>
+              <p className="text-xl font-bold text-purple-900">{subtotals.balanceQuantity} units</p>
             </div>
             <Package className="h-8 w-8 text-purple-600" />
           </div>
@@ -891,33 +926,24 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Category
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Serial Number
-              </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Purchase Type
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vendor Bill No.
-              </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Purchase Quantity
+                Purchase Qty
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Purchase Rate
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Purchaes Amount
+                Purchase Amount
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Balance Quantity
+                Balance Qty
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Balance Amount
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Expected Sale Rate
+                Sale Rate
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Potential Profit
@@ -935,28 +961,26 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.grn || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{entry.itemName}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.category}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.serialNumber || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorName || "-"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.purchaseType || "-"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorBillNumber || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                     {entry.purchaseQuantity}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                     {formatCurrency(entry.purchaseRate)}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                   {formatCurrency(entry.balanceStockValue)}
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-bold">
+                    {formatCurrency(entry.purchaseAmount)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                     {entry.balanceQuantity}
+                    {entry.balanceQuantity}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-green-600 text-right font-bold">
                     {formatCurrency(entry.balanceAmount)}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                    {formatCurrency(entry.saleRate)}                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-medium">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                    {formatCurrency(entry.saleRate)}
+                  </td>
+                     <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-medium">
                     <span className={entry.profit >= 0 ? "text-green-600" : "text-red-600"}>
                       {formatCurrency(entry.profit)}
                     </span>
@@ -990,7 +1014,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               ))
             ) : (
               <tr>
-                <td colSpan="16" className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan="14" className="px-4 py-8 text-center text-sm text-gray-500">
                   No products found. Add some products to get started.
                 </td>
               </tr>
@@ -999,19 +1023,23 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           {filteredEntries.length > 0 && (
             <tfoot className="bg-gray-100">
               <tr>
-                <td colSpan="10" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">
+                <td colSpan="5" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">
                   Totals:
                 </td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">
-                  {filteredEntries.reduce((sum, e) => sum + e.balanceQuantity, 0)}
-                </td>
-                <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">
-                  {formatCurrency(subtotals.balanceStockValue)}
+                  {subtotals.purchaseQuantity}
                 </td>
                 <td className="px-4 py-4"></td>
-                <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">
-                  {formatCurrency(filteredEntries.reduce((sum, e) => sum + e.balanceAmount, 0))}
+                <td className="px-4 py-4 text-sm font-bold text-blue-600 text-right">
+                  {formatCurrency(subtotals.purchaseAmount)}
                 </td>
+                <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">
+                  {subtotals.balanceQuantity}
+                </td>
+                <td className="px-4 py-4 text-sm font-bold text-green-600 text-right">
+                  {formatCurrency(subtotals.balanceAmount)}
+                </td>
+                <td className="px-4 py-4"></td>
                 <td className="px-4 py-4 text-sm font-bold text-right">
                   <span className={subtotals.totalProfit >= 0 ? "text-green-600" : "text-red-600"}>
                     {formatCurrency(subtotals.totalProfit)}
@@ -1069,10 +1097,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
       {/* Product Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">{isEditing ? "Edit Product" : "ADD New Purchases"}</h2>
+              <h2 className="text-xl font-semibold">{isEditing ? "Edit Product" : "Add New Purchase"}</h2>
               <button onClick={resetForm} className="text-gray-500 hover:text-gray-700">
                 <X className="h-5 w-5" />
               </button>
@@ -1123,13 +1151,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                         className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="">Select category</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Furniture">Furniture</option>
-                        <option value="Stationery">Stationery</option>
-                        <option value="Kitchenware">Kitchenware</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Food">Food</option>
-                        <option value="Other">Other</option>
+                        {productCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -1270,9 +1294,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Select the purchase account from your chart of accounts
-                      </p>
                     </div>
 
                     <div>
@@ -1299,20 +1320,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">GRN Number</label>
-                      <input
-                        type="text"
-                        name="grn"
-                        value={formData.grn}
-                        onChange={handleChange}
-                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
-                        placeholder="Auto-generated"
-                        readOnly
-                      />
-                      <p className="text-xs text-gray-500 mt-1">GRN will be auto-generated when product is created</p>
-                    </div>
-
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                       <textarea
@@ -1337,14 +1344,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <div className="text-lg font-bold text-blue-900">{Number(formData.quantity) || 0}</div>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-100">
-                      <span className="text-xs font-medium text-gray-600">Balance Quantity</span>
-                      <div className="text-lg font-bold text-blue-900">{Number(formData.quantity) || 0}</div>
-                    </div>
-                    <div className="bg-white p-3 rounded border border-blue-100">
-                      <span className="text-xs font-medium text-gray-600">Balance Stock Value</span>
-                      <div className="text-lg font-bold text-green-600">
+                      <span className="text-xs font-medium text-gray-600">Purchase Amount</span>
+                      <div className="text-lg font-bold text-blue-600">
                         {formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}
                       </div>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-100">
+                      <span className="text-xs font-medium text-gray-600">Balance Quantity</span>
+                      <div className="text-lg font-bold text-green-900">{Number(formData.quantity) || 0}</div>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Balance Amount</span>
@@ -1378,42 +1385,64 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       )}
 
+      {/* Details Modal */}
       {showDetails && selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-screen overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Product Details</h2>
+              <h2 className="text-xl font-semibold">Product Details - GRN Tracking</h2>
               <button onClick={() => setShowDetails(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-6">
-              {/* Purchase Summary - Prominent Display */}
+              {/* GRN Summary */}
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border-2 border-blue-200">
-                <h3 className="text-lg font-bold text-blue-900 mb-4">Purchase Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <h3 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
+                  <Package className="h-6 w-6" />
+                  GRN Tracking Summary
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-white p-4 rounded-lg shadow-sm">
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Purchase Quantity</label>
                     <p className="text-2xl font-bold text-blue-600">{selectedEntry.purchaseQuantity} units</p>
-                    <p className="text-xs text-gray-500 mt-1">Quantity purchased by the user</p>
+                    <p className="text-xs text-gray-500 mt-1">Original purchase quantity (unchangeable)</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Purchase Amount</label>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {formatCurrency(selectedEntry.purchaseAmount)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Original purchase value (unchangeable)</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow-sm">
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Balance Quantity</label>
                     <p className="text-2xl font-bold text-green-600">{selectedEntry.balanceQuantity} units</p>
-                    <p className="text-xs text-gray-500 mt-1">Remaining stock quantity</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Balance Stock Value</label>
-                    <p className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(selectedEntry.balanceStockValue)}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">Value based on remaining stock quantity</p>
+                    <p className="text-xs text-gray-500 mt-1">Current available stock</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg shadow-sm">
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Balance Amount</label>
-                    <p className="text-2xl font-bold text-orange-600">{formatCurrency(selectedEntry.balanceAmount)}</p>
-                    <p className="text-xs text-gray-500 mt-1">Cost amount of purchased items</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {formatCurrency(selectedEntry.balanceAmount)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Balance Qty × Purchase Rate</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Total Sold Quantity</label>
+                    <p className="text-2xl font-bold text-red-600">{selectedEntry.totalSoldQuantity} units</p>
+                    <p className="text-xs text-gray-500 mt-1">Total units sold from this purchase</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Stock Utilization</label>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {selectedEntry.purchaseQuantity > 0 
+                        ? ((selectedEntry.totalSoldQuantity / selectedEntry.purchaseQuantity) * 100).toFixed(2)
+                        : 0}%
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Percentage of stock sold</p>
                   </div>
                 </div>
               </div>
@@ -1435,12 +1464,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     <p className="text-sm text-gray-900">{selectedEntry.serialNumber || "N/A"}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
-                    <p className="text-sm text-gray-900">
-                      {selectedEntry.expiryDate ? formatDateToDDMMYYYY(selectedEntry.expiryDate) : "N/A"}
-                    </p>
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700">GRN Number</label>
                     <p className="text-sm text-gray-900">{selectedEntry.grn || "N/A"}</p>
                   </div>
@@ -1448,10 +1471,16 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     <label className="block text-sm font-medium text-gray-700">Date Added</label>
                     <p className="text-sm text-gray-900">{selectedEntry.date}</p>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Expiry Date</label>
+                    <p className="text-sm text-gray-900">
+                      {selectedEntry.expiryDate ? formatDateToDDMMYYYY(selectedEntry.expiryDate) : "N/A"}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Stock & Pricing */}
+              {/* Pricing Information */}
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Pricing Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1526,4 +1555,5 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     </div>
   )
 }
+
 export default StockManagement

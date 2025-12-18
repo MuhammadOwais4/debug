@@ -14,45 +14,35 @@ const {
   getProductsByVendor,
   getProductCategories,
   getVendors,
-} = require("./controllers/productController.js")
+  getPurchaseTypes,
+  getProductSummary,
+  getProductsWithSummary,
+} = require("./controllers/productController")
 
-// Get all products with optional filters
-router.get("/", getProducts)
+// Product CRUD routes
+router.get("/", getProducts) // Get all products with filters
+router.get("/with-summary", getProductsWithSummary) // Get all products with summary
+router.post("/", createProduct) // Create new product
+router.get("/:id", getProduct) // Get single product
+router.put("/:id", updateProduct) // Update product
+router.delete("/:id", deleteProduct) // Delete product
 
-// Get product categories
-router.get("/categories", getProductCategories)
+// Stock management
+router.patch("/:id/stock", updateStock) // Update stock (add/subtract)
 
-// Get vendors
-router.get("/vendors", getVendors)
+// Product filtering and search routes
+router.get("/category/:category", getProductsByCategory) // Get products by category
+router.get("/vendor/:vendorName", getProductsByVendor) // Get products by vendor
+router.get("/filter/low-stock", getLowStockProducts) // Get low stock products
+router.get("/filter/expiring", getExpiringProducts) // Get expiring products
+router.get("/filter/expired", getExpiredProducts) // Get expired products
 
-// Get products by category
-router.get("/category/:category", getProductsByCategory)
+// Metadata routes
+router.get("/meta/categories", getProductCategories) // Get all categories
+router.get("/meta/vendors", getVendors) // Get all vendors
+router.get("/meta/purchase-types", getPurchaseTypes) // Get all purchase types
 
-// Get products by vendor
-router.get("/vendor/:vendorName", getProductsByVendor)
-
-// Get low stock products
-router.get("/low-stock", getLowStockProducts)
-
-// Get expiring products
-router.get("/expiring", getExpiringProducts)
-
-// Get expired products
-router.get("/expired", getExpiredProducts)
-
-// Get a single product
-router.get("/:id", getProduct)
-
-// Create a new product
-router.post("/", createProduct)
-
-// Update a product
-router.put("/:id", updateProduct)
-
-// Update product stock
-router.patch("/:id/stock", updateStock)
-
-// Delete a product
-router.delete("/:id", deleteProduct)
+// Summary and reporting
+router.get("/:id/summary", getProductSummary) // Get detailed product summary with GRN tracking
 
 module.exports = router
