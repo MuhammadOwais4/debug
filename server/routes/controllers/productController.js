@@ -21,7 +21,6 @@ const getProducts = async (req, res) => {
     }
 
     if (vendorName) {
-      // Find vendor by name in Liability model
       const vendors = await Liability.find({
         name: { $regex: vendorName, $options: "i" },
         type: "PAYABLES",
@@ -31,7 +30,6 @@ const getProducts = async (req, res) => {
       }
     }
 
-    // Handle expiry status filtering
     if (expiryStatus) {
       const now = new Date()
       switch (expiryStatus) {
@@ -81,7 +79,7 @@ const getProduct = async (req, res) => {
   }
 }
 
-// Create a new product (Purchase Entry)
+// Create a new product
 const createProduct = async (req, res) => {
   try {
     const {
@@ -100,10 +98,8 @@ const createProduct = async (req, res) => {
       purchaseType,
     } = req.body
 
-    // Log received data for debugging
     console.log("Received product data:", req.body)
 
-    // Validation for required fields
     if (!name || !category || !purchaseRate || !saleRate || quantity === undefined || !purchaseType) {
       return res.status(400).json({
         message: "Name, category, purchase rate, sale rate, quantity, and purchase type are required",
@@ -114,13 +110,11 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Rates and quantity must be non-negative" })
     }
 
-    // Validate purchaseType exists in Asset model
     const assetExists = await Asset.findById(purchaseType)
     if (!assetExists) {
       return res.status(400).json({ message: "Invalid purchase type. Asset not found." })
     }
 
-    // Validate vendorName if provided
     if (vendorName) {
       const vendorExists = await Liability.findById(vendorName)
       if (!vendorExists) {
@@ -131,12 +125,10 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Validate expiry date if provided (optional field)
     if (expiryDate && new Date(expiryDate) <= new Date()) {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    // Validate serial number uniqueness if provided
     if (serialNumber) {
       const existingProduct = await Product.findOne({ serialNumber })
       if (existingProduct) {
@@ -151,24 +143,22 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Calculate purchase amount and balance amount
     const purchaseAmount = quantity * purchaseRate
-    const balanceAmount = purchaseAmount // Initially same as purchase amount
+    const balanceAmount = purchaseAmount
 
     const productData = {
       name,
       category,
       purchaseRate,
       saleRate,
-      quantity, // Current balance quantity
-      purchaseQuantity: quantity, // Original purchase quantity (unchangeable)
-      purchaseAmount, // Original purchase amount (unchangeable)
-      balanceAmount, // Current balance amount
-      totalSoldQuantity: 0, // No sales yet
+      quantity,
+      purchaseQuantity: quantity,
+      purchaseAmount,
+      balanceAmount,
+      totalSoldQuantity: 0,
       purchaseType,
     }
 
-    // Add optional fields if provided
     if (serialNumber) productData.serialNumber = serialNumber
     if (expiryDate) productData.expiryDate = new Date(expiryDate)
     if (vendorName) productData.vendorName = vendorName
@@ -177,12 +167,9 @@ const createProduct = async (req, res) => {
     if (notes) productData.notes = notes
     if (grn) productData.grn = grn
 
-    console.log("Final product data to save:", productData)
-
     const product = new Product(productData)
     const savedProduct = await product.save()
 
-    // Populate the references before sending response
     await savedProduct.populate("vendorName", "name code balance description")
     await savedProduct.populate("purchaseType", "name type code description")
 
@@ -229,10 +216,8 @@ const updateProduct = async (req, res) => {
       purchaseType,
     } = req.body
 
-    // Log received data for debugging
     console.log("Received update data:", req.body)
 
-    // Validation
     if (purchaseRate !== undefined && purchaseRate < 0) {
       return res.status(400).json({ message: "Purchase rate must be non-negative" })
     }
@@ -243,7 +228,6 @@ const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Quantity must be non-negative" })
     }
 
-    // Validate purchaseType if provided
     if (purchaseType) {
       const assetExists = await Asset.findById(purchaseType)
       if (!assetExists) {
@@ -251,7 +235,6 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Validate vendorName if provided
     if (vendorName) {
       const vendorExists = await Liability.findById(vendorName)
       if (!vendorExists) {
@@ -262,12 +245,10 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Validate expiry date if provided (optional field)
     if (expiryDate && new Date(expiryDate) <= new Date()) {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    // Validate serial number uniqueness if provided and changed
     if (serialNumber) {
       const existingProduct = await Product.findOne({
         serialNumber,
@@ -278,7 +259,6 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Validate vendor bill number uniqueness if provided and changed
     if (vendorBillNumber) {
       const existingBill = await Product.findOne({
         vendorBillNumber,
@@ -289,7 +269,6 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Get current product to recalculate amounts if needed
     const currentProduct = await Product.findById(req.params.id)
     if (!currentProduct) {
       return res.status(404).json({ message: "Product not found" })
@@ -297,19 +276,16 @@ const updateProduct = async (req, res) => {
 
     const updateData = {}
 
-    // Add fields to update only if they are provided
     if (grn !== undefined) updateData.grn = grn
     if (name !== undefined) updateData.name = name
     if (category !== undefined) updateData.category = category
     if (purchaseRate !== undefined) {
       updateData.purchaseRate = purchaseRate
-      // Recalculate balance amount with new purchase rate
       updateData.balanceAmount = currentProduct.quantity * purchaseRate
     }
     if (saleRate !== undefined) updateData.saleRate = saleRate
     if (quantity !== undefined) {
       updateData.quantity = quantity
-      // Recalculate balance amount with new quantity
       const rate = purchaseRate !== undefined ? purchaseRate : currentProduct.purchaseRate
       updateData.balanceAmount = quantity * rate
     }
@@ -320,8 +296,6 @@ const updateProduct = async (req, res) => {
     if (vendorBillNumber !== undefined) updateData.vendorBillNumber = vendorBillNumber
     if (notes !== undefined) updateData.notes = notes
     if (purchaseType !== undefined) updateData.purchaseType = purchaseType
-
-    console.log("Final update data:", updateData)
 
     const product = await Product.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
@@ -358,7 +332,7 @@ const updateProduct = async (req, res) => {
   }
 }
 
-// Update product stock (for sale/purchase transactions)
+// Update product stock
 const updateStock = async (req, res) => {
   try {
     const { quantity, operation } = req.body
@@ -377,23 +351,20 @@ const updateStock = async (req, res) => {
     }
 
     if (operation === "add") {
-      // Adding more stock (additional purchase)
       const additionalAmount = quantity * product.purchaseRate
-      
+
       product.quantity += quantity
-      product.purchaseQuantity += quantity // Update total purchase quantity
-      product.purchaseAmount += additionalAmount // Update total purchase amount
-      product.balanceAmount = product.quantity * product.purchaseRate // Recalculate balance amount
-      
+      product.purchaseQuantity += quantity
+      product.purchaseAmount += additionalAmount
+      product.balanceAmount = product.quantity * product.purchaseRate
     } else if (operation === "subtract") {
-      // Sale transaction
       if (product.quantity < quantity) {
         return res.status(400).json({ message: "Insufficient stock available" })
       }
-      
-      product.quantity -= quantity // Decrease current quantity
-      product.totalSoldQuantity += quantity // Track total sold
-      product.balanceAmount = product.quantity * product.purchaseRate // Recalculate balance amount
+
+      product.quantity -= quantity
+      product.totalSoldQuantity += quantity
+      product.balanceAmount = product.quantity * product.purchaseRate
     }
 
     const updatedProduct = await product.save()
@@ -503,7 +474,6 @@ const getProductsByVendor = async (req, res) => {
   try {
     const { vendorName } = req.params
 
-    // Find vendors matching the name
     const vendors = await Liability.find({
       name: { $regex: vendorName, $options: "i" },
       type: "PAYABLES",
@@ -541,7 +511,6 @@ const getProductCategories = async (req, res) => {
 // Get unique vendors
 const getVendors = async (req, res) => {
   try {
-    // Get all vendors from Liability model with type PAYABLES
     const vendors = await Liability.find({
       type: "PAYABLES",
       isActive: true,
@@ -557,7 +526,6 @@ const getVendors = async (req, res) => {
 // Get purchase types
 const getPurchaseTypes = async (req, res) => {
   try {
-    // Get all assets that can be used as purchase types
     const purchaseTypes = await Asset.find({
       type: { $in: ["Purchases", "Stock", "General Account"] },
       isActive: true,
@@ -570,7 +538,7 @@ const getPurchaseTypes = async (req, res) => {
   }
 }
 
-// Get product summary (GRN details with purchase and sales tracking)
+// Get product summary
 const getProductSummary = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -585,30 +553,28 @@ const getProductSummary = async (req, res) => {
       grn: product.grn,
       name: product.name,
       category: product.category,
-      
-      // Purchase Information (Original - Unchangeable)
       purchaseDetails: {
         purchaseQuantity: product.purchaseQuantity,
         purchaseRate: product.purchaseRate,
         purchaseAmount: product.purchaseAmount,
       },
-      
-      // Sales Information
       salesDetails: {
         totalSoldQuantity: product.totalSoldQuantity,
         saleRate: product.saleRate,
         totalSaleAmount: product.totalSoldQuantity * product.saleRate,
-        totalSaleProfit: (product.totalSoldQuantity * product.saleRate) - (product.totalSoldQuantity * product.purchaseRate),
+        totalSaleProfit:
+          product.totalSoldQuantity * product.saleRate - product.totalSoldQuantity * product.purchaseRate,
       },
-      
-      // Current Balance
       currentBalance: {
         balanceQuantity: product.quantity,
         balanceAmount: product.balanceAmount,
-        calculatedBalanceAmount: product.quantity * product.purchaseRate, // Verification
+        calculatedBalanceAmount: product.quantity * product.purchaseRate,
       },
-      
-      // Additional Information
+      returnDetails: {
+        returnQuantity: product.ReturnQuantity || 0,
+        returnedAmount: product.ReturnedAmount || 0,
+        returnedDate: product.ReturnedDate || null,
+      },
       vendor: product.vendorName,
       purchaseType: product.purchaseType,
       serialNumber: product.serialNumber,
@@ -626,7 +592,7 @@ const getProductSummary = async (req, res) => {
   }
 }
 
-// Get all products with full summary details
+// Get all products with summary
 const getProductsWithSummary = async (req, res) => {
   try {
     const { category, search, lowStock, expiryStatus, vendorName } = req.query
@@ -679,20 +645,204 @@ const getProductsWithSummary = async (req, res) => {
       .populate("purchaseType", "name type code description")
       .sort({ createdAt: -1 })
 
-    // Add summary calculations to each product
-    const productsWithSummary = products.map(product => ({
+    const productsWithSummary = products.map((product) => ({
       ...product.toObject(),
       summary: {
         totalSaleAmount: product.totalSoldQuantity * product.saleRate,
-        totalSaleProfit: (product.totalSoldQuantity * product.saleRate) - (product.totalSoldQuantity * product.purchaseRate),
-        balancePercentage: product.purchaseQuantity > 0 ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2) : 0,
-      }
+        totalSaleProfit:
+          product.totalSoldQuantity * product.saleRate - product.totalSoldQuantity * product.purchaseRate,
+        balancePercentage:
+          product.purchaseQuantity > 0 ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2) : 0,
+      },
     }))
 
     res.json(productsWithSummary)
   } catch (error) {
     console.error("Error fetching products with summary:", error)
     res.status(500).json({ message: "Error fetching products with summary", error: error.message })
+  }
+}
+
+// Process Purchase Return - UPDATED WITH TRACKING
+const processPurchaseReturn = async (req, res) => {
+  try {
+    const { productId, returnQuantity, returnDate, reason } = req.body
+
+    console.log("[PRN] Received return request:", req.body)
+
+    if (!productId || !returnQuantity || !returnDate) {
+      return res.status(400).json({
+        message: "Product ID, return quantity, and return date are required",
+      })
+    }
+
+    const qty = Number.parseInt(returnQuantity)
+    if (qty <= 0) {
+      return res.status(400).json({ message: "Return quantity must be greater than 0" })
+    }
+
+    const product = await Product.findById(productId)
+      .populate("vendorName", "name code balance description")
+      .populate("purchaseType", "name type code description")
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" })
+    }
+
+    if (product.quantity < qty) {
+      return res.status(400).json({
+        message: `Cannot return more than available quantity. Available: ${product.quantity}`,
+      })
+    }
+
+    const calculatedReturnAmount = qty * product.purchaseRate
+
+    // Update quantities
+    product.quantity -= qty
+    product.balanceAmount = product.quantity * product.purchaseRate
+    
+    // Update return tracking fields
+    product.ReturnQuantity = (product.ReturnQuantity || 0) + qty
+    product.ReturnedAmount = (product.ReturnedAmount || 0) + calculatedReturnAmount
+    product.ReturnedDate = new Date(returnDate)
+
+    await product.save()
+
+    console.log("[PRN] Purchase return processed successfully:", {
+      productId: product._id,
+      productName: product.name,
+      returnQuantity: qty,
+      returnAmount: calculatedReturnAmount,
+      totalReturnQuantity: product.ReturnQuantity,
+      totalReturnedAmount: product.ReturnedAmount,
+      newBalanceQuantity: product.quantity,
+      newBalanceAmount: product.balanceAmount,
+    })
+
+    await product.populate("vendorName", "name code balance description")
+    await product.populate("purchaseType", "name type code description")
+
+    res.json({
+      success: true,
+      message: `Successfully returned ${qty} units of ${product.name}`,
+      product,
+      returnDetails: {
+        returnQuantity: qty,
+        returnAmount: calculatedReturnAmount,
+        returnDate,
+        reason: reason || "N/A",
+        totalReturned: product.ReturnQuantity,
+        totalReturnedAmount: product.ReturnedAmount,
+      },
+    })
+  } catch (error) {
+    console.error("[PRN] Error processing purchase return:", error)
+    res.status(500).json({
+      message: "Error processing purchase return",
+      error: error.message,
+    })
+  }
+}
+
+// Get Purchase Return History - NEW
+const getPurchaseReturns = async (req, res) => {
+  try {
+    const { startDate, endDate, productId, category } = req.query
+    const filter = {
+      ReturnQuantity: { $gt: 0 },
+    }
+
+    if (startDate || endDate) {
+      filter.ReturnedDate = {}
+      if (startDate) filter.ReturnedDate.$gte = new Date(startDate)
+      if (endDate) filter.ReturnedDate.$lte = new Date(endDate)
+    }
+
+    if (productId) {
+      filter._id = productId
+    }
+
+    if (category) {
+      filter.category = category
+    }
+
+    const products = await Product.find(filter)
+      .populate("vendorName", "name code balance description")
+      .populate("purchaseType", "name type code description")
+      .sort({ ReturnedDate: -1 })
+
+    const returns = products.map(product => ({
+      _id: product._id,
+      productId: product._id,
+      productName: product.name,
+      vendorName: product.vendorName?.name || "N/A",
+      grnDate: product.createdAt,
+      grn: product.grn,
+      returnDate: product.ReturnedDate,
+      returnQuantity: product.ReturnQuantity,
+      purchaseRate: product.purchaseRate,
+      returnAmount: product.ReturnedAmount,
+      reason: "N/A",
+      category: product.category,
+      status: "approved",
+    }))
+
+    console.log("[PRN] Fetched returns:", returns.length)
+
+    res.json({
+      success: true,
+      count: returns.length,
+      data: returns,
+    })
+  } catch (error) {
+    console.error("[PRN] Error fetching purchase returns:", error)
+    res.status(500).json({
+      message: "Error fetching purchase returns",
+      error: error.message,
+    })
+  }
+}
+
+// Get Single Product Return Details - NEW
+const getPurchaseReturn = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate("vendorName", "name code balance description")
+      .populate("purchaseType", "name type code description")
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" })
+    }
+
+    if (!product.ReturnQuantity || product.ReturnQuantity === 0) {
+      return res.status(404).json({ message: "No returns found for this product" })
+    }
+
+    const returnDetails = {
+      _id: product._id,
+      productId: product._id,
+      productName: product.name,
+      vendorName: product.vendorName?.name || "N/A",
+      grnDate: product.createdAt,
+      grn: product.grn,
+      returnDate: product.ReturnedDate,
+      returnQuantity: product.ReturnQuantity,
+      purchaseRate: product.purchaseRate,
+      returnAmount: product.ReturnedAmount,
+      category: product.category,
+      status: "approved",
+    }
+
+    res.json({
+      success: true,
+      data: returnDetails,
+    })
+  } catch (error) {
+    console.error("[PRN] Error fetching return details:", error)
+    res.status(500).json({
+      message: "Error fetching return details",
+      error: error.message,
+    })
   }
 }
 
@@ -703,7 +853,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   updateStock,
-  getProductsByCategory,
+  getProductsByCategory,  
   getLowStockProducts,
   getExpiringProducts,
   getExpiredProducts,
@@ -713,4 +863,7 @@ module.exports = {
   getPurchaseTypes,
   getProductSummary,
   getProductsWithSummary,
+  processPurchaseReturn,
+  getPurchaseReturns, // Exported new function
+  getPurchaseReturn,  // Exported new function
 }

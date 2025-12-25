@@ -72,14 +72,12 @@ const getAllAccounts = async (req, res) => {
     // Calculate actual closing balance from ALL ledger entries for each account
     for (const account of allAccounts) {
       try {
-        // Get ALL ledger entries for this account, sorted by date
         const ledgerEntries = await Ledger.find({ accountCode: account.code })
           .sort({ date: 1, createdAt: 1 })
           .select("debit credit balance")
           .lean()
         
         if (ledgerEntries && ledgerEntries.length > 0) {
-          // Get the LAST entry's balance (which is the closing balance)
           const lastEntry = ledgerEntries[ledgerEntries.length - 1]
           account.balance = lastEntry.balance || 0
           console.log(`✅ ${account.code} - Balance: ${account.balance} (from ${ledgerEntries.length} entries)`)
@@ -261,7 +259,74 @@ const getAccountLedger = async (req, res) => {
       }
     })
 
-    // ========== PROCESS PRODUCTS ==========
+    // ========== PROCESS SALE RETURNS ==========
+    const salesWithReturns = await Sale.find({
+      returnedQuantity: { $gt: 0 },
+      "returnHistory.date": { $gte: from, $lte: to },
+    })
+      .populate("product")
+      .lean()
+
+    console.log(`✅ Found ${salesWithReturns.length} sales with returns`)
+
+    salesWithReturns.forEach((sale) => {
+      if (!sale.returnHistory || sale.returnHistory.length === 0) return
+
+      sale.returnHistory.forEach((returnEntry) => {
+        const returnDate = new Date(returnEntry.date)
+        if (returnDate < from || returnDate > to) return
+
+        const returnAmount = parseFloat(returnEntry.refundAmount || (returnEntry.quantity * sale.saleRate))
+        const customerName = sale.customerName || ""
+        const saleType = sale.saleType || ""
+
+        // Sale Return Account (DEBIT) - Reverse of revenue
+        if (matchAccount(saleType, accountCode, accountName)) {
+          if (normalBalance === "debit") {
+            runningBalance += returnAmount
+          } else {
+            runningBalance -= returnAmount
+          }
+
+          ledgerEntries.push({
+            id: `sale-return-${sale._id}-${returnEntry._id}-revenue`,
+            date: returnDate,
+            voucherNo: sale.invoice || "N/A",
+            voucherType: "Sale Return",
+            description: `Return from ${customerName} - ${returnEntry.reason || "Sale return"}`,
+            debit: returnAmount,
+            credit: 0,
+            balance: runningBalance,
+            grn: null,
+            sourceId: sale._id,
+          })
+        }
+
+        // Customer Account (CREDIT) - Reverse of receivable
+        if (matchAccount(customerName, accountCode, accountName)) {
+          if (normalBalance === "debit") {
+            runningBalance -= returnAmount
+          } else {
+            runningBalance += returnAmount
+          }
+
+          ledgerEntries.push({
+            id: `sale-return-${sale._id}-${returnEntry._id}-customer`,
+            date: returnDate,
+            voucherNo: sale.invoice || "N/A",
+            voucherType: "Sale Return",
+            description: `Return: ${returnEntry.quantity} units - ${returnEntry.reason || "Sale return"}`,
+            debit: 0,
+            credit: returnAmount,
+            balance: runningBalance,
+            grn: null,
+            sourceId: sale._id,
+          })
+        }
+      })
+    })
+
+    // ========== PROCESS PRODUCTS (PURCHASES) ==========
     const products = await Product.find({
       createdAt: { $gte: from, $lte: to },
     })
@@ -299,7 +364,7 @@ const getAccountLedger = async (req, res) => {
           date: product.createdAt,
           voucherNo: product.grn || "N/A",
           voucherType: "Purchase",
-          description: `Purchase from ${vendorDisplay} - ${product.name}: ${product.purchaseRate} units @ Rs. ${product.purchaseQuantity}`,
+          description: `Purchase from ${vendorDisplay} - ${product.name}: ${product.purchaseQuantity} units @ Rs. ${product.purchaseRate}`,
           debit: amount,
           credit: 0,
           balance: runningBalance,
@@ -323,9 +388,80 @@ const getAccountLedger = async (req, res) => {
           date: product.createdAt,
           voucherNo: product.grn || "N/A",
           voucherType: "Purchase",
-          description: `${purchaseTypeDisplay} - ${product.name}: ${product.purchaseRate} units @ Rs. ${product.purchaseQuantity}`,
+          description: `${purchaseTypeDisplay} - ${product.name}: ${product.purchaseQuantity} units @ Rs. ${product.purchaseRate}`,
           debit: 0,
           credit: amount,
+          balance: runningBalance,
+          grn: product.grn,
+          sourceId: product._id,
+        })
+      }
+    })
+
+    // ========== PROCESS PURCHASE RETURNS ==========
+    const productsWithReturns = await Product.find({
+      ReturnQuantity: { $gt: 0 },
+      ReturnedDate: { $gte: from, $lte: to },
+    })
+      .populate("purchaseType", "name code")
+      .populate("vendorName", "name code")
+      .lean()
+
+    console.log(`✅ Found ${productsWithReturns.length} purchase returns`)
+
+    productsWithReturns.forEach((product) => {
+      const returnAmount = parseFloat(product.ReturnedAmount || 0)
+      if (returnAmount <= 0) return
+
+      const purchaseTypeName = product.purchaseType?.name || ""
+      const purchaseTypeCode = product.purchaseType?.code || ""
+      const vendorName = product.vendorName?.name || ""
+      const vendorCode = product.vendorName?.code || ""
+      const returnDate = new Date(product.ReturnedDate)
+
+      // Vendor Account (DEBIT) - Reverse of payable
+      if (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName)) {
+        if (normalBalance === "debit") {
+          runningBalance += returnAmount
+        } else {
+          runningBalance -= returnAmount
+        }
+
+        ledgerEntries.push({
+          id: `purchase-return-${product._id}-vendor`,
+          date: returnDate,
+          voucherNo: product.grn || "N/A",
+          voucherType: "Purchase Return",
+          description: `Return to ${vendorName} - ${product.name}: ${product.ReturnQuantity} units @ Rs. ${product.purchaseRate}`,
+          debit: returnAmount,
+          credit: 0,
+          balance: runningBalance,
+          grn: product.grn,
+          sourceId: product._id,
+        })
+      }
+
+      // Purchase Return Account (CREDIT) - Reverse of purchase
+      if (
+        matchAccount(purchaseTypeName, accountCode, accountName) ||
+        matchAccount(purchaseTypeCode, accountCode, accountName)
+      ) {
+        if (normalBalance === "debit") {
+          runningBalance -= returnAmount
+        } else {
+          runningBalance += returnAmount
+        }
+
+        const vendorDisplay = vendorName || "Vendor"
+
+        ledgerEntries.push({
+          id: `purchase-return-${product._id}-purchaseType`,
+          date: returnDate,
+          voucherNo: product.grn || "N/A",
+          voucherType: "Purchase Return",
+          description: `Return to ${vendorDisplay} - ${product.name}: ${product.ReturnQuantity} units @ Rs. ${product.purchaseRate}`,
+          debit: 0,
+          credit: returnAmount,
           balance: runningBalance,
           grn: product.grn,
           sourceId: product._id,
@@ -366,7 +502,10 @@ const getAccountLedger = async (req, res) => {
         accountCategory: accountCategory,
         voucherNo: entry.voucherNo,
         voucherType: entry.voucherType,
-        sourceType: entry.id.includes('voucher') ? 'Voucher' : entry.id.includes('sale') ? 'Sale' : 'Product',
+        sourceType: entry.id.includes('voucher') ? 'Voucher' : 
+                    entry.id.includes('sale-return') ? 'SaleReturn' :
+                    entry.id.includes('sale') ? 'Sale' : 
+                    entry.id.includes('purchase-return') ? 'PurchaseReturn' : 'Product',
         sourceId: entry.sourceId,
         grn: entry.grn || null,
         description: entry.description,
@@ -381,7 +520,6 @@ const getAccountLedger = async (req, res) => {
     })
     
     console.log(`\n📦 Prepared ${ledgerDocsToSave.length} documents to save`)
-    console.log(`Sample document:`, JSON.stringify(ledgerDocsToSave[0], null, 2))
 
     // Save all ledger entries to database
     try {
@@ -486,8 +624,12 @@ async function findAccountInfo(accountIdentifier) {
 function determineEntryType(voucherType, debit, credit) {
   if (voucherType === "Sale") {
     return debit > 0 ? "RECEIVABLE" : "REVENUE"
+  } else if (voucherType === "Sale Return") {
+    return debit > 0 ? "SALE_RETURN" : "RECEIVABLE_REVERSAL"
   } else if (voucherType === "Purchase") {
     return debit > 0 ? "PURCHASE" : "PAYABLE"
+  } else if (voucherType === "Purchase Return") {
+    return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_RETURN"
   } else if (voucherType === "CRV" || voucherType === "BRV") {
     return voucherType === "CRV" ? "CASH" : "BANK"
   } else if (voucherType === "CPV" || voucherType === "BPV") {

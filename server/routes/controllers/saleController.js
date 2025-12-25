@@ -233,39 +233,100 @@ exports.createSale = async (req, res) => {
         message: "Validation Error",
         error: messages,
       })
-    } else if (error.name === "CastError") {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid product ID format",
-      })
-    } else {
-      res.status(500).json({
-        success: false,
-        message: "Server Error",
-        error: error.message,
-      })
     }
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
   }
 }
 
-// Update sale
-exports.updateSale = async (req, res) => {
+exports.getReturns = async (req, res) => {
   try {
-    const {
-      product: productId,
-      quantity,
-      saleQuantity,
-      salePrice,
-      saleRate,
-      date,
-      customerName,
-      customerPhone,
-      notes,
-      saleType,
-      saleAccount,
-    } = req.body
+    const { startDate, endDate, limit, offset } = req.query
+    const query = {}
 
-    const sale = await Sale.findById(req.params.id)
+    // Filter by date range
+    if (startDate && endDate) {
+      query["returnHistory.date"] = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      }
+    }
+
+    // Find sales that have returns
+    const salesWithReturns = await Sale.find({
+      returnedQuantity: { $gt: 0 },
+      ...query
+    })
+      .populate("product", "name")
+      .sort({ "returnHistory.date": -1 })
+      .limit(Number.parseInt(limit) || 100)
+      .skip(Number.parseInt(offset) || 0)
+
+    // Extract return entries with sale info
+    const returns = []
+    salesWithReturns.forEach(sale => {
+      if (sale.returnHistory && sale.returnHistory.length > 0) {
+        sale.returnHistory.forEach(returnEntry => {
+          // Apply date filter to individual return entries
+          if (startDate && new Date(returnEntry.date) < new Date(startDate)) return
+          if (endDate && new Date(returnEntry.date) > new Date(endDate)) return
+          
+          returns.push({
+            _id: returnEntry._id,
+            sale: {
+              _id: sale._id,
+              invoice: sale.invoice,
+              product: sale.product,
+              productName: sale.itemName,
+              totalAmount: sale.totalAmount
+            },
+            returnQuantity: returnEntry.quantity,
+            returnReason: returnEntry.reason,
+            refundAmount: returnEntry.refundAmount || (returnEntry.quantity * sale.saleRate),
+            date: returnEntry.date,
+            createdAt: returnEntry.date
+          })
+        })
+      }
+    })
+
+    // Sort by date descending
+    returns.sort((a, b) => new Date(b.date) - new Date(a.date))
+
+    res.status(200).json({
+      success: true,
+      count: returns.length,
+      data: returns
+    })
+  } catch (error) {
+    console.error("Error in getReturns:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Update the returnSale function to match frontend expectations
+exports.returnSale = async (req, res) => {
+  try {
+    const { sale: saleId, returnQuantity, returnReason, refundAmount, date } = req.body
+
+    // Validate required fields
+    if (!saleId || !returnQuantity) {
+      return res.status(400).json({
+        success: false,
+        message: "Sale ID and return quantity are required",
+      })
+    }
+
+    // Find the original sale
+    const sale = await Sale.findById(saleId).populate("product")
 
     if (!sale) {
       return res.status(404).json({
@@ -274,152 +335,69 @@ exports.updateSale = async (req, res) => {
       })
     }
 
-    // Use new field names if available, fallback to old ones
-    const finalQuantity = saleQuantity || quantity
-    const finalSaleRate = saleRate || salePrice
+    // Calculate returned quantity (existing + new return)
+    const existingReturned = sale.returnedQuantity || 0
+    const newReturnedTotal = existingReturned + Number.parseInt(returnQuantity)
 
-    // If product or quantity is being updated, we need to adjust stock
-    if ((productId && productId !== sale.product.toString()) || (finalQuantity && finalQuantity !== sale.quantity)) {
-      // Restore original product stock
-      const originalProduct = await Product.findById(sale.product)
-      if (originalProduct) {
-        originalProduct.quantity += sale.quantity
-        await originalProduct.save()
-      }
-
-      // If product is being changed, update new product stock
-      if (productId && productId !== sale.product.toString()) {
-        const newProduct = await Product.findById(productId)
-
-        if (!newProduct) {
-          // Restore the stock we just added back
-          if (originalProduct) {
-            originalProduct.quantity -= sale.quantity
-            await originalProduct.save()
-          }
-          return res.status(404).json({
-            success: false,
-            message: "New product not found",
-          })
-        }
-
-        const requiredQuantity = finalQuantity || sale.quantity
-        if (newProduct.quantity < requiredQuantity) {
-          // Restore the stock we just added back
-          if (originalProduct) {
-            originalProduct.quantity -= sale.quantity
-            await originalProduct.save()
-          }
-          return res.status(400).json({
-            success: false,
-            message: `Not enough stock available for new product. Only ${newProduct.quantity} units available.`,
-          })
-        }
-
-        newProduct.quantity -= requiredQuantity
-        await newProduct.save()
-      } else if (finalQuantity && finalQuantity !== sale.quantity) {
-        // If only quantity is being updated
-        const product = await Product.findById(sale.product)
-        const quantityDifference = finalQuantity - sale.quantity
-
-        if (product.quantity < quantityDifference) {
-          // Restore the stock we just added back
-          if (originalProduct) {
-            originalProduct.quantity -= sale.quantity
-            await originalProduct.save()
-          }
-          return res.status(400).json({
-            success: false,
-            message: `Not enough stock available. Only ${product.quantity + sale.quantity} units available.`,
-          })
-        }
-
-        product.quantity -= quantityDifference
-        await product.save()
-      }
+    // Validate return quantity doesn't exceed sale quantity
+    if (newReturnedTotal > sale.saleQuantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot return more than sold quantity. Sold: ${sale.saleQuantity}, Already returned: ${existingReturned}`,
+      })
     }
 
-    // Update the sale
-    const updateData = {}
-    if (productId) updateData.product = productId
-    if (finalQuantity) {
-      updateData.quantity = Number.parseInt(finalQuantity)
-      updateData.saleQuantity = Number.parseInt(finalQuantity)
-    }
-    if (finalSaleRate) {
-      updateData.salePrice = Number.parseFloat(finalSaleRate)
-      updateData.saleRate = Number.parseFloat(finalSaleRate)
-    }
-    if (date) updateData.date = date
-    if (customerName !== undefined) updateData.customerName = customerName
-    if (customerPhone !== undefined) updateData.customerPhone = customerPhone
-    if (notes !== undefined) updateData.notes = notes
-    if (saleType !== undefined) updateData.saleType = saleType
-    if (saleAccount !== undefined) updateData.saleAccount = saleAccount
+    // Calculate refund amount if not provided
+    const calculatedRefund = refundAmount || (returnQuantity * sale.saleRate)
 
-    const updatedSale = await Sale.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    }).populate("product", "name purchaseRate saleRate")
+    // Update sale with returned quantity
+    sale.returnedQuantity = newReturnedTotal
+    sale.netQuantity = sale.saleQuantity - newReturnedTotal
+
+    // Add return history
+    if (!sale.returnHistory) {
+      sale.returnHistory = []
+    }
+    sale.returnHistory.push({
+      quantity: Number.parseInt(returnQuantity),
+      date: date || new Date(),
+      reason: returnReason || "",
+      refundAmount: calculatedRefund
+    })
+
+    await sale.save()
+
+    // Restore product stock
+    const product = await Product.findById(sale.product._id)
+    if (product) {
+      product.quantity += Number.parseInt(returnQuantity)
+      await product.save()
+    }
+
+    // Create notification for return
+    try {
+      await Notification.create({
+        type: "return",
+        title: "Sale Return Processed",
+        message: `Return processed for ${sale.invoice}: ${returnQuantity} ${sale.itemName} returned`,
+        priority: "medium",
+        relatedId: sale._id,
+        relatedModel: "Sale",
+      })
+    } catch (notifError) {
+      console.warn("Failed to create return notification:", notifError)
+    }
+
+    // Populate and return updated sale
+    const updatedSale = await Sale.findById(sale._id).populate("product", "name purchaseRate saleRate")
 
     res.status(200).json({
       success: true,
       data: updatedSale,
-      message: "Sale updated successfully",
+      message: `Successfully returned ${returnQuantity} items for ${sale.invoice}`,
     })
   } catch (error) {
-    console.error("Error in updateSale:", error)
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map((val) => val.message)
-      return res.status(400).json({
-        success: false,
-        message: "Validation Error",
-        error: messages,
-      })
-    } else if (error.name === "CastError") {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid ID format",
-      })
-    } else {
-      res.status(500).json({
-        success: false,
-        message: "Server Error",
-        error: error.message,
-      })
-    }
-  }
-}
-
-// Delete sale
-exports.deleteSale = async (req, res) => {
-  try {
-    const sale = await Sale.findById(req.params.id)
-
-    if (!sale) {
-      return res.status(404).json({
-        success: false,
-        message: "Sale not found",
-      })
-    }
-
-    // Restore product stock
-    const product = await Product.findById(sale.product)
-    if (product) {
-      product.quantity += sale.quantity
-      await product.save()
-    }
-
-    await sale.deleteOne()
-
-    res.status(200).json({
-      success: true,
-      data: {},
-      message: "Sale deleted successfully",
-    })
-  } catch (error) {
-    console.error("Error in deleteSale:", error)
+    console.error("Error in returnSale:", error)
     if (error.name === "CastError") {
       return res.status(400).json({
         success: false,
@@ -434,287 +412,12 @@ exports.deleteSale = async (req, res) => {
   }
 }
 
-// Get sales statistics
-exports.getSalesStats = async (req, res) => {
-  try {
-    const { startDate, endDate, productId } = req.query
-    let dateQuery = {}
-
-    // Filter by date range
-    if (startDate && endDate) {
-      dateQuery = {
-        date: {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
-        },
-      }
-    } else if (startDate) {
-      dateQuery = { date: { $gte: new Date(startDate) } }
-    } else if (endDate) {
-      dateQuery = { date: { $lte: new Date(endDate) } }
-    }
-
-    // Filter by product if provided
-    if (productId) {
-      dateQuery.product = productId
-    }
-
-    // Aggregate sales statistics
-    const stats = await Sale.aggregate([
-      { $match: dateQuery },
-      {
-        $group: {
-          _id: null,
-          totalSales: { $sum: "$totalAmount" },
-          totalRevenue: { $sum: "$totalAmount" },
-          totalProfit: { $sum: "$profit" },
-          totalQuantity: { $sum: "$quantity" },
-          totalOrders: { $sum: 1 },
-          averageSaleValue: { $avg: "$totalAmount" },
-          averageProfit: { $avg: "$profit" },
-          minSaleValue: { $min: "$totalAmount" },
-          maxSaleValue: { $max: "$totalAmount" },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalSales: { $round: ["$totalSales", 2] },
-          totalRevenue: { $round: ["$totalRevenue", 2] },
-          totalProfit: { $round: ["$totalProfit", 2] },
-          totalQuantity: 1,
-          totalOrders: 1,
-          averageSaleValue: { $round: ["$averageSaleValue", 2] },
-          averageProfit: { $round: ["$averageProfit", 2] },
-          minSaleValue: { $round: ["$minSaleValue", 2] },
-          maxSaleValue: { $round: ["$maxSaleValue", 2] },
-          profitMargin: {
-            $round: [
-              {
-                $cond: [
-                  { $eq: ["$totalRevenue", 0] },
-                  0,
-                  { $multiply: [{ $divide: ["$totalProfit", "$totalRevenue"] }, 100] },
-                ],
-              },
-              2,
-            ],
-          },
-        },
-      },
-    ])
-
-    // If no sales found, return default values
-    const result =
-      stats.length > 0
-        ? stats[0]
-        : {
-            totalSales: 0,
-            totalRevenue: 0,
-            totalProfit: 0,
-            totalQuantity: 0,
-            totalOrders: 0,
-            averageSaleValue: 0,
-            averageProfit: 0,
-            minSaleValue: 0,
-            maxSaleValue: 0,
-            profitMargin: 0,
-          }
-
-    // Add period information
-    result.period = {
-      startDate: startDate || "All time",
-      endDate: endDate || "All time",
-      productFilter: productId || "All products",
-    }
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    console.error("Error in getSalesStats:", error)
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error: error.message,
-    })
-  }
-}
-
-// Get sales by product
-exports.getSalesByProduct = async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query
-    let dateQuery = {}
-
-    // Filter by date range
-    if (startDate && endDate) {
-      dateQuery = {
-        date: {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
-        },
-      }
-    } else if (startDate) {
-      dateQuery = { date: { $gte: new Date(startDate) } }
-    } else if (endDate) {
-      dateQuery = { date: { $lte: new Date(endDate) } }
-    }
-
-    const salesByProduct = await Sale.aggregate([
-      { $match: dateQuery },
-      {
-        $lookup: {
-          from: "products",
-          localField: "product",
-          foreignField: "_id",
-          as: "productInfo",
-        },
-      },
-      { $unwind: "$productInfo" },
-      {
-        $group: {
-          _id: {
-            productId: "$productInfo._id",
-            productName: "$productInfo.name",
-          },
-          totalAmount: { $sum: "$totalAmount" },
-          totalProfit: { $sum: "$profit" },
-          totalQuantity: { $sum: "$quantity" },
-          salesCount: { $sum: 1 },
-          averageSalePrice: { $avg: "$salePrice" },
-          minSalePrice: { $min: "$salePrice" },
-          maxSalePrice: { $max: "$salePrice" },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          productId: "$_id.productId",
-          productName: "$_id.productName",
-          totalAmount: { $round: ["$totalAmount", 2] },
-          totalProfit: { $round: ["$totalProfit", 2] },
-          totalQuantity: 1,
-          salesCount: 1,
-          averageSalePrice: { $round: ["$averageSalePrice", 2] },
-          minSalePrice: { $round: ["$minSalePrice", 2] },
-          maxSalePrice: { $round: ["$maxSalePrice", 2] },
-          profitMargin: {
-            $round: [
-              {
-                $cond: [
-                  { $eq: ["$totalAmount", 0] },
-                  0,
-                  { $multiply: [{ $divide: ["$totalProfit", "$totalAmount"] }, 100] },
-                ],
-              },
-              2,
-            ],
-          },},
-           $sort: { totalAmount: -1 } },
-        ])
-
-    res.status(200).json({
-      success: true,
-      count: salesByProduct.length,
-      data: salesByProduct,
-    })
-  } catch (error) {
-    console.error("Error in getSalesByProduct:", error)
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error: error.message,
-    })
-  }
-}
-
-// Get sales by date
-exports.getSalesByDate = async (req, res) => {
-  try {
-    const { startDate, endDate, productId } = req.query
-    let dateQuery = {}
-
-    // Filter by date range
-    if (startDate && endDate) {
-      dateQuery = {
-        date: {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
-        },
-      }
-    } else if (startDate) {
-      dateQuery = { date: { $gte: new Date(startDate) } }
-    } else if (endDate) {
-      dateQuery = { date: { $lte: new Date(endDate) } }
-    }
-
-    // Filter by product if provided
-    if (productId) {
-      dateQuery.product = productId
-    }
-
-    const salesByDate = await Sale.aggregate([
-      { $match: dateQuery },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          totalAmount: { $sum: "$totalAmount" },
-          totalProfit: { $sum: "$profit" },
-          totalQuantity: { $sum: "$quantity" },
-          salesCount: { $sum: 1 },
-          averageSaleValue: { $avg: "$totalAmount" },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          date: "$_id",
-          totalAmount: { $round: ["$totalAmount", 2] },
-          totalProfit: { $round: ["$totalProfit", 2] },
-          totalQuantity: 1,
-          salesCount: 1,
-          averageSaleValue: { $round: ["$averageSaleValue", 2] },
-          profitMargin: {
-            $round: [
-              {
-                $cond: [
-                  { $eq: ["$totalAmount", 0] },
-                  0,
-                  { $multiply: [{ $divide: ["$totalProfit", "$totalAmount"] }, 100] },
-                ],
-              },
-              2,
-            ],
-          },
-        },
-      },
-      { $sort: { date: 1 } },
-    ])
-
-    res.status(200).json({
-      success: true,
-      count: salesByDate.length,
-      data: salesByDate,
-    })
-  } catch (error) {
-    console.error("Error in getSalesByDate:", error)
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error: error.message,
-    })
-  }
-}
-
 // Get top selling products
 exports.getTopSellingProducts = async (req, res) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query
     let dateQuery = {}
 
-    // Filter by date range
     if (startDate && endDate) {
       dateQuery = {
         date: {
@@ -799,6 +502,373 @@ exports.getRecentSales = async (req, res) => {
     })
   } catch (error) {
     console.error("Error in getRecentSales:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Update sale
+exports.updateSale = async (req, res) => {
+  try {
+    const {
+      product: productId,
+      quantity,
+      saleQuantity,
+      salePrice,
+      saleRate,
+      date,
+      customerName,
+      customerPhone,
+      notes,
+      saleType,
+      saleAccount,
+    } = req.body
+
+    const sale = await Sale.findById(req.params.id)
+
+    if (!sale) {
+      return res.status(404).json({
+        success: false,
+        message: "Sale not found",
+      })
+    }
+
+    // Get the old product and quantity to restore stock
+    const oldProduct = await Product.findById(sale.product)
+    const oldQuantity = sale.saleQuantity
+
+    // Use new field names if available, fallback to old ones
+    const finalQuantity = saleQuantity || quantity || sale.saleQuantity
+    const finalSaleRate = saleRate || salePrice || sale.saleRate
+    const finalProductId = productId || sale.product
+
+    // If product changed or quantity changed, update stock
+    if (productId && productId !== sale.product.toString()) {
+      // Restore stock to old product
+      if (oldProduct) {
+        oldProduct.quantity += oldQuantity
+        await oldProduct.save()
+      }
+
+      // Check new product stock
+      const newProduct = await Product.findById(productId)
+      if (!newProduct) {
+        return res.status(404).json({
+          success: false,
+          message: "New product not found",
+        })
+      }
+
+      if (newProduct.quantity < finalQuantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Not enough stock available. Only ${newProduct.quantity} units in stock.`,
+        })
+      }
+
+      // Reduce stock from new product
+      newProduct.quantity -= finalQuantity
+      await newProduct.save()
+    } else if (finalQuantity !== oldQuantity) {
+      // Same product, but quantity changed
+      const quantityDifference = finalQuantity - oldQuantity
+
+      if (oldProduct.quantity < quantityDifference) {
+        return res.status(400).json({
+          success: false,
+          message: `Not enough stock available. Only ${oldProduct.quantity} units in stock.`,
+        })
+      }
+
+      oldProduct.quantity -= quantityDifference
+      await oldProduct.save()
+    }
+
+    // Update sale fields
+    sale.product = finalProductId
+    sale.saleQuantity = finalQuantity
+    sale.saleRate = finalSaleRate
+    sale.quantity = finalQuantity
+    sale.salePrice = finalSaleRate
+    if (date) sale.date = date
+    if (customerName !== undefined) sale.customerName = customerName
+    if (customerPhone !== undefined) sale.customerPhone = customerPhone
+    if (notes !== undefined) sale.notes = notes
+    if (saleType !== undefined) sale.saleType = saleType
+    if (saleAccount !== undefined) sale.saleAccount = saleAccount
+
+    await sale.save()
+
+    const updatedSale = await Sale.findById(sale._id).populate("product", "name purchaseRate saleRate")
+
+    res.status(200).json({
+      success: true,
+      data: updatedSale,
+      message: "Sale updated successfully",
+    })
+  } catch (error) {
+    console.error("Error in updateSale:", error)
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((val) => val.message)
+      return res.status(400).json({
+        success: false,
+        message: "Validation Error",
+        error: messages,
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Delete sale
+exports.deleteSale = async (req, res) => {
+  try {
+    const sale = await Sale.findById(req.params.id)
+
+    if (!sale) {
+      return res.status(404).json({
+        success: false,
+        message: "Sale not found",
+      })
+    }
+
+    // Restore product stock
+    const product = await Product.findById(sale.product)
+    if (product) {
+      product.quantity += sale.saleQuantity
+      await product.save()
+    }
+
+    await sale.deleteOne()
+
+    res.status(200).json({
+      success: true,
+      message: "Sale deleted successfully",
+    })
+  } catch (error) {
+    console.error("Error in deleteSale:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Get sales grouped by product
+exports.getSalesByProduct = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query
+    let dateQuery = {}
+
+    if (startDate && endDate) {
+      dateQuery = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      }
+    } else if (startDate) {
+      dateQuery = { date: { $gte: new Date(startDate) } }
+    } else if (endDate) {
+      dateQuery = { date: { $lte: new Date(endDate) } }
+    }
+
+    const salesByProduct = await Sale.aggregate([
+      { $match: dateQuery },
+      {
+        $lookup: {
+          from: "products",
+          localField: "product",
+          foreignField: "_id",
+          as: "productInfo",
+        },
+      },
+      { $unwind: "$productInfo" },
+      {
+        $group: {
+          _id: "$product",
+          productName: { $first: "$productInfo.name" },
+          totalQuantity: { $sum: "$saleQuantity" },
+          totalRevenue: { $sum: "$totalAmount" },
+          totalProfit: { $sum: "$profit" },
+          salesCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          productName: 1,
+          totalQuantity: 1,
+          totalRevenue: { $round: ["$totalRevenue", 2] },
+          totalProfit: { $round: ["$totalProfit", 2] },
+          salesCount: 1,
+        },
+      },
+      { $sort: { totalRevenue: -1 } },
+    ])
+
+    res.status(200).json({
+      success: true,
+      count: salesByProduct.length,
+      data: salesByProduct,
+    })
+  } catch (error) {
+    console.error("Error in getSalesByProduct:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Get sales grouped by date
+exports.getSalesByDate = async (req, res) => {
+  try {
+    const { startDate, endDate, groupBy = "day" } = req.query
+    let dateQuery = {}
+
+    if (startDate && endDate) {
+      dateQuery = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      }
+    } else if (startDate) {
+      dateQuery = { date: { $gte: new Date(startDate) } }
+    } else if (endDate) {
+      dateQuery = { date: { $lte: new Date(endDate) } }
+    }
+
+    const dateGrouping =
+      groupBy === "month"
+        ? {
+            year: { $year: "$date" },
+            month: { $month: "$date" },
+          }
+        : {
+            year: { $year: "$date" },
+            month: { $month: "$date" },
+            day: { $dayOfMonth: "$date" },
+          }
+
+    const salesByDate = await Sale.aggregate([
+      { $match: dateQuery },
+      {
+        $group: {
+          _id: dateGrouping,
+          totalQuantity: { $sum: "$saleQuantity" },
+          totalRevenue: { $sum: "$totalAmount" },
+          totalProfit: { $sum: "$profit" },
+          salesCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          totalQuantity: 1,
+          totalRevenue: { $round: ["$totalRevenue", 2] },
+          totalProfit: { $round: ["$totalProfit", 2] },
+          salesCount: 1,
+        },
+      },
+      { $sort: { "_id.year": -1, "_id.month": -1, "_id.day": -1 } },
+    ])
+
+    res.status(200).json({
+      success: true,
+      count: salesByDate.length,
+      data: salesByDate,
+    })
+  } catch (error) {
+    console.error("Error in getSalesByDate:", error)
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    })
+  }
+}
+
+// Get sales statistics
+exports.getSalesStats = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query
+    let dateQuery = {}
+
+    if (startDate && endDate) {
+      dateQuery = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      }
+    } else if (startDate) {
+      dateQuery = { date: { $gte: new Date(startDate) } }
+    } else if (endDate) {
+      dateQuery = { date: { $lte: new Date(endDate) } }
+    }
+
+    const stats = await Sale.aggregate([
+      { $match: dateQuery },
+      {
+        $group: {
+          _id: null,
+          totalSales: { $sum: "$totalAmount" },
+          totalProfit: { $sum: "$profit" },
+          totalQuantity: { $sum: "$saleQuantity" },
+          totalOrders: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalSales: { $round: ["$totalSales", 2] },
+          totalProfit: { $round: ["$totalProfit", 2] },
+          totalQuantity: 1,
+          totalOrders: 1,
+          averageSaleValue: {
+            $round: [{ $divide: ["$totalSales", "$totalOrders"] }, 2],
+          },
+          profitMargin: {
+            $round: [
+              {
+                $multiply: [{ $divide: ["$totalProfit", "$totalSales"] }, 100],
+              },
+              2,
+            ],
+          },
+        },
+      },
+    ])
+
+    const result =
+      stats.length > 0
+        ? stats[0]
+        : {
+            totalSales: 0,
+            totalProfit: 0,
+            totalQuantity: 0,
+            totalOrders: 0,
+            averageSaleValue: 0,
+            profitMargin: 0,
+          }
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    console.error("Error in getSalesStats:", error)
     res.status(500).json({
       success: false,
       message: "Server Error",

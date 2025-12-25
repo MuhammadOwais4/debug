@@ -585,53 +585,7 @@ const Reports = () => {
         </div>
       </div>
 
-      {/* Summary Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-md">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Sales Summary</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Total Sales:</span>
-              <span className="font-semibold text-green-600">{formatCurrency(metrics.sales.total)}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Total Orders:</span>
-              <span className="font-semibold">{metrics.sales.count}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Average Order:</span>
-              <span className="font-semibold">{formatCurrency(metrics.sales.average)}</span>
-            </div>
-            <div className="flex justify-between py-2">
-              <span className="text-gray-600">Net Profit:</span>
-              <span className="font-semibold text-green-600">{formatCurrency(metrics.netProfit)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-md">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Inventory Summary</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Total Stock Value:</span>
-              <span className="font-semibold text-blue-600">{formatCurrency(metrics.purchases.totalStockValue)}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Cost of Goods Sold:</span>
-              <span className="font-semibold text-red-600">{formatCurrency(metrics.purchases.totalCostOfSales)}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Total Products:</span>
-              <span className="font-semibold">{metrics.purchases.productCount}</span>
-            </div>
-            <div className="flex justify-between py-2">
-              <span className="text-gray-600">Gross Profit:</span>
-              <span className="font-semibold text-green-600">{formatCurrency(metrics.grossProfit)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+         </div>
   )
 }
 

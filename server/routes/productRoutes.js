@@ -17,6 +17,8 @@ const {
   getPurchaseTypes,
   getProductSummary,
   getProductsWithSummary,
+  processPurchaseReturn,
+  getPurchaseReturns,
 } = require("./controllers/productController")
 
 // Product CRUD routes
@@ -29,6 +31,9 @@ router.delete("/:id", deleteProduct) // Delete product
 
 // Stock management
 router.patch("/:id/stock", updateStock) // Update stock (add/subtract)
+
+router.post("/return", processPurchaseReturn) // Process purchase return
+router.get("/returns/:id", getPurchaseReturns) // Get purchase return details
 
 // Product filtering and search routes
 router.get("/category/:category", getProductsByCategory) // Get products by category

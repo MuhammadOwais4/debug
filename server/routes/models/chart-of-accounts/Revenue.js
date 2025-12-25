@@ -16,7 +16,7 @@ const revenueSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["INCOME ACCOUNT", "SALE ACCOUNT"],
+      enum: ["INCOME ACCOUNT", "SALE ACCOUNT",],
       default: "INCOME ACCOUNT",
     },
     parentAccount: {

@@ -93,6 +93,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const [loadingCustomer, setLoadingCustomer] = useState(false)
   const [saleTypes, setSaleTypes] = useState([])
   const [loadingSaleTypes, setLoadingSaleTypes] = useState(false)
+  const [showReturnForm, setShowReturnForm] = useState(false)
+  const [returnFormData, setReturnFormData] = useState({
+    saleId: "",
+    returnQuantity: "",
+    returnReason: "",
+    refundAmount: "",
+  })
+  const [returns, setReturns] = useState([])
+  const [showReturns, setShowReturns] = useState(false)
 
   // Fetch products from API
   const fetchProducts = async () => {
@@ -187,9 +196,33 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     }
   }
 
+  // Fetch sales returns
+  const fetchReturns = async () => {
+  try {
+    const filters = {}
+    if (startDate) filters.startDate = startDate
+    if (endDate) filters.endDate = endDate
+
+    const response = await ApiHandler.getReturns(filters) // Use the new method
+    
+    let returnsData = []
+    if (response && response.success && Array.isArray(response.data)) {
+      returnsData = response.data
+    } else if (Array.isArray(response)) {
+      returnsData = response
+    }
+    
+    setReturns(returnsData)
+  } catch (error) {
+    console.error("Error fetching returns:", error)
+    setReturns([])
+  }
+}
+
   useEffect(() => {
     loadCustomer()
     loadSaleTypes()
+    fetchReturns()
   }, [])
 
   // Fetch sales data from API
@@ -276,7 +309,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
-      await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries()])
+      await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries(), fetchReturns()])
       setIsLoading(false)
     }
     loadData()
@@ -498,8 +531,92 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   // Refresh data
   const handleRefresh = async () => {
     setIsLoading(true)
-    await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries()])
+    await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries(), fetchReturns()])
     setIsLoading(false)
+  }
+
+  // Handle return sale form
+  const handleReturnChange = (e) => {
+    const { name, value } = e.target
+    setReturnFormData({
+      ...returnFormData,
+      [name]: name === "returnQuantity" || name === "refundAmount" ? Number(value) || "" : value,
+    })
+
+    // Auto-calculate refund amount when sale is selected
+    if (name === "saleId") {
+      const sale = sales.find((s) => (s._id || s.id) === value)
+      if (sale) {
+        const maxRefund = sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate)
+        setReturnFormData((prev) => ({
+          ...prev,
+          saleId: value,
+          refundAmount: maxRefund,
+        }))
+      }
+    }
+  }
+
+  const handleReturnSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      const sale = sales.find((s) => (s._id || s.id) === returnFormData.saleId)
+      
+      if (!sale) {
+        throw new Error("Please select a valid sale")
+      }
+
+      if (returnFormData.returnQuantity > sale.quantity) {
+        throw new Error(`Cannot return more than ${sale.quantity} units`)
+      }
+
+      const returnData = {
+        sale: returnFormData.saleId,
+        returnQuantity: Number(returnFormData.returnQuantity),
+        returnReason: returnFormData.returnReason,
+        refundAmount: Number(returnFormData.refundAmount),
+        date: getCurrentDate(),
+      }
+
+      const result = await ApiHandler.post("/sales/return", returnData)
+      const newReturn = result.data
+
+      setReturns((prev) => [...(Array.isArray(prev) ? prev : []), newReturn])
+      
+      // Refresh sales and products to reflect updated quantities
+      await Promise.all([fetchProducts(), fetchSales()])
+
+      if (onNotification) {
+        onNotification({
+          id: Date.now(),
+          type: "return",
+          title: "Sale Return Processed",
+          message: `Return for Invoice  ${sale.invoice}: ${returnFormData.returnQuantity} units returned`,
+          date: new Date().toISOString(),
+        })
+      }
+
+      resetReturnForm()
+    } catch (error) {
+      console.error("Error processing return:", error)
+      setError(error.message || "Failed to process return")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const resetReturnForm = () => {
+    setReturnFormData({
+      saleId: "",
+      returnQuantity: "",
+      returnReason: "",
+      refundAmount: "",
+    })
+    setShowReturnForm(false)
+    setError(null)
   }
 
   // Export data
@@ -659,7 +776,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </section>
 
             <section class="summary">
-              <div<div class="card">
+              <div class="card">
                 <div class="label">Total Sales</div>
                 <div class="value">${fmt(totalSales || 0)}</div>
               </div>
@@ -908,11 +1025,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         <h2 className="text-xl font-semibold mb-4 md:mb-0 flex items-center gap-2">
           <DollarSign className="h-5 w-5" />
           Sales Invoices
-          <span className="text-sm text-gray-500 ml-2 flex items-center gap-1">
-            <Warehouse className="h-4 w-4" />
-            with Stock Data
-          </span>
-        </h2>
+          </h2>
         <div className="flex flex-wrap gap-2">
           <button
             className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center gap-2 disabled:opacity-50"
@@ -921,6 +1034,23 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           >
             <Filter className="h-4 w-4" />
             Filters
+          </button>
+          <button
+            className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 flex items-center gap-2 disabled:opacity-50"
+            onClick={() => setShowReturns(!showReturns)}
+            disabled={isLoading}
+          >
+            <Package className="h-4 w-4" />
+            {showReturns ? "Hide" : "Show"} Returns ({returns.length})
+          </button>
+          <button
+            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2 disabled:opacity-50"
+            onClick={() => setShowReturnForm(true)}
+            disabled={isLoading || sales.length === 0}
+            title={sales.length === 0 ? "No sales available for return" : "Process Return Sale"}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Return Sale
           </button>
           <button
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center gap-2 disabled:opacity-50"
@@ -1180,6 +1310,73 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <div className="h-64">{renderChart()}</div>
           </div>
 
+          {/* Returns Section */}
+          {showReturns && (
+            <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Package className="h-5 w-5 text-orange-600" />
+                Sales Returns
+              </h3>
+              
+              {returns.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No returns recorded yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-orange-200">
+                    <thead className="bg-orange-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-orange-800 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-orange-800 uppercase">Invoice</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-orange-800 uppercase">Product</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-orange-800 uppercase">Return Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-orange-800 uppercase">Refund Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-orange-800 uppercase">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-orange-100">
+                      {returns.map((returnItem) => {
+                        const sale = sales.find((s) => (s._id || s.id) === (returnItem.sale?._id || returnItem.sale))
+                        return (
+                          <tr key={returnItem._id || returnItem.id} className="hover:bg-orange-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {new Date(returnItem.date).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-mono font-semibold text-gray-900">
+                              {sale?.invoice || "N/A"}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {sale?.product?.name || sale?.productName || "Unknown"}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                              {returnItem.returnQuantity}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right font-semibold">
+                              {formatCurrency(returnItem.refundAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {returnItem.returnReason || "—"}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot className="bg-orange-100">
+                      <tr>
+                        <td colSpan="4" className="px-4 py-3 text-sm font-medium text-orange-900 text-right">
+                          Total Refunds:
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-orange-900 text-right">
+                          {formatCurrency(returns.reduce((sum, r) => sum + (r.refundAmount || 0), 0))}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Enhanced Sales Table with Invoice Number */}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1238,7 +1435,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                           {sale.saleType || "—"}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-medium">
-                          {sale.quantity}
+                          {sale.netQuantity}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                           {formatCurrency(sale.salePrice || sale.saleRate)}
@@ -1348,7 +1545,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                       }`}
                     >
                       {pageNum}
-</button>
+                    </button>
                   )
                 })}
                 <button
@@ -1362,6 +1559,176 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </div>
           )}
         </>
+      )}
+
+      {/* Return Sale Form Modal */}
+      {showReturnForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-red-600" />
+                Process Sale Return
+              </h2>
+              <button
+                onClick={resetReturnForm}
+                className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                disabled={isSubmitting}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500" />
+                <span className="text-red-700 text-sm">{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleReturnSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Sale Invoice
+                  </label>
+                  <select
+                    name="saleId"
+                    value={returnFormData.saleId}
+                    onChange={handleReturnChange}
+                    className="w-full p-2 border rounded-md"
+                    required
+                    disabled={isSubmitting}
+                  >
+                    <option value="">Choose a sale to return...</option>
+                    {sales.map((sale) => (
+                      <option key={sale._id || sale.id} value={sale._id || sale.id}>
+                        {sale.invoice} - {sale.product?.name || sale.productName} - Qty: {sale.quantity} - {formatCurrency(sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate))}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {returnFormData.saleId && (() => {
+                  const selectedSale = sales.find((s) => (s._id || s.id) === returnFormData.saleId)
+                  return selectedSale ? (
+                    <div className="p-3 bg-blue-50 rounded-md">
+                      <h4 className="font-medium text-blue-800 mb-2">Sale Details</h4>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-blue-700">Product:</span>
+                          <p className="font-medium">{selectedSale.product?.name || selectedSale.productName}</p>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Customer:</span>
+                          <p className="font-medium">{selectedSale.customerName || "N/A"}</p>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Quantity Sold:</span>
+                          <p className="font-medium">{selectedSale.quantity}</p>
+                        </div>
+                        <div>
+                          <span className="text-blue-700">Sale Amount:</span>
+                          <p className="font-medium">{formatCurrency(selectedSale.totalAmount || selectedSale.quantity * (selectedSale.salePrice || selectedSale.saleRate))}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Return Quantity
+                    {returnFormData.saleId && (() => {
+                      const sale = sales.find((s) => (s._id || s.id) === returnFormData.saleId)
+                      return sale ? ` (Max: ${sale.quantity})` : ""
+                    })()}
+                  </label>
+                  <input
+                    type="number"
+                    name="returnQuantity"
+                    value={returnFormData.returnQuantity}
+                    onChange={handleReturnChange}
+                    className="w-full p-2 border rounded-md"
+                    min="1"
+                    max={returnFormData.saleId ? sales.find((s) => (s._id || s.id) === returnFormData.saleId)?.quantity : undefined}
+                    required
+                    disabled={isSubmitting || !returnFormData.saleId}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Refund Amount (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    name="refundAmount"
+                    value={returnFormData.refundAmount}
+                    onChange={handleReturnChange}
+                    className="w-full p-2 border rounded-md"
+                    min="0"
+                    step="0.01"
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Return Reason
+                  </label>
+                  <textarea
+                    name="returnReason"
+                    value={returnFormData.returnReason}
+                    onChange={handleReturnChange}
+                    className="w-full p-2 border rounded-md"
+                    rows="3"
+                    placeholder="Reason for return (e.g., Defective product, Customer changed mind...)"
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                {/* Return Summary */}
+                {returnFormData.returnQuantity && returnFormData.refundAmount && (
+                  <div className="p-3 bg-red-50 rounded-md border border-red-200">
+                    <h4 className="font-medium text-red-800 mb-2">Return Summary</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-red-700">Return Quantity:</span>
+                        <span className="font-medium">{returnFormData.returnQuantity}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-red-700">Refund Amount:</span>
+                        <span className="font-bold text-lg">{formatCurrency(returnFormData.refundAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={resetReturnForm}
+                  className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                  disabled={isSubmitting || !returnFormData.saleId || !returnFormData.returnQuantity || !returnFormData.refundAmount}
+                >
+                  {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
+                  Process Return
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Sale Form Modal */}
@@ -1582,7 +1949,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         </div>
       )}
 
-      {/* Enhanced Sale Details Modal with Invoice */}
+      {/* Sale Details Modal */}
       {showSaleDetails && selectedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-lg">

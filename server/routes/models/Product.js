@@ -29,24 +29,24 @@ const productSchema = new mongoose.Schema(
       trim: true,
       enum: {
         values: ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Other"],
-        message: "{VALUE} is not a valid category"
+        message: "{VALUE} is not a valid category",
       },
     },
-    
+
     // Purchase Rate (Original purchase rate)
     purchaseRate: {
       type: Number,
       required: [true, "Purchase rate is required"],
       min: [0, "Purchase rate cannot be negative"],
     },
-    
+
     // Sale Rate
     saleRate: {
       type: Number,
       required: [true, "Sale rate is required"],
       min: [0, "Sale rate cannot be negative"],
     },
-    
+
     // ORIGINAL PURCHASE DATA (Unchangeable - Initial Purchase)
     purchaseQuantity: {
       type: Number,
@@ -60,7 +60,7 @@ const productSchema = new mongoose.Schema(
       min: [0, "Purchase amount cannot be negative"],
       default: 0,
     },
-    
+
     // CURRENT/BALANCE DATA (Changes with each transaction)
     quantity: {
       type: Number,
@@ -73,14 +73,14 @@ const productSchema = new mongoose.Schema(
       min: [0, "Balance amount cannot be negative"],
       default: 0,
     },
-    
+
     // TRACKING
     totalSoldQuantity: {
       type: Number,
       min: [0, "Total sold quantity cannot be negative"],
       default: 0,
     },
-    
+
     serialNumber: {
       type: String,
       trim: true,
@@ -98,13 +98,11 @@ const productSchema = new mongoose.Schema(
     expiryDate: {
       type: Date,
       validate: {
-        validator: function(date) {
-          return !date || date > new Date()
-        },
+        validator: (date) => !date || date > new Date(),
         message: "Expiry date must be in the future",
       },
     },
-    
+
     // Reference to Liability model for vendor
     vendorName: {
       type: mongoose.Schema.Types.ObjectId,
@@ -115,7 +113,20 @@ const productSchema = new mongoose.Schema(
       trim: true,
       maxlength: [20, "Vendor phone cannot exceed 20 characters"],
     },
-    
+
+    ReturnedAmount: {
+      type: Number,
+      default: 0,
+      min: [0, "Returned amount cannot be negative"],
+    },
+    ReturnedDate: {
+      type: Date,
+    },
+    ReturnQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, "Return quantity cannot be negative"],
+    },
     // Reference to Asset model for purchase type
     purchaseType: {
       type: mongoose.Schema.Types.ObjectId,
@@ -127,6 +138,11 @@ const productSchema = new mongoose.Schema(
       trim: true,
       maxlength: [500, "Notes cannot exceed 500 characters"],
     },
+    Reason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Reason for return cannot exceed 500 characters"],
+    },
   },
   {
     timestamps: true,
@@ -136,52 +152,52 @@ const productSchema = new mongoose.Schema(
 )
 
 // Virtual for profit per unit
-productSchema.virtual('profitPerUnit').get(function() {
+productSchema.virtual("profitPerUnit").get(function () {
   return this.saleRate - this.purchaseRate
 })
 
 // Virtual for total profit from sold items
-productSchema.virtual('totalProfit').get(function() {
+productSchema.virtual("totalProfit").get(function () {
   return (this.saleRate - this.purchaseRate) * this.totalSoldQuantity
 })
 
 // Virtual for total sale amount
-productSchema.virtual('totalSaleAmount').get(function() {
+productSchema.virtual("totalSaleAmount").get(function () {
   return this.totalSoldQuantity * this.saleRate
 })
 
 // Virtual for stock status
-productSchema.virtual('stockStatus').get(function() {
-  if (this.quantity === 0) return 'OUT_OF_STOCK'
-  if (this.quantity < 5) return 'LOW_STOCK'
-  return 'IN_STOCK'
+productSchema.virtual("stockStatus").get(function () {
+  if (this.quantity === 0) return "OUT_OF_STOCK"
+  if (this.quantity < 5) return "LOW_STOCK"
+  return "IN_STOCK"
 })
 
 // Virtual for expiry status
-productSchema.virtual('expiryStatus').get(function() {
-  if (!this.expiryDate) return 'NO_EXPIRY'
-  
+productSchema.virtual("expiryStatus").get(function () {
+  if (!this.expiryDate) return "NO_EXPIRY"
+
   const now = new Date()
   const expiryDate = new Date(this.expiryDate)
-  
-  if (expiryDate < now) return 'EXPIRED'
-  
+
+  if (expiryDate < now) return "EXPIRED"
+
   const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
-  
-  if (daysUntilExpiry <= 7) return 'EXPIRING_SOON'
-  if (daysUntilExpiry <= 30) return 'EXPIRING_THIS_MONTH'
-  
-  return 'VALID'
+
+  if (daysUntilExpiry <= 7) return "EXPIRING_SOON"
+  if (daysUntilExpiry <= 30) return "EXPIRING_THIS_MONTH"
+
+  return "VALID"
 })
 
 // Virtual for balance percentage
-productSchema.virtual('balancePercentage').get(function() {
+productSchema.virtual("balancePercentage").get(function () {
   if (this.purchaseQuantity === 0) return 0
   return ((this.quantity / this.purchaseQuantity) * 100).toFixed(2)
 })
 
 // Pre-save middleware to calculate balance amount
-productSchema.pre('save', function(next) {
+productSchema.pre("save", function (next) {
   // Calculate balance amount based on current quantity and purchase rate
   this.balanceAmount = this.quantity * this.purchaseRate
   next()

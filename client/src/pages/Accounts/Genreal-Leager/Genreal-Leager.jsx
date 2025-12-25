@@ -243,7 +243,7 @@ export default function GeneralLedger() {
                       <td className="border border-gray-300 p-3 text-sm font-mono">{entry.voucherNo}</td>
                       <td className="border border-gray-300 p-3 text-sm font-mono">
                         {entry.voucherType === "Purchase" && entry.grn ? (
-                          <span className="text-purple-600 font-medium">{entry.grn}</span>
+                          <span className="text-purple-600 font-medium">{entry.grn} ? {entry.invoice}</span>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}

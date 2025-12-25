@@ -255,6 +255,50 @@ const ApiHandler = {
       throw new Error(error.response?.data?.message || error.message || "Failed to update stock")
     }
   },
+  // RETURN PRODUCTS
+
+  returnProduct: async (returnData) => {
+    try {
+      console.log("Returning product with data:", returnData)
+      const response = await apiClient.post("/products/return", returnData)
+      return response.data
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.")
+      }
+      let errorMessage = "Failed to return product"
+      if (error.response?.data?.error) {
+        if (Array.isArray(error.response.data.error)) {
+          errorMessage = error.response.data.error.join(", ")
+        } else {
+          errorMessage = error.response.data.error
+        }
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      throw new Error(errorMessage)
+    }
+  },
+//  getPurchaseReturns
+getPurchaseReturns: async (id) => {
+  try {
+    const response = await apiClient.get(`/products/returns/${id}`)
+    return response.data
+  } catch (error) {
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.")
+    }
+
+    throw new Error(
+      error.response?.data?.message ||
+      error.message ||
+      "Failed to fetch purchase returns"
+    )
+  }
+},
+
 
   // Get products by category
   getProductsByCategory: async (category, filters = {}) => {
@@ -516,8 +560,49 @@ const ApiHandler = {
       throw new Error(errorMessage)
     }
   },
+returnSale: async (returnData) => {
+  try {
+    const response = await apiClient.post("/sales/return", returnData)
+    return response.data
+  } catch (error) {
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.")
+    }
+    const errorMessage = error.response?.data?.error
+      ? Array.isArray(error.response.data.error)
+        ? error.response.data.error.join(", ")
+        : error.response.data.error
+      : error.response?.data?.message || error.message || "Failed to process sale return"
+    throw new Error(errorMessage)
+  }
+},
 
-  // Delete sale
+// Add this function to fetch returns:
+getReturns: async (filters = {}) => {
+  try {
+    const params = new URLSearchParams()
+    Object.keys(filters).forEach((key) => {
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") {
+        params.append(key, filters[key])
+      }
+    })
+
+    const url = params.toString() ? `/sales/return?${params.toString()}` : "/sales/return"
+    const response = await apiClient.get(url)
+    
+    if (response.data && response.success !== false) {
+      return response.data
+    }
+    
+    return { success: true, data: [] }
+  } catch (error) {
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.")
+    }
+    console.error("Error fetching returns:", error)
+    return { success: true, data: [] }
+  }
+},// Delete sale
   deleteSale: async (id) => {
     try {
       const response = await apiClient.delete(`/sales/${id}`)
