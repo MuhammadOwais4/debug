@@ -25,7 +25,8 @@ import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
 import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
-
+import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
+import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers"
 
 // Sample initial data
 const initialProducts = [];
@@ -191,6 +192,15 @@ const reportsDropdownRef = useRef(null);
   {reportsDropdownOpen && (
     <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
       <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => {
+                      handleTabChange("General Ledger");
+                      setAccountsDropdownOpen(false);
+                    }}
+                  >
+                    General Ledger
+                  </button>
+      <button
         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
         onClick={() => {
           handleTabChange("Balance Sheet");
@@ -217,6 +227,7 @@ const reportsDropdownRef = useRef(null);
       >
        Business reports
       </button>
+      
     </div>
   )}
 </div>
@@ -351,11 +362,20 @@ const reportsDropdownRef = useRef(null);
                   <button
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => {
-                      handleTabChange("General Ledger");
+                      handleTabChange("purchase discoiunt Voucher");
                       setAccountsDropdownOpen(false);
                     }}
                   >
-                    General Ledger
+                    Purchase Discount Voucher 
+                  </button>
+                  <button 
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => {
+                      handleTabChange("sales discount Voucher");
+                      setAccountsDropdownOpen(false);
+                    }}
+                  >
+                    Sales Discount Voucher 
                   </button>
                   <button
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -428,9 +448,7 @@ const reportsDropdownRef = useRef(null);
           />
         )}
         {activeTab === "reports" && (
-          <Reports products={products} expenses={expenses} sales={sales} />
-          
-
+          <Reports products={products} expenses={expenses} sales={sales} />         
         )}
 
         {activeTab === "chart-of-accounts" && (
@@ -463,6 +481,8 @@ const reportsDropdownRef = useRef(null);
         {activeTab === "Voucher Query" && <VoucherQuery/>}
         {activeTab === "Balance Sheet" && <BalanceSheet />}
         {activeTab === "ProfitLoss" && <ProfitLoss />}
+        {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
+        {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
 
         
 

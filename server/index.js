@@ -24,6 +24,8 @@ app.get("/api/health", (req, res) => {
 
 // Routes
 app.use("/api/products", require("./routes/productRoutes"))
+app.use('/api/sale-discount', require('./routes/sale-discount-Routes'));
+app.use('/api/purchases-discount', require('./routes/purchases-discount-Routes'));
 app.use("/api/sales", require("./routes/saleRoutes"))
 app.use("/api/notifications", require("./routes/notificationRoutes"))
 app.use("/api/dashboard", require("./routes/dashboardRoutes"))

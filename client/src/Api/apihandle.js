@@ -449,6 +449,79 @@ getPurchaseReturns: async (id) => {
       throw new Error(error.response?.data?.message || error.message || "Failed to fetch purchase types")
     }
   },
+  // purchase discounts
+  getPurchaseDiscounts: async () => {
+    try {
+      const response = await apiClient.get('/purchases-discount');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching purchase discounts:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch purchase discounts");
+    }
+  },
+  getPurchaseDiscountById: async (id) => {
+    try {
+      const response = await apiClient.get(`/purchases-discount/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching purchase discount by ID:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch purchase discount");
+    }
+  },
+  createPurchaseDiscount: async (data) => {
+    try {
+      const response = await apiClient.post('/purchases-discount', data);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating purchase discount:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to create purchase discount");
+    }
+  },
+  updatePurchaseDiscount: async (id, data) => {
+    try {
+      const response = await apiClient.put(`/purchases-discount/${id}`, data);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating purchase discount:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to update purchase discount");
+    }
+  },
+  deletePurchaseDiscount: async (id) => {
+    try {
+      const response = await apiClient.delete(`/purchases-discount/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting purchase discount:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to delete purchase discount");
+    }
+  },
+  getTotalPurchaseDiscount: async () => {
+    try {
+      const response = await apiClient.get('/purchases-discount/total/amount');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching total purchase discount:', error);
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch total purchase discount");
+    }
+  },
 
   // ============ SALES ENDPOINTS ============
 
@@ -577,6 +650,72 @@ returnSale: async (returnData) => {
   }
 },
 
+// Sale Discounts APIs
+getSaleDiscounts: async () => {
+  try {
+    const response = await apiClient.get('/sale-discount');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching sale discounts:', error);
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.");
+    }
+    throw new Error(error.response?.data?.message || error.message || "Failed to fetch sale discounts");
+  }
+},
+
+getSaleDiscountById: async (id) => {
+  try {
+    const response = await apiClient.get(`/sale-discount/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching sale discount by ID:', error);
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.");
+    }
+    throw new Error(error.response?.data?.message || error.message || "Failed to fetch sale discount");
+  }
+},
+
+createSaleDiscount: async (data) => {
+  try {
+    const response = await apiClient.post('/sale-discount', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating sale discount:', error);
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.");
+    }
+    throw new Error(error.response?.data?.message || error.message || "Failed to create sale discount");
+  }
+},
+
+updateSaleDiscount: async (id, data) => {
+  try {
+    const response = await apiClient.put(`/sale-discount/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating sale discount:', error);
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.");
+    }
+    throw new Error(error.response?.data?.message || error.message || "Failed to update sale discount");
+  }
+},
+
+deleteSaleDiscount: async (id) => {
+  try {
+    const response = await apiClient.delete(`/sale-discount/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting sale discount:', error);
+    if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+      throw new Error("Cannot connect to server. Please check if the server is running.");
+    }
+    throw new Error(error.response?.data?.message || error.message || "Failed to delete sale discount");
+  }
+},
+  
 // Add this function to fetch returns:
 getReturns: async (filters = {}) => {
   try {
