@@ -27,7 +27,6 @@ export default function SalesDiscountManagement() {
   const [customer, setCustomer] = useState("")
   const [debitAmount, setDebitAmount] = useState("")
   const [creditAmount, setCreditAmount] = useState("")
-  const [entryType, setEntryType] = useState("debit")
   const [description, setDescription] = useState("")
   const [customers, setCustomers] = useState([])
   const [saleDiscounts, setSaleDiscounts] = useState([])
@@ -99,7 +98,6 @@ export default function SalesDiscountManagement() {
     setCustomer("")
     setDebitAmount("")
     setCreditAmount("")
-    setEntryType("debit")
     setDescription("")
     setIsEditMode(false)
     setEditingId(null)
@@ -114,14 +112,32 @@ export default function SalesDiscountManagement() {
     setCustomer(item.customer?._id || "")
     setDebitAmount(item.debitAmount?.toString() || "0")
     setCreditAmount(item.creditAmount?.toString() || "0")
-    setEntryType(item.entryType)
     setDescription(item.description || "")
     setShowList(false)
   }
 
+  const handleDebitAmountChange = (value) => {
+    setDebitAmount(value)
+    // Automatically set credit amount to the same value
+    setCreditAmount(value)
+  }
+
+  const handleDebitKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      // Ensure credit amount matches debit amount
+      setCreditAmount(debitAmount)
+      // Focus next field (customer select or description)
+      const customerSelect = document.getElementById('customer-trigger')
+      if (customerSelect) {
+        customerSelect.click()
+      }
+    }
+  }
+
   const handleSave = async () => {
-    if (!date || !type || !entryType) {
-      alert("Date, type, and entry type are required")
+    if (!date || !type) {
+      alert("Date and type are required")
       return
     }
 
@@ -133,13 +149,8 @@ export default function SalesDiscountManagement() {
       return
     }
 
-    if (entryType === "debit" && debitValue === 0) {
-      alert("Debit amount must be greater than 0 for debit entry")
-      return
-    }
-
-    if (entryType === "credit" && creditValue === 0) {
-      alert("Credit amount must be greater than 0 for credit entry")
+    if (debitValue === 0) {
+      alert("Debit amount must be greater than 0")
       return
     }
 
@@ -151,9 +162,8 @@ export default function SalesDiscountManagement() {
         date: new Date(date),
         type,
         customer: customer || undefined,
-        debitAmount: entryType === "debit" ? debitValue : 0,
-        creditAmount: entryType === "credit" ? creditValue : 0,
-        entryType,
+        debitAmount: debitValue,
+        creditAmount: creditValue,
         description: description.trim() || undefined,
       }
 
@@ -335,30 +345,7 @@ export default function SalesDiscountManagement() {
                         Cancel Edit
                       </Button>
                     )}
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="flex items-center gap-2 bg-green-500/30 px-4 py-2 rounded-lg">
-                      <TrendingUp className="w-5 h-5" />
-                      <div className="text-left">
-                        <div className="text-xs opacity-80">Total Debit</div>
-                        <div className="text-lg font-bold">{formatCurrency(totalDebit)}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-red-500/30 px-4 py-2 rounded-lg">
-                      <TrendingDown className="w-5 h-5" />
-                      <div className="text-left">
-                        <div className="text-xs opacity-80">Total Credit</div>
-                        <div className="text-lg font-bold">{formatCurrency(totalCredit)}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg">
-                      <DollarSign className="w-5 h-5" />
-                      <div className="text-left">
-                        <div className="text-xs opacity-80">Net Amount</div>
-                        <div className="text-lg font-bold">{formatCurrency(netAmount)}</div>
-                      </div>
-                    </div>
-                  </div>
+                  </div>                 
                 </div>
                 <div className="text-lg font-semibold mb-3 opacity-90">ABC and Co.</div>
                 <CardTitle className="text-3xl font-bold tracking-wide">
@@ -421,19 +408,13 @@ export default function SalesDiscountManagement() {
                                 <div className="flex items-center gap-3">
                                   <span className="font-semibold text-blue-900">{item.invoice || "N/A"}</span>
                                   <span className="text-sm text-gray-600">{formatDate(item.date)}</span>
-                                  {item.entryType === "debit" ? (
-                                    <span className="font-bold text-green-700 flex items-center gap-1">
-                                      <TrendingUp className="w-4 h-4" />
-                                      {formatCurrency(item.debitAmount)}
-                                    </span>
-                                  ) : (
-                                    <span className="font-bold text-red-700 flex items-center gap-1">
-                                      <TrendingDown className="w-4 h-4" />
-                                      {formatCurrency(item.creditAmount)}
-                                    </span>
-                                  )}
-                                  <span className={`text-xs px-2 py-1 rounded ${item.entryType === "debit" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                                    {item.entryType.toUpperCase()}
+                                  <span className="font-bold text-green-700 flex items-center gap-1">
+                                    <TrendingUp className="w-4 h-4" />
+                                    D: {formatCurrency(item.debitAmount)}
+                                  </span>
+                                  <span className="font-bold text-red-700 flex items-center gap-1">
+                                    <TrendingDown className="w-4 h-4" />
+                                    C: {formatCurrency(item.creditAmount)}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
@@ -515,25 +496,10 @@ export default function SalesDiscountManagement() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <div className="space-y-3">
-                    <Label htmlFor="entryType" className="text-lg font-semibold text-blue-700">
-                      Entry Type *
-                    </Label>
-                    <Select value={entryType} onValueChange={setEntryType}>
-                      <SelectTrigger className="border-2 border-gray-300 focus:border-blue-500">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="debit">Debit</SelectItem>
-                        <SelectItem value="credit">Credit</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div className="space-y-3">
                     <Label htmlFor="debitAmount" className="text-lg font-semibold text-blue-700">
-                      Debit Amount (PKR)
+                      Debit Amount (PKR) *
                     </Label>
                     <Input
                       id="debitAmount"
@@ -541,10 +507,10 @@ export default function SalesDiscountManagement() {
                       step="0.01"
                       min="0"
                       value={debitAmount}
-                      onChange={(e) => setDebitAmount(e.target.value)}
+                      onChange={(e) => handleDebitAmountChange(e.target.value)}
+                      onKeyPress={handleDebitKeyPress}
                       placeholder="0.00"
-                      disabled={entryType !== "debit"}
-                      className="border-2 border-gray-300 focus:border-blue-500 disabled:bg-gray-100"
+                      className="border-2 border-gray-300 focus:border-blue-500"
                     />
                     <div className="text-sm text-gray-600 font-medium">
                       Display: {formatCurrency(parseFloat(debitAmount) || 0)}
@@ -553,7 +519,7 @@ export default function SalesDiscountManagement() {
 
                   <div className="space-y-3">
                     <Label htmlFor="creditAmount" className="text-lg font-semibold text-blue-700">
-                      Credit Amount (PKR)
+                      Credit Amount (PKR) *
                     </Label>
                     <Input
                       id="creditAmount"
@@ -563,8 +529,8 @@ export default function SalesDiscountManagement() {
                       value={creditAmount}
                       onChange={(e) => setCreditAmount(e.target.value)}
                       placeholder="0.00"
-                      disabled={entryType !== "credit"}
-                      className="border-2 border-gray-300 focus:border-blue-500 disabled:bg-gray-100"
+                      className="border-2 border-gray-300 focus:border-blue-500 bg-gray-50"
+                      readOnly
                     />
                     <div className="text-sm text-gray-600 font-medium">
                       Display: {formatCurrency(parseFloat(creditAmount) || 0)}
@@ -587,7 +553,7 @@ export default function SalesDiscountManagement() {
                     </Button>
                   </Label>
                   <Select value={customer || undefined} onValueChange={setCustomer}>
-                    <SelectTrigger className="border-2 border-gray-300 focus:border-blue-500">
+                    <SelectTrigger id="customer-trigger" className="border-2 border-gray-300 focus:border-blue-500">
                       <SelectValue placeholder="Select customer" />
                     </SelectTrigger>
                     <SelectContent>
@@ -633,8 +599,8 @@ export default function SalesDiscountManagement() {
                       <div className="mt-1">{type}</div>
                     </div>
                     <div>
-                      <span className="font-semibold">Entry Type:</span>
-                      <div className="mt-1 capitalize">{entryType}</div>
+                      <span className="font-semibold">Customer:</span>
+                      <div className="mt-1">{customer ? customers.find(c => c._id === customer)?.name || "Selected" : "None"}</div>
                     </div>
                     <div>
                       <span className="font-semibold">Debit Amount:</span>
@@ -644,11 +610,7 @@ export default function SalesDiscountManagement() {
                       <span className="font-semibold">Credit Amount:</span>
                       <div className="mt-1 text-red-700 font-bold">{formatCurrency(parseFloat(creditAmount) || 0)}</div>
                     </div>
-                    <div>
-                      <span className="font-semibold">Customer:</span>
-                      <div className="mt-1">{customer ? customers.find(c => c._id === customer)?.name || "Selected" : "None"}</div>
-                    </div>
-                    <div>
+                    <div className="col-span-2">
                       <span className="font-semibold">Description / Narration:</span>
                       <div className="mt-1">{description || "None"}</div>
                     </div>
@@ -679,8 +641,8 @@ export default function SalesDiscountManagement() {
                   <div>{type}</div>
                 </div>
                 <div>
-                  <div className="font-semibold">Entry Type:</div>
-                  <div className="capitalize">{entryType}</div>
+                  <div className="font-semibold">Customer:</div>
+                  <div>{customer ? customers.find(c => c._id === customer)?.name || "N/A" : "N/A"}</div>
                 </div>
                 <div>
                   <div className="font-semibold">Debit Amount:</div>
@@ -689,10 +651,6 @@ export default function SalesDiscountManagement() {
                 <div>
                   <div className="font-semibold">Credit Amount:</div>
                   <div className="text-lg font-bold">{formatCurrency(parseFloat(creditAmount) || 0)}</div>
-                </div>
-                <div className="col-span-2">
-                  <div className="font-semibold">Customer:</div>
-                  <div>{customer ? customers.find(c => c._id === customer)?.name || "N/A" : "N/A"}</div>
                 </div>
                 {description && (
                   <div className="col-span-2">
@@ -720,10 +678,7 @@ export default function SalesDiscountManagement() {
                     <p className="font-semibold">{itemToDelete.invoice || "N/A"}</p>
                     <p className="text-sm">{formatDate(itemToDelete.date)}</p>
                     <p className="text-sm font-bold">
-                      {itemToDelete.entryType === "debit" 
-                        ? `Debit: ${formatCurrency(itemToDelete.debitAmount)}`
-                        : `Credit: ${formatCurrency(itemToDelete.creditAmount)}`
-                      }
+                      Debit: {formatCurrency(itemToDelete.debitAmount)} | Credit: {formatCurrency(itemToDelete.creditAmount)}
                     </p>
                   </div>
                 )}

@@ -34,11 +34,6 @@ const SaleDiscountSchema = new mongoose.Schema(
     default: 0,
     min: 0,
   },
-  entryType: {
-    type: String,
-    required: true,
-    enum: ["debit", "credit"],
-  },
   description: {
     type: String,
     trim: true,

@@ -3,21 +3,13 @@ const SaleDiscount = require("../models/Sale-discount");
 // Create sale Discount
 const createSalediscount = async (req, res) => {
   try {
-    const { invoice, date, type, customer, debitAmount, creditAmount, entryType, description } = req.body;
+    const { invoice, date, type, customer, debitAmount, creditAmount, description } = req.body;
 
     // Validate required fields
-    if (!date || !type || !entryType) {
+    if (!date || !type) {
       return res.status(400).json({
         success: false,
-        message: "Date, type, and entry type are required",
-      });
-    }
-
-    // Validate entry type
-    if (!["debit", "credit"].includes(entryType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Entry type must be either 'debit' or 'credit'",
+        message: "Date and type are required",
       });
     }
 
@@ -36,9 +28,9 @@ const createSalediscount = async (req, res) => {
       });
     }
 
-    // Ensure only one amount is provided based on entry type
-    const finalDebitAmount = entryType === "debit" ? (debitAmount || 0) : 0;
-    const finalCreditAmount = entryType === "credit" ? (creditAmount || 0) : 0;
+    // Both amounts should be the same
+    const finalDebitAmount = debitAmount || 0;
+    const finalCreditAmount = creditAmount || 0;
 
     // Create sale Discount
     const saleDiscount = await SaleDiscount.create({
@@ -48,7 +40,6 @@ const createSalediscount = async (req, res) => {
       customer,
       debitAmount: finalDebitAmount,
       creditAmount: finalCreditAmount,
-      entryType,
       description,
     });
 
@@ -135,7 +126,7 @@ const getSalediscountById = async (req, res) => {
 // Update sale Discount
 const updateSalediscount = async (req, res) => {
   try {
-    const { invoice, date, type, customer, debitAmount, creditAmount, entryType, description } = req.body;
+    const { invoice, date, type, customer, debitAmount, creditAmount, description } = req.body;
 
     const saleDiscount = await SaleDiscount.findById(req.params.id);
 
@@ -143,14 +134,6 @@ const updateSalediscount = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Sale discount not found",
-      });
-    }
-
-    // Validate entry type if provided
-    if (entryType && !["debit", "credit"].includes(entryType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Entry type must be either 'debit' or 'credit'",
       });
     }
 
@@ -175,28 +158,8 @@ const updateSalediscount = async (req, res) => {
     if (type !== undefined) saleDiscount.type = type;
     if (customer !== undefined) saleDiscount.customer = customer;
     if (description !== undefined) saleDiscount.description = description;
-    
-    // Update entry type and amounts
-    if (entryType !== undefined) {
-      saleDiscount.entryType = entryType;
-      
-      // Reset amounts based on entry type
-      if (entryType === "debit") {
-        saleDiscount.debitAmount = debitAmount !== undefined ? debitAmount : saleDiscount.debitAmount;
-        saleDiscount.creditAmount = 0;
-      } else {
-        saleDiscount.creditAmount = creditAmount !== undefined ? creditAmount : saleDiscount.creditAmount;
-        saleDiscount.debitAmount = 0;
-      }
-    } else {
-      // If entry type not changed, update based on current entry type
-      if (saleDiscount.entryType === "debit" && debitAmount !== undefined) {
-        saleDiscount.debitAmount = debitAmount;
-      }
-      if (saleDiscount.entryType === "credit" && creditAmount !== undefined) {
-        saleDiscount.creditAmount = creditAmount;
-      }
-    }
+    if (debitAmount !== undefined) saleDiscount.debitAmount = debitAmount;
+    if (creditAmount !== undefined) saleDiscount.creditAmount = creditAmount;
 
     await saleDiscount.save();
     
@@ -252,7 +215,7 @@ const deleteSalediscount = async (req, res) => {
   }
 };
 
-// Get total discount amount (additional endpoint)
+// Get total discount amount
 const getTotalDiscount = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;

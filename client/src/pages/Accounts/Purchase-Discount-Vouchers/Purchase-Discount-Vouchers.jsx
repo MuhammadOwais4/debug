@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Trash2, Edit3, X, Check, RefreshCw, DollarSign, AlertTriangle, Info } from "lucide-react"
+import { Trash2, Edit3, X, Check, RefreshCw, DollarSign, TrendingUp, TrendingDown } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
 
 export default function PurchasesDiscountManagement() {
@@ -18,7 +18,6 @@ export default function PurchasesDiscountManagement() {
   const [vendor, setVendor] = useState("")
   const [debitAmount, setDebitAmount] = useState("")
   const [creditAmount, setCreditAmount] = useState("")
-  const [entryType, setEntryType] = useState("credit")
   const [description, setDescription] = useState("")
   const [vendors, setVendors] = useState([])
   const [purchasesDiscounts, setPurchasesDiscounts] = useState([])
@@ -87,7 +86,6 @@ export default function PurchasesDiscountManagement() {
     setVendor("")
     setDebitAmount("")
     setCreditAmount("")
-    setEntryType("credit")
     setDescription("")
     setIsEditMode(false)
     setEditingId(null)
@@ -102,14 +100,32 @@ export default function PurchasesDiscountManagement() {
     setVendor(item.vendor?._id || "")
     setDebitAmount(item.debitAmount?.toString() || "0")
     setCreditAmount(item.creditAmount?.toString() || "0")
-    setEntryType(item.entryType || "credit")
     setDescription(item.description || "")
     setShowList(false)
   }
 
+  const handleDebitAmountChange = (value) => {
+    setDebitAmount(value)
+    // Automatically set credit amount to the same value
+    setCreditAmount(value)
+  }
+
+  const handleDebitKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      // Ensure credit amount matches debit amount
+      setCreditAmount(debitAmount)
+      // Focus next field (vendor select)
+      const vendorSelect = document.getElementById('vendor-trigger')
+      if (vendorSelect) {
+        vendorSelect.click()
+      }
+    }
+  }
+
   const handleSave = async () => {
-    if (!date || !type || !entryType) {
-      alert("Date, type, and entry type are required")
+    if (!date || !type) {
+      alert("Date and type are required")
       return
     }
 
@@ -118,6 +134,11 @@ export default function PurchasesDiscountManagement() {
 
     if (debitValue < 0 || creditValue < 0) {
       alert("Amounts cannot be negative")
+      return
+    }
+
+    if (debitValue === 0) {
+      alert("Debit amount must be greater than 0")
       return
     }
 
@@ -136,7 +157,6 @@ export default function PurchasesDiscountManagement() {
         vendor,
         debitAmount: debitValue,
         creditAmount: creditValue,
-        entryType,
         description: description.trim() || undefined,
       }
 
@@ -274,7 +294,7 @@ export default function PurchasesDiscountManagement() {
                       className="bg-white/20 border-white/30 text-white hover:bg-white/30"
                     >
                       <Edit3 className="w-4 h-4 mr-2" />
-                      {showList ? "Hide" : "View"} Ledger
+                      {showList ? "Hide" : "View"} Discounts
                     </Button>
                     {isEditMode && (
                       <Button
@@ -286,22 +306,6 @@ export default function PurchasesDiscountManagement() {
                         Cancel Edit
                       </Button>
                     )}
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg">
-                      <DollarSign className="w-5 h-5" />
-                      <div className="text-left">
-                        <div className="text-xs opacity-80">Total Debit</div>
-                        <div className="text-lg font-bold">{formatCurrency(totalDebit)}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg">
-                      <DollarSign className="w-5 h-5" />
-                      <div className="text-left">
-                        <div className="text-xs opacity-80">Total Credit</div>
-                        <div className="text-lg font-bold">{formatCurrency(totalCredit)}</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
                 <div className="text-lg font-semibold mb-3 opacity-90">ABC and Co.</div>
@@ -324,14 +328,14 @@ export default function PurchasesDiscountManagement() {
                       variant="outline"
                       className="border-purple-600 text-purple-600 hover:bg-purple-50"
                     >
-                      Print Voucher
+                      Print
                     </Button>
                     <Button
                       onClick={handleSave}
                       disabled={saving}
                       className="bg-purple-600 text-white hover:bg-purple-700"
                     >
-                      {saving ? "Saving..." : isEditMode ? "Update Entry" : "Save Entry"}
+                      {saving ? "Saving..." : isEditMode ? "Update" : "Save"}
                     </Button>
                   </div>
                 </div>
@@ -339,7 +343,7 @@ export default function PurchasesDiscountManagement() {
                 {showList && (
                   <div className="mb-8 border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-bold text-purple-800">Purchases Discount Ledger</h3>
+                      <h3 className="text-lg font-bold text-purple-800">Purchases Discounts</h3>
                       <Button
                         variant="outline"
                         size="sm"
@@ -353,7 +357,7 @@ export default function PurchasesDiscountManagement() {
                     </div>
                     <div className="max-h-96 overflow-y-auto">
                       {purchasesDiscounts.length === 0 ? (
-                        <p className="text-center text-gray-500 py-4">No entries found</p>
+                        <p className="text-center text-gray-500 py-4">No discounts found</p>
                       ) : (
                         <div className="space-y-2">
                           {purchasesDiscounts.map((item) => (
@@ -365,15 +369,19 @@ export default function PurchasesDiscountManagement() {
                                 <div className="flex items-center gap-3">
                                   <span className="font-semibold text-purple-900">{item.invoice || "N/A"}</span>
                                   <span className="text-sm text-gray-600">{formatDate(item.date)}</span>
-                                  <span className="font-bold text-green-700">DR: {formatCurrency(item.debitAmount || 0)}</span>
-                                  <span className="font-bold text-red-700">CR: {formatCurrency(item.creditAmount || 0)}</span>
+                                  <span className="font-bold text-green-700 flex items-center gap-1">
+                                    <TrendingUp className="w-4 h-4" />
+                                    D: {formatCurrency(item.debitAmount)}
+                                  </span>
+                                  <span className="font-bold text-red-700 flex items-center gap-1">
+                                    <TrendingDown className="w-4 h-4" />
+                                    C: {formatCurrency(item.creditAmount)}
+                                  </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  {item.vendor?.name && `Vendor: ${item.vendor.name}`}
+                                  {item.type} {item.vendor?.name && `- ${item.vendor.name}`}
+                                  {item.description && ` | ${item.description}`}
                                 </p>
-                                {item.description && (
-                                  <p className="text-xs text-gray-500 mt-1 italic">{item.description}</p>
-                                )}
                               </div>
                               <div className="flex gap-2">
                                 <Button
@@ -403,10 +411,10 @@ export default function PurchasesDiscountManagement() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                   <div className="space-y-3">
                     <Label htmlFor="invoice" className="text-lg font-semibold text-purple-700">
-                      Invoice / Voucher No.
+                      Invoice No.
                     </Label>
                     <Input
                       id="invoice"
@@ -433,12 +441,10 @@ export default function PurchasesDiscountManagement() {
                       Display: {formatDate(date)}
                     </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div className="space-y-3">
                     <Label htmlFor="type" className="text-lg font-semibold text-purple-700">
-                      Transaction Type *
+                      Type *
                     </Label>
                     <Select value={type} onValueChange={setType}>
                       <SelectTrigger className="border-2 border-gray-300 focus:border-purple-500">
@@ -449,28 +455,12 @@ export default function PurchasesDiscountManagement() {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  <div className="space-y-3">
-                    <Label htmlFor="entryType" className="text-lg font-semibold text-purple-700">
-                      Entry Type *
-                    </Label>
-                    <Select value={entryType} onValueChange={setEntryType}>
-                      <SelectTrigger className="border-2 border-gray-300 focus:border-purple-500">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="debit">Debit Entry (DR)</SelectItem>
-                        <SelectItem value="credit">Credit Entry (CR)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div className="space-y-3">
-                    <Label htmlFor="debitAmount" className="text-lg font-semibold text-purple-700 flex items-center gap-2">
-                      Debit Amount (PKR)
-                      <span className="text-xs font-normal text-gray-500">(Vendor A/C - Reduces Liability)</span>
+                    <Label htmlFor="debitAmount" className="text-lg font-semibold text-purple-700">
+                      Debit Amount (PKR) *
                     </Label>
                     <Input
                       id="debitAmount"
@@ -478,10 +468,10 @@ export default function PurchasesDiscountManagement() {
                       step="0.01"
                       min="0"
                       value={debitAmount}
-                      onChange={(e) => setDebitAmount(e.target.value)}
+                      onChange={(e) => handleDebitAmountChange(e.target.value)}
+                      onKeyPress={handleDebitKeyPress}
                       placeholder="0.00"
                       className="border-2 border-gray-300 focus:border-purple-500"
-                      disabled={entryType === "credit"}
                     />
                     <div className="text-sm text-gray-600 font-medium">
                       Display: {formatCurrency(parseFloat(debitAmount) || 0)}
@@ -489,9 +479,8 @@ export default function PurchasesDiscountManagement() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label htmlFor="creditAmount" className="text-lg font-semibold text-purple-700 flex items-center gap-2">
-                      Credit Amount (PKR)
-                      <span className="text-xs font-normal text-gray-500">(Purchases Discount - Income)</span>
+                    <Label htmlFor="creditAmount" className="text-lg font-semibold text-purple-700">
+                      Credit Amount (PKR) *
                     </Label>
                     <Input
                       id="creditAmount"
@@ -501,8 +490,8 @@ export default function PurchasesDiscountManagement() {
                       value={creditAmount}
                       onChange={(e) => setCreditAmount(e.target.value)}
                       placeholder="0.00"
-                      className="border-2 border-gray-300 focus:border-purple-500"
-                      disabled={entryType === "debit"}
+                      className="border-2 border-gray-300 focus:border-purple-500 bg-gray-50"
+                      readOnly
                     />
                     <div className="text-sm text-gray-600 font-medium">
                       Display: {formatCurrency(parseFloat(creditAmount) || 0)}
@@ -525,10 +514,11 @@ export default function PurchasesDiscountManagement() {
                     </Button>
                   </Label>
                   <Select value={vendor || undefined} onValueChange={setVendor}>
-                    <SelectTrigger className="border-2 border-gray-300 focus:border-purple-500">
+                    <SelectTrigger id="vendor-trigger" className="border-2 border-gray-300 focus:border-purple-500">
                       <SelectValue placeholder="Select vendor" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
                       {vendors.map((v) => (
                         <SelectItem key={v._id} value={v._id}>
                           {v.code} - {v.name}
@@ -543,102 +533,47 @@ export default function PurchasesDiscountManagement() {
 
                 <div className="space-y-3 mb-6">
                   <Label htmlFor="description" className="text-lg font-semibold text-purple-700">
-                    Narration / Description
+                    Description / Narration
                   </Label>
                   <Textarea
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Enter narration details..."
-                    className="border-2 border-gray-300 focus:border-purple-500 min-h-[100px]"
-                    rows={4}
+                    placeholder="Enter description or narration"
+                    className="border-2 border-gray-300 focus:border-purple-500 min-h-20"
                   />
-                  <div className="text-xs text-gray-500">
-                    This narration will appear in the journal entry
-                  </div>
                 </div>
 
-                <div className="mt-8 p-6 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg">
-                  <h3 className="text-xl font-bold text-purple-800 mb-4 flex items-center gap-2">
-                    <span>📋</span> Journal Entry Preview (Correct Accounting)
-                  </h3>
-                  <div className="bg-white rounded-lg overflow-hidden border border-purple-200 shadow-sm">
-                    <table className="w-full">
-                      <thead className="bg-gradient-to-r from-purple-100 to-indigo-100">
-                        <tr>
-                          <th className="text-left p-3 font-semibold text-purple-900 border-r border-purple-200">Account & Description</th>
-                          <th className="text-right p-3 font-semibold text-purple-900 border-r border-purple-200 w-32">DR. Amount</th>
-                          <th className="text-right p-3 font-semibold text-purple-900 w-32">CR. Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-t border-purple-100 hover:bg-purple-50/50">
-                          <td className="p-3 border-r border-purple-100">
-                            <div className="font-semibold text-gray-800">
-                              {vendor ? vendors.find(v => v._id === vendor)?.name || "Vendor A/C" : "Vendor A/C"}
-                            </div>
-                            <div className="text-sm text-gray-600 mt-1">(DR - Accounts Payable)</div>
-                            {description && (
-                              <div className="text-sm text-gray-500 mt-2 italic bg-gray-50 p-2 rounded">
-                                {description}
-                              </div>
-                            )}
-                          </td>
-                          <td className="text-right p-3 font-bold text-green-700 border-r border-purple-100">
-                            {formatCurrency(parseFloat(debitAmount) || 0)}
-                          </td>
-                          <td className="text-right p-3 text-gray-400">-</td>
-                        </tr>
-                        <tr className="border-t border-purple-100 bg-purple-50/30 hover:bg-purple-50/50">
-                          <td className="p-3 border-r border-purple-100">
-                            <div className="font-semibold text-gray-800">Purchases Discount A/C</div>
-                            <div className="text-sm text-gray-600 mt-1">(CR - Income)</div>
-                            {description && (
-                              <div className="text-sm text-gray-500 mt-2 italic bg-gray-50 p-2 rounded">
-                                {description}
-                              </div>
-                            )}
-                          </td>
-                          <td className="text-right p-3 text-gray-400 border-r border-purple-100">-</td>
-                          <td className="text-right p-3 font-bold text-red-700">
-                            {formatCurrency(parseFloat(creditAmount) || 0)}
-                          </td>
-                        </tr>
-                        <tr className="border-t-2 border-purple-300 bg-gradient-to-r from-purple-100 to-indigo-100 font-bold">
-                          <td className="p-3 text-purple-900 border-r border-purple-200">TOTAL</td>
-                          <td className="text-right p-3 text-green-700 border-r border-purple-200">
-                            {formatCurrency(parseFloat(debitAmount) || 0)}
-                          </td>
-                          <td className="text-right p-3 text-red-700">
-                            {formatCurrency(parseFloat(creditAmount) || 0)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="bg-white p-3 rounded border border-purple-200 shadow-sm">
-                      <span className="font-semibold text-purple-900">Voucher:</span>
-                      <div className="mt-1 text-gray-700">{invoice || "Auto-generate"}</div>
+                <div className="mt-8 p-4 bg-purple-50 border-2 border-purple-200 rounded-lg">
+                  <h3 className="text-lg font-bold text-purple-800 mb-3">Summary</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="font-semibold">Invoice:</span>
+                      <div className="mt-1">{invoice || "Auto-generate"}</div>
                     </div>
-                    <div className="bg-white p-3 rounded border border-purple-200 shadow-sm">
-                      <span className="font-semibold text-purple-900">Date:</span>
-                      <div className="mt-1 text-gray-700">{formatDate(date)}</div>
+                    <div>
+                      <span className="font-semibold">Date:</span>
+                      <div className="mt-1">{formatDate(date)}</div>
                     </div>
-                    <div className="bg-white p-3 rounded border border-purple-200 shadow-sm">
-                      <span className="font-semibold text-purple-900">Entry Type:</span>
-                      <div className="mt-1 text-gray-700">{entryType === 'debit' ? 'Debit (DR)' : 'Credit (CR)'}</div>
+                    <div>
+                      <span className="font-semibold">Type:</span>
+                      <div className="mt-1">{type}</div>
                     </div>
-                    <div className="bg-white p-3 rounded border border-purple-200 shadow-sm">
-                      <span className="font-semibold text-purple-900">Balance:</span>
-                      <div className="mt-1 text-gray-700">
-                        {Math.abs(parseFloat(debitAmount || 0) - parseFloat(creditAmount || 0)) === 0 ? (
-                          <span className="text-green-700 font-bold">✓ Balanced</span>
-                        ) : (
-                          <span className="text-red-700 font-bold">⚠ Not Balanced</span>
-                        )}
-                      </div>
+                    <div>
+                      <span className="font-semibold">Vendor:</span>
+                      <div className="mt-1">{vendor ? vendors.find(v => v._id === vendor)?.name || "Selected" : "None"}</div>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Debit Amount:</span>
+                      <div className="mt-1 text-green-700 font-bold">{formatCurrency(parseFloat(debitAmount) || 0)}</div>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Credit Amount:</span>
+                      <div className="mt-1 text-red-700 font-bold">{formatCurrency(parseFloat(creditAmount) || 0)}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-semibold">Description / Narration:</span>
+                      <div className="mt-1">{description || "None"}</div>
                     </div>
                   </div>
                 </div>
@@ -648,81 +583,68 @@ export default function PurchasesDiscountManagement() {
 
           <div className="print-area px-10 py-12">
             <div className="max-w-4xl mx-auto">
-              <header className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-                <h1 className="text-4xl font-bold">Purchases Discount Voucher</h1>
-                <p className="text-lg mt-2">ABC and Co.</p>
+              <header className="text-center mb-6 border-b-2 border-gray-300 pb-4">
+                <h1 className="text-2xl font-bold text-black">ABC and Co.</h1>
+                <p className="text-base text-gray-700 mt-1">Purchases Discount Document</p>
               </header>
-              <section className="mb-6">
-                <div className="flex justify-between mb-2">
-                  <div>
-                    <span className="font-semibold">Voucher No.:</span> {invoice || "Auto-generated"}
-                  </div>
-                  <div>
-                    <span className="font-semibold">Date:</span> {formatDate(date)}
-                  </div>
-                </div>
-                <div className="mb-4">
-                  <span className="font-semibold">Vendor:</span> {vendor ? vendors.find(v => v._id === vendor)?.name || "N/A" : "N/A"}
+
+              <section className="grid grid-cols-2 gap-4 text-sm mb-6">
+                <div>
+                  <div className="font-semibold">Invoice No:</div>
+                  <div>{invoice || "N/A"}</div>
                 </div>
                 <div>
-                  <span className="font-semibold">Description:</span> {description || "N/A"}
+                  <div className="font-semibold">Date:</div>
+                  <div>{formatDate(date)}</div>
                 </div>
+                <div>
+                  <div className="font-semibold">Type:</div>
+                  <div>{type}</div>
+                </div>
+                <div>
+                  <div className="font-semibold">Vendor:</div>
+                  <div>{vendor ? vendors.find(v => v._id === vendor)?.name || "N/A" : "N/A"}</div>
+                </div>
+                <div>
+                  <div className="font-semibold">Debit Amount:</div>
+                  <div className="text-lg font-bold">{formatCurrency(parseFloat(debitAmount) || 0)}</div>
+                </div>
+                <div>
+                  <div className="font-semibold">Credit Amount:</div>
+                  <div className="text-lg font-bold">{formatCurrency(parseFloat(creditAmount) || 0)}</div>
+                </div>
+                {description && (
+                  <div className="col-span-2">
+                    <div className="font-semibold">Description / Narration:</div>
+                    <div>{description}</div>
+                  </div>
+                )}
               </section>
-              <section>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="border border-gray-800 p-3 text-left">Account</th>
-                      <th className="border border-gray-800 p-3 text-right">Debit (PKR)</th>
-                      <th className="border border-gray-800 p-3 text-right">Credit (PKR)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="border border-gray-800 p-3">
-                        {vendor ? vendors.find(v => v._id === vendor)?.name || "Vendor A/C" : "Vendor A/C"} (DR)
-                      </td>
-                      <td className="border border-gray-800 p-3 text-right">
-                        {formatCurrency(parseFloat(debitAmount) || 0)}
-                      </td>
-                      <td className="border border-gray-800 p-3 text-right">-</td>
-                    </tr>
-                    <tr>
-                      <td className="border border-gray-800 p-3">
-                        Purchases Discount A/C (CR)
-                      </td>
-                      <td className="border border-gray-800 p-3 text-right">-</td>
-                      <td className="border border-gray-800 p-3 text-right">
-                        {formatCurrency(parseFloat(creditAmount) || 0)}
-                      </td>
-                    </tr>
-                    <tr className="font-bold bg-gray-100">
-                      <td className="border border-gray-800 p-3">TOTAL</td>
-                      <td className="border border-gray-800 p-3 text-right">
-                        {formatCurrency(parseFloat(debitAmount) || 0)}
-                      </td>
-                      <td className="border border-gray-800 p-3 text-right">
-                        {formatCurrency(parseFloat(creditAmount) || 0)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </section>
-              <footer className="print-footer text-center text-sm text-gray-600 mt-8">
-                Generated by ABC and Co. Accounting System
-              </footer>
+
+              <div className="print-footer text-xs text-gray-700 mt-12">
+                Created by Soft-Technix
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-red-700">Confirm Deletion</DialogTitle>    
+            <DialogTitle className="text-xl font-bold text-red-700">Delete Purchases Discount</DialogTitle>    
             <DialogDescription>
-              Are you sure you want to delete this purchases discount entry
+              Are you sure you want to delete this purchases discount?
+              {itemToDelete && (
+                <div className="mt-2 p-2 bg-gray-100 rounded">
+                  <p className="font-semibold">{itemToDelete.invoice || "N/A"}</p>
+                  <p className="text-sm">{formatDate(itemToDelete.date)}</p>
+                  <p className="text-sm font-bold">
+                    Debit: {formatCurrency(itemToDelete.debitAmount)} | Credit: {formatCurrency(itemToDelete.creditAmount)}
+                  </p>
+                </div>
+              )}
+              This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 flex justify-end gap-4"> 

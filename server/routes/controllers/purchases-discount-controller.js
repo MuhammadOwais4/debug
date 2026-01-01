@@ -3,21 +3,13 @@ const PurchasesDiscount = require("../models/Purchases-discount");
 // Create purchases Discount
 const createPurchasesDiscount = async (req, res) => {
   try {
-    const { invoice, date, type, vendor, debitAmount, creditAmount, entryType, description } = req.body;
+    const { invoice, date, type, vendor, debitAmount, creditAmount, description } = req.body;
 
     // Validate required fields
-    if (!date || !type || !entryType) {
+    if (!date || !type) {
       return res.status(400).json({
         success: false,
-        message: "Date, type, and entry type are required",
-      });
-    }
-
-    // Validate entryType
-    if (!["debit", "credit"].includes(entryType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Entry type must be either 'debit' or 'credit'",
+        message: "Date and type are required",
       });
     }
 
@@ -36,15 +28,18 @@ const createPurchasesDiscount = async (req, res) => {
       });
     }
 
+    // Both amounts should be the same
+    const finalDebitAmount = debitAmount || 0;
+    const finalCreditAmount = creditAmount || 0;
+
     // Create purchases Discount
     const purchasesDiscount = await PurchasesDiscount.create({
       invoice,
       date,
       type,
       vendor,
-      debitAmount: debitAmount || 0,
-      creditAmount: creditAmount || 0,
-      entryType,
+      debitAmount: finalDebitAmount,
+      creditAmount: finalCreditAmount,
       description,
     });
 
@@ -130,7 +125,7 @@ const getPurchasesDiscountById = async (req, res) => {
 // Update purchases Discount
 const updatePurchasesDiscount = async (req, res) => {
   try {
-    const { invoice, date, type, vendor, debitAmount, creditAmount, entryType, description } = req.body;
+    const { invoice, date, type, vendor, debitAmount, creditAmount, description } = req.body;
 
     const purchasesDiscount = await PurchasesDiscount.findById(req.params.id);
 
@@ -138,14 +133,6 @@ const updatePurchasesDiscount = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Purchases discount not found",
-      });
-    }
-
-    // Validate entryType if provided
-    if (entryType !== undefined && !["debit", "credit"].includes(entryType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Entry type must be either 'debit' or 'credit'",
       });
     }
 
@@ -171,7 +158,6 @@ const updatePurchasesDiscount = async (req, res) => {
     if (vendor !== undefined) purchasesDiscount.vendor = vendor;
     if (debitAmount !== undefined) purchasesDiscount.debitAmount = debitAmount;
     if (creditAmount !== undefined) purchasesDiscount.creditAmount = creditAmount;
-    if (entryType !== undefined) purchasesDiscount.entryType = entryType;
     if (description !== undefined) purchasesDiscount.description = description;
 
     await purchasesDiscount.save();
@@ -228,7 +214,7 @@ const deletePurchasesDiscount = async (req, res) => {
   }
 };
 
-// Get total discount amount (additional endpoint)
+// Get total discount amount
 const getTotalPurchasesDiscount = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
