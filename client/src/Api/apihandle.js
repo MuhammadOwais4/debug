@@ -1,8 +1,8 @@
 import axios from "axios"
 
-// const API_BASE_URL = "https://debug-nxby.vercel.app/api"
+const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 // const API_BASE_URL = "https://stock-management-system-lime.vercel.app/api"
-const API_BASE_URL = "http://localhost:5000/api"
+// const API_BASE_URL = "http://localhost:5000/api"
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -754,112 +754,7 @@ getReturns: async (filters = {}) => {
     }
   },
 
-  // ============ EXPENSE ENDPOINTS ============
-
-  // Expenses endpoints (Chart of Accounts)
-  getExpenses: async () => {
-    try {
-      const response = await apiClient.get("/expenses")
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to fetch expenses")
-    }
-  },
-
-  createExpense: async (expenseData) => {
-    try {
-      const response = await apiClient.post("/expenses", expenseData)
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to create expense")
-    }
-  },
-
-  updateExpense: async (id, expenseData) => {
-    try {
-      const response = await apiClient.put(`/expenses/${id}`, expenseData)
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to update expense")
-    }
-  },
-
-  deleteExpense: async (id) => {
-    try {
-      const response = await apiClient.delete(`/expenses/${id}`)
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to delete expense")
-    }
-  },
-
-  // Get expense categories
-  getExpenseCategories: async () => {
-    try {
-      const response = await apiClient.get("/expenses/categories")
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to fetch expense categories")
-    }
-  },
-
-  // Get expenses grouped by category
-  getExpensesByCategory: async (filters = {}) => {
-    try {
-      const params = new URLSearchParams()
-      Object.keys(filters).forEach((key) => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") {
-          params.append(key, filters[key])
-        }
-      })
-
-      const url = params.toString() ? `/expenses/by-category?${params.toString()}` : "/expenses/by-category"
-      const response = await apiClient.get(url)
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to fetch expenses by category")
-    }
-  },
-
-  // Get expenses grouped by date
-  getExpensesByDate: async (filters = {}) => {
-    try {
-      const params = new URLSearchParams()
-      Object.keys(filters).forEach((key) => {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") {
-          params.append(key, filters[key])
-        }
-      })
-
-      const url = params.toString() ? `/expenses/by-date?${params.toString()}` : "/expenses/by-date"
-      const response = await apiClient.get(url)
-      return response.data
-    } catch (error) {
-      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
-        throw new Error("Cannot connect to server. Please check if the server is running.")
-      }
-      throw new Error(error.response?.data?.message || error.message || "Failed to fetch expenses by date")
-    }
-  },
-
+  
   // ============ NOTIFICATION ENDPOINTS ============
 
   // Get all notifications with optional filters
