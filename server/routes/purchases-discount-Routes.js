@@ -14,5 +14,5 @@ router.get("/", getPurchasesDiscounts);
 router.get("/:id", getPurchasesDiscountById);
 router.put("/:id", updatePurchasesDiscount);
 router.delete("/:id", deletePurchasesDiscount);
-router.get("/total/amount", getTotalPurchasesDiscount);
+router.get("/total/amount", getTotalPurchasesDiscount);  
 module.exports = router;

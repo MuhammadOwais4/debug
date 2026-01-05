@@ -6,19 +6,13 @@ import {
   Download,
   Printer,
   RefreshCw,
-  Plus,
-  Minus,
-  FileSpreadsheet,
-  Upload,
-  Save,
-  CheckCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// const API_BASE_URL = "http://localhost:5000/api"
-const API_BASE_URL = "https://debug-nxby.vercel.app/api"
+const API_BASE_URL = "http://localhost:5000/api"
+// const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 const format = (n) => {
   const num = Number.parseFloat(n) || 0
   return num === 0 ? "0" : num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -142,7 +136,7 @@ export default function TrialBalanceIntegrated() {
               }
             }
 
-            // Determine closing debit/credit
+            // Determine closing debit/credit based on normal balance
             let closingDebit = 0
             let closingCredit = 0
             
@@ -160,12 +154,60 @@ export default function TrialBalanceIntegrated() {
               }
             }
 
+            // ✅ CRITICAL FIX: Purchase Discount Special Handling
+            // Purchase Discount is a REVENUE account (credit normal balance)
+            // So it MUST show in CREDIT columns, not DEBIT
+            if (account.code === 'PURCH-DISC' || account.name === 'PURCHASES DISCOUNT') {
+              console.log(`🔧 Fixing Purchase Discount display:`, {
+                code: account.code,
+                currentDebit,
+                currentCredit,
+                closingBalance,
+                normalBalance,
+                category: account.category
+              })
+              
+              // Purchase Discount should ALWAYS show in CREDIT side
+              // Because it's a REVENUE (contra-expense) account
+              if (closingBalance !== 0) {
+                // Force to show in credit column
+                closingDebit = 0
+                closingCredit = Math.abs(closingBalance)
+              }
+              
+              console.log(`✅ After fix - ClosingDebit: ${closingDebit}, ClosingCredit: ${closingCredit}`)
+            }
+
+            // ✅ CRITICAL FIX: Sales Discount Special Handling
+            // Sales Discount is an EXPENSE account (debit normal balance)
+            // So it MUST show in DEBIT columns
+            if (account.code === 'SALES-DISC' || account.name === 'SALES DISCOUNT') {
+              console.log(`🔧 Fixing Sales Discount display:`, {
+                code: account.code,
+                currentDebit,
+                currentCredit,
+                closingBalance,
+                normalBalance,
+                category: account.category
+              })
+              
+              // Sales Discount should ALWAYS show in DEBIT side
+              if (closingBalance !== 0) {
+                // Force to show in debit column
+                closingCredit = 0
+                closingDebit = Math.abs(closingBalance)
+              }
+              
+              console.log(`✅ After fix - ClosingDebit: ${closingDebit}, ClosingCredit: ${closingCredit}`)
+            }
+
             const hasActivity = currentDebit > 0 || currentCredit > 0 || openingBalance !== 0
 
             return {
               code: account.code,
               name: account.name,
               category: account.category,
+              normalBalance,
               openingDebit,
               openingCredit,
               currentDebit,
@@ -185,6 +227,13 @@ export default function TrialBalanceIntegrated() {
       const activeAccounts = trialBalanceEntries.filter(
         (entry) => entry !== null && entry.hasActivity
       )
+
+      console.log(`\n📊 Final Trial Balance Summary:`)
+      activeAccounts.forEach(acc => {
+        if (acc.code === 'PURCH-DISC' || acc.code === 'SALES-DISC') {
+          console.log(`  ${acc.code}: Current Dr=${acc.currentDebit}, Cr=${acc.currentCredit} | Closing Dr=${acc.closingDebit}, Cr=${acc.closingCredit}`)
+        }
+      })
 
       setTrialBalanceData(activeAccounts)
       console.log(`✅ Trial Balance calculated with ${activeAccounts.length} active accounts`)
