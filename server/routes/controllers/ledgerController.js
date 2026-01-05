@@ -317,29 +317,7 @@ const getAccountLedger = async (req, res) => {
       const debitAmount = parseFloat(discount.debitAmount || 0)
       const creditAmount = parseFloat(discount.creditAmount || 0)
 
-      // Vendor Account (DEBIT) - Reducing vendor's receivable
-      if (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName)) {
-        if (normalBalance === "debit") {
-          runningBalance += debitAmount
-        } else {
-          runningBalance -= debitAmount
-        }
-
-        ledgerEntries.push({
-          id: `purchase-discount-${discount._id}-vendor`,
-          date: discount.date,
-          voucherNo: discount.invoice || "N/A",
-          voucherType: "Purchase Discount",
-          description: discount.description || `Discount received from ${vendorName}`,
-          debit: debitAmount,
-          credit: 0,
-          balance: runningBalance,
-          grn: null,
-          sourceId: discount._id,
-        })
-      }
-
-      // Purchase Discount Account (CREDIT) - Discount received
+      // Purchase Discount Account (CREDIT) - Discount received ✅ FIXED
       if (matchAccount(discountType, accountCode, accountName)) {
         if (normalBalance === "debit") {
           runningBalance -= creditAmount
@@ -360,6 +338,28 @@ const getAccountLedger = async (req, res) => {
           sourceId: discount._id,
           accountCode: "PURCH-DISC",
           accountName: "PURCHASES DISCOUNT",
+        })
+      }
+
+      // Vendor Account (DEBIT) - Reducing vendor's payable ✅ FIXED
+      if (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName)) {
+        if (normalBalance === "debit") {
+          runningBalance += debitAmount
+        } else {
+          runningBalance -= debitAmount
+        }
+
+        ledgerEntries.push({
+          id: `purchase-discount-${discount._id}-vendor`,
+          date: discount.date,
+          voucherNo: discount.invoice || "N/A",
+          voucherType: "Purchase Discount",
+          description: discount.description || `Discount received from ${vendorName}`,
+          debit: debitAmount,
+          credit: 0,
+          balance: runningBalance,
+          grn: null,
+          sourceId: discount._id,
         })
       }
     })
