@@ -8,10 +8,20 @@ function ProfitLoss() {
   const [saleDiscounts, setSaleDiscounts] = useState([]);
   const [saleReturns, setSaleReturns] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [otherIncome, setOtherIncome] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [purchaseReturns, setPurchaseReturns] = useState([]);
+  const [purchaseDiscounts, setPurchaseDiscounts] = useState([]);
   const [totalSales, setTotalSales] = useState(0);
   const [totalDiscounts, setTotalDiscounts] = useState(0);
   const [totalReturns, setTotalReturns] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalOtherIncome, setTotalOtherIncome] = useState(0);
+  const [openingStock, setOpeningStock] = useState(0);
+  const [purchases, setPurchases] = useState(0);
+  const [totalPurchaseReturns, setTotalPurchaseReturns] = useState(0);
+  const [totalPurchaseDiscounts, setTotalPurchaseDiscounts] = useState(0);
+  const [closingStock, setClosingStock] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -39,6 +49,39 @@ function ProfitLoss() {
       console.log("📅 Fetching data for year:", year);
       console.log("🔍 Date range:", startDate, "to", endDate);
 
+      // Fetch Trial Balance accounts for Opening Stock
+      console.log("📊 Fetching Trial Balance accounts...");
+      const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      const accountsData = await accountsResponse.json();
+      
+      if (!accountsData.success) {
+        throw new Error("Failed to fetch accounts");
+      }
+
+      console.log(`✅ Loaded ${accountsData.count} accounts from Trial Balance`);
+
+      // Find Stock account from Trial Balance and get its balance
+      let openingStockValue = 0;
+      const stockAccount = accountsData.data.find(acc => 
+        acc.name?.toUpperCase().includes('STOCK') || 
+        acc.name?.toUpperCase().includes('INVENTORY') ||
+        acc.code?.toUpperCase().includes('STOCK')
+      );
+
+      if (stockAccount) {
+        openingStockValue = Math.abs(stockAccount.balance || 0);
+        console.log("📦 Found Stock Account:", {
+          code: stockAccount.code,
+          name: stockAccount.name,
+          balance: stockAccount.balance,
+          openingStock: openingStockValue
+        });
+      } else {
+        console.warn("⚠️ Stock account not found in Trial Balance");
+      }
+
+      setOpeningStock(openingStockValue);
+
       // Fetch sales data with filters
       const salesResponse = await ApiHandler.getSales({
         startDate,
@@ -62,7 +105,6 @@ function ProfitLoss() {
       
       // Calculate total sales from totalAmount field
       const salesTotal = salesData.reduce((sum, sale) => {
-        // Use totalAmount directly as it's already calculated in the model
         const amount = sale.totalAmount || 0;
         return sum + amount;
       }, 0);
@@ -132,6 +174,8 @@ function ProfitLoss() {
 
       // Fetch Chart of Accounts - Expenses to get all expense account codes
       let expenseAccountCodes = new Set();
+      let stockAccountCode = null;
+      
       try {
         const chartExpensesResponse = await ApiHandler.getChartExpenses();
         let chartExpenses = [];
@@ -144,7 +188,7 @@ function ProfitLoss() {
           chartExpenses = chartExpensesResponse;
         }
         
-        // Extract all expense account codes (usually start with 5)
+        // Extract all expense account codes
         chartExpenses.forEach(exp => {
           if (exp.code) {
             expenseAccountCodes.add(exp.code);
@@ -154,6 +198,33 @@ function ProfitLoss() {
         console.log("📋 Expense Account Codes from Chart:", Array.from(expenseAccountCodes));
       } catch (err) {
         console.warn("⚠️ Could not load chart of accounts, will use debit logic only");
+      }
+
+      // Get Stock account code from Assets
+      try {
+        const chartAssetsResponse = await ApiHandler.getAssets();
+        let chartAssets = [];
+        
+        if (chartAssetsResponse && chartAssetsResponse.success && Array.isArray(chartAssetsResponse.data)) {
+          chartAssets = chartAssetsResponse.data;
+        } else if (Array.isArray(chartAssetsResponse.data)) {
+          chartAssets = chartAssetsResponse.data;
+        } else if (Array.isArray(chartAssetsResponse)) {
+          chartAssets = chartAssetsResponse;
+        }
+        
+        const stockAsset = chartAssets.find(acc => 
+          acc.name?.toUpperCase().includes('STOCK') || 
+          acc.name?.toUpperCase().includes('INVENTORY') ||
+          acc.code?.toUpperCase().includes('STOCK')
+        );
+        
+        if (stockAsset) {
+          stockAccountCode = stockAsset.code;
+          console.log("📦 Found Stock Account Code:", stockAccountCode);
+        }
+      } catch (err) {
+        console.warn("⚠️ Could not load assets chart");
       }
 
       // Fetch expenses from vouchers (CPV & BPV - Cash/Bank Payment Vouchers with DR entries)
@@ -174,18 +245,10 @@ function ProfitLoss() {
       }
 
       console.log("✅ Total Vouchers Found:", vouchersData.length);
-      
-      // Debug first voucher structure
-      if (vouchersData.length > 0) {
-        console.log("🔍 First Voucher Structure:", vouchersData[0]);
-        console.log("🔍 First Voucher Keys:", Object.keys(vouchersData[0]));
-        console.log("🔍 Entries Field:", vouchersData[0].entries);
-        console.log("🔍 Has entries?:", vouchersData[0].entries !== undefined);
-        console.log("🔍 Entries is array?:", Array.isArray(vouchersData[0].entries));
-      }
 
-      // Extract expense entries from CPV and BPV vouchers
+      // Extract expense entries from CPV, BPV, and JV vouchers
       let expensesData = [];
+      const processedVoucherEntries = new Set(); // Track to avoid duplicates
       
       console.log("🔍 Processing vouchers for expenses...");
       
@@ -195,52 +258,50 @@ function ProfitLoss() {
                                   voucher.type === 'CPV' || 
                                   voucher.type === 'BPV';
         
-        console.log(`📝 Voucher ${voucher.voucherNo}: Type=${voucher.voucherType || voucher.type}, IsPayment=${isPaymentVoucher}`);
+        const isJournalVoucher = voucher.voucherType === 'JV' || voucher.type === 'JV';
         
-        if (isPaymentVoucher) {
-          // First try to use entries if they exist in the voucher itself
+        if (isPaymentVoucher || isJournalVoucher) {
           if (voucher.entries && Array.isArray(voucher.entries) && voucher.entries.length > 0) {
-            console.log(`  ✅ Found ${voucher.entries.length} entries directly in voucher`);
-            
             voucher.entries.forEach((entry, idx) => {
-              console.log(`  Entry ${idx}:`, entry);
+              const entryKey = `${voucher.voucherNo}-${entry.serialNo || idx}`;
               
-              // Check if this is a debit entry (expense) - debitAmount > 0
+              if (processedVoucherEntries.has(entryKey)) {
+                return; // Skip duplicate
+              }
+              
               const isDebit = (entry.debitAmount && entry.debitAmount > 0);
               const accountCode = entry.accountCode || entry.code || '';
               const accountName = entry.account || entry.accountName || '';
               
-              // Check if this account is in expense chart OR account code starts with 5 (expense accounts)
               const isExpenseByCode = expenseAccountCodes.size > 0 
                 ? expenseAccountCodes.has(accountCode)
-                : accountCode.startsWith('5'); // Fallback: expense accounts usually start with 5
+                : accountCode.startsWith('5');
               
-              // Also check by name keywords
-              const isExpenseByName = accountName.includes('EXPENSE') || 
-                                     accountName.includes('SALARY') || 
-                                     accountName.includes('SALARIES') ||
-                                     accountName.includes('RENT') ||
-                                     accountName.includes('UTILITY') ||
-                                     accountName.includes('UTILITIES') ||
-                                     accountName.includes('TRAVEL') ||
-                                     accountName.includes('CHARGES') ||
-                                     accountName.includes('FEE') ||
-                                     accountName.includes('SUPPLY') ||
-                                     accountName.includes('MATERIAL') ||
-                                     accountName.includes('DEPRECIATION') ||
-                                     accountName.includes('ADVERTISEMENT') ||
-                                     accountName.includes('MARKETING') ||
-                                     accountName.includes('INTERNET') ||
-                                     accountName.includes('ELECTRICITY') ||
-                                     accountName.includes('WATER');
+              const isExpenseByName = accountName.toUpperCase().includes('EXPENSE') || 
+                                     accountName.toUpperCase().includes('SALARY') || 
+                                     accountName.toUpperCase().includes('SALARIES') ||
+                                     accountName.toUpperCase().includes('RENT') ||
+                                     accountName.toUpperCase().includes('UTILITY') ||
+                                     accountName.toUpperCase().includes('UTILITIES') ||
+                                     accountName.toUpperCase().includes('TRAVEL') ||
+                                     accountName.toUpperCase().includes('CHARGES') ||
+                                     accountName.toUpperCase().includes('FEE') ||
+                                     accountName.toUpperCase().includes('SUPPLY') ||
+                                     accountName.toUpperCase().includes('MATERIAL') ||
+                                     accountName.toUpperCase().includes('DEPRECIATION') ||
+                                     accountName.toUpperCase().includes('ADVERTISEMENT') ||
+                                     accountName.toUpperCase().includes('MARKETING') ||
+                                     accountName.toUpperCase().includes('INTERNET') ||
+                                     accountName.toUpperCase().includes('ELECTRICITY') ||
+                                     accountName.toUpperCase().includes('WATER');
               
               const isExpenseAccount = isExpenseByCode || isExpenseByName;
               
-              console.log(`    IsDebit: ${isDebit}, Code: ${accountCode}, Name: ${accountName}`);
-              console.log(`    IsExpenseByCode: ${isExpenseByCode}, IsExpenseByName: ${isExpenseByName}, Final: ${isExpenseAccount}`);
+              // Skip Stock account from JV (goes to COGS, not expenses)
+              const isStockAccount = stockAccountCode && accountCode === stockAccountCode;
               
-              if (isDebit && isExpenseAccount) {
-                console.log(`    ✅ This is an EXPENSE entry! Amount: ${entry.debitAmount}`);
+              if (isDebit && isExpenseAccount && !isStockAccount) {
+                processedVoucherEntries.add(entryKey);
                 expensesData.push({
                   voucherNo: voucher.voucherNo,
                   voucherType: voucher.voucherType || voucher.type,
@@ -254,18 +315,18 @@ function ProfitLoss() {
               }
             });
           } else {
-            // If entries not in main voucher, try to fetch by ID
-            console.log(`  ⚠️ No entries in voucher, trying to fetch by ID...`);
             try {
               const voucherDetails = await ApiHandler.getVoucherById(voucher._id || voucher.id);
-              console.log(`  📄 Fetched details:`, voucherDetails);
-              
               const fullVoucher = voucherDetails.data || voucherDetails;
               
               if (fullVoucher.entries && Array.isArray(fullVoucher.entries)) {
-                console.log(`  ✅ Found ${fullVoucher.entries.length} entries from API`);
-                
-                fullVoucher.entries.forEach(entry => {
+                fullVoucher.entries.forEach((entry, idx) => {
+                  const entryKey = `${voucher.voucherNo}-${entry.serialNo || idx}`;
+                  
+                  if (processedVoucherEntries.has(entryKey)) {
+                    return;
+                  }
+                  
                   const isDebit = (entry.debitAmount && entry.debitAmount > 0);
                   const accountCode = entry.accountCode || entry.code || '';
                   const accountName = entry.account || entry.accountName || '';
@@ -274,27 +335,29 @@ function ProfitLoss() {
                     ? expenseAccountCodes.has(accountCode)
                     : accountCode.startsWith('5');
                   
-                  const isExpenseByName = accountName.includes('EXPENSE') || 
-                                         accountName.includes('SALARY') || 
-                                         accountName.includes('SALARIES') ||
-                                         accountName.includes('RENT') ||
-                                         accountName.includes('UTILITY') ||
-                                         accountName.includes('UTILITIES') ||
-                                         accountName.includes('TRAVEL') ||
-                                         accountName.includes('CHARGES') ||
-                                         accountName.includes('FEE') ||
-                                         accountName.includes('SUPPLY') ||
-                                         accountName.includes('MATERIAL') ||
-                                         accountName.includes('DEPRECIATION') ||
-                                         accountName.includes('ADVERTISEMENT') ||
-                                         accountName.includes('MARKETING') ||
-                                         accountName.includes('INTERNET') ||
-                                         accountName.includes('ELECTRICITY') ||
-                                         accountName.includes('WATER');
+                  const isExpenseByName = accountName.toUpperCase().includes('EXPENSE') || 
+                                         accountName.toUpperCase().includes('SALARY') || 
+                                         accountName.toUpperCase().includes('SALARIES') ||
+                                         accountName.toUpperCase().includes('RENT') ||
+                                         accountName.toUpperCase().includes('UTILITY') ||
+                                         accountName.toUpperCase().includes('UTILITIES') ||
+                                         accountName.toUpperCase().includes('TRAVEL') ||
+                                         accountName.toUpperCase().includes('CHARGES') ||
+                                         accountName.toUpperCase().includes('FEE') ||
+                                         accountName.toUpperCase().includes('SUPPLY') ||
+                                         accountName.toUpperCase().includes('MATERIAL') ||
+                                         accountName.toUpperCase().includes('DEPRECIATION') ||
+                                         accountName.toUpperCase().includes('ADVERTISEMENT') ||
+                                         accountName.toUpperCase().includes('MARKETING') ||
+                                         accountName.toUpperCase().includes('INTERNET') ||
+                                         accountName.toUpperCase().includes('ELECTRICITY') ||
+                                         accountName.toUpperCase().includes('WATER');
                   
                   const isExpenseAccount = isExpenseByCode || isExpenseByName;
+                  const isStockAccount = stockAccountCode && accountCode === stockAccountCode;
                   
-                  if (isDebit && isExpenseAccount) {
+                  if (isDebit && isExpenseAccount && !isStockAccount) {
+                    processedVoucherEntries.add(entryKey);
                     expensesData.push({
                       voucherNo: voucher.voucherNo,
                       voucherType: voucher.voucherType || voucher.type,
@@ -309,22 +372,13 @@ function ProfitLoss() {
                 });
               }
             } catch (err) {
-              console.error(`  ❌ Error fetching voucher ${voucher.voucherNo}:`, err.message);
+              console.error(`Error fetching voucher ${voucher.voucherNo}:`, err.message);
             }
           }
         }
       }
 
       console.log("✅ Total Expense Entries Found:", expensesData.length);
-      if (expensesData.length > 0) {
-        console.log("✅ Sample Expenses:", expensesData.slice(0, 3));
-      } else {
-        console.warn("⚠️ NO EXPENSES FOUND! Check if:");
-        console.warn("  1. Vouchers have voucherType = 'CPV' or 'BPV'");
-        console.warn("  2. Entries exist in vouchers");
-        console.warn("  3. Entries have debitAmount > 0 and account name contains EXPENSE");
-      }
-
       setExpenses(expensesData);
 
       // Calculate total expenses
@@ -335,6 +389,184 @@ function ProfitLoss() {
       console.log("💵 Total Expenses Calculated:", expensesTotal);
       setTotalExpenses(expensesTotal);
 
+      // Fetch Revenue accounts from Chart of Accounts
+      let revenueAccountCodes = new Set();
+      let saleAccountCodes = new Set();
+      try {
+        const chartRevenueResponse = await ApiHandler.getRevenue();
+        let chartRevenue = [];
+        
+        if (chartRevenueResponse && chartRevenueResponse.success && Array.isArray(chartRevenueResponse.data)) {
+          chartRevenue = chartRevenueResponse.data;
+        } else if (Array.isArray(chartRevenueResponse.data)) {
+          chartRevenue = chartRevenueResponse.data;
+        } else if (Array.isArray(chartRevenueResponse)) {
+          chartRevenue = chartRevenueResponse;
+        }
+        
+        chartRevenue.forEach(rev => {
+          if (rev.code) {
+            revenueAccountCodes.add(rev.code);
+            
+            const name = (rev.name || rev.accountName || '').toUpperCase();
+            if (name.includes('SALE') && rev.type === 'SALE ACCOUNT') {
+              saleAccountCodes.add(rev.code);
+            }
+          }
+        });
+        
+        console.log("📋 Revenue Account Codes:", Array.from(revenueAccountCodes));
+        console.log("📋 Sale Account Codes:", Array.from(saleAccountCodes));
+      } catch (err) {
+        console.warn("⚠️ Could not load revenue chart");
+      }
+
+      // Fetch Income from Other Sources from CRV & BRV vouchers
+      let otherIncomeData = [];
+      
+      for (const voucher of vouchersData) {
+        const isReceiptVoucher = voucher.voucherType === 'CRV' || 
+                                  voucher.voucherType === 'BRV' ||
+                                  voucher.type === 'CRV' || 
+                                  voucher.type === 'BRV';
+        
+        if (isReceiptVoucher) {
+          if (voucher.entries && Array.isArray(voucher.entries) && voucher.entries.length > 0) {
+            voucher.entries.forEach((entry) => {
+              const isCredit = (entry.creditAmount && entry.creditAmount > 0);
+              const accountCode = entry.accountCode || entry.code || '';
+              const accountName = entry.account || entry.accountName || '';
+              
+              const isRevenueByCode = revenueAccountCodes.size > 0 
+                ? revenueAccountCodes.has(accountCode) && !saleAccountCodes.has(accountCode)
+                : accountCode.startsWith('4') && !accountCode.startsWith('40');
+              
+              const nameUpper = accountName.toUpperCase();
+              const isRevenueByName = !nameUpper.includes('SALE') && (
+                nameUpper.includes('INCOME') ||
+                nameUpper.includes('INTEREST') ||
+                nameUpper.includes('DIVIDEND') ||
+                nameUpper.includes('COMMISSION') ||
+                nameUpper.includes('RENT INCOME') ||
+                nameUpper.includes('GAIN') ||
+                nameUpper.includes('REVENUE') ||
+                nameUpper.includes('MISCELLANEOUS INCOME')
+              );
+              
+              const isOtherIncome = isRevenueByCode || isRevenueByName;
+              
+              if (isCredit && isOtherIncome) {
+                otherIncomeData.push({
+                  voucherNo: voucher.voucherNo,
+                  voucherType: voucher.voucherType || voucher.type,
+                  date: voucher.voucherDate || voucher.date,
+                  accountName: accountName,
+                  accountCode: accountCode,
+                  description: entry.description || voucher.description || voucher.narration,
+                  amount: entry.creditAmount || entry.amount || 0,
+                  serialNo: entry.serialNo
+                });
+              }
+            });
+          }
+        }
+      }
+
+      console.log("✅ Other Income Entries Found:", otherIncomeData.length);
+      setOtherIncome(otherIncomeData);
+
+      const otherIncomeTotal = otherIncomeData.reduce((sum, income) => {
+        return sum + (income.amount || 0);
+      }, 0);
+
+      console.log("💰 Total Other Income Calculated:", otherIncomeTotal);
+      setTotalOtherIncome(otherIncomeTotal);
+
+      // Fetch products for COGS calculation
+      const productsResponse = await ApiHandler.getProducts();
+      let productsData = [];
+      
+      if (productsResponse && productsResponse.success && Array.isArray(productsResponse.data)) {
+        productsData = productsResponse.data;
+      } else if (Array.isArray(productsResponse.data)) {
+        productsData = productsResponse.data;
+      } else if (Array.isArray(productsResponse)) {
+        productsData = productsResponse;
+      }
+
+      console.log("📦 Products fetched:", productsData.length);
+      setProducts(productsData);
+
+      // Calculate Total Purchases
+      const purchasesValue = productsData.reduce((sum, product) => {
+        return sum + (product.purchaseAmount || 0);
+      }, 0);
+      
+      console.log("💰 Total Purchases:", purchasesValue);
+      setPurchases(purchasesValue);
+
+      // Calculate Closing Stock
+      const closingStockValue = productsData.reduce((sum, product) => {
+        return sum + (product.balanceAmount || 0);
+      }, 0);
+      
+      console.log("📦 Closing Stock:", closingStockValue);
+      setClosingStock(closingStockValue);
+
+      // Get Purchase Returns
+      try {
+        const productsWithReturns = productsData.filter(product => 
+          product.ReturnQuantity && product.ReturnQuantity > 0
+        );
+
+        console.log("🔙 Products with Returns:", productsWithReturns.length);
+        setPurchaseReturns(productsWithReturns);
+
+        const purchaseReturnsTotal = productsWithReturns.reduce((sum, product) => {
+          return sum + (product.ReturnedAmount || 0);
+        }, 0);
+
+        console.log("🔙 Total Purchase Returns:", purchaseReturnsTotal);
+        setTotalPurchaseReturns(purchaseReturnsTotal);
+      } catch (err) {
+        console.warn("⚠️ Could not calculate purchase returns:", err);
+        setPurchaseReturns([]);
+        setTotalPurchaseReturns(0);
+      }
+
+      // Get Purchase Discounts
+      try {
+        const purchaseDiscountsResponse = await ApiHandler.getPurchaseDiscounts();
+        
+        let purchaseDiscountsData = [];
+        if (purchaseDiscountsResponse && purchaseDiscountsResponse.success && Array.isArray(purchaseDiscountsResponse.data)) {
+          purchaseDiscountsData = purchaseDiscountsResponse.data;
+        } else if (Array.isArray(purchaseDiscountsResponse.data)) {
+          purchaseDiscountsData = purchaseDiscountsResponse.data;
+        } else if (Array.isArray(purchaseDiscountsResponse)) {
+          purchaseDiscountsData = purchaseDiscountsResponse;
+        }
+
+        const yearPurchaseDiscounts = purchaseDiscountsData.filter(discount => {
+          const discountYear = new Date(discount.date).getFullYear();
+          return discountYear === year;
+        });
+
+        console.log("💸 Purchase Discounts:", yearPurchaseDiscounts.length);
+        setPurchaseDiscounts(yearPurchaseDiscounts);
+
+        const purchaseDiscountsTotal = yearPurchaseDiscounts.reduce((sum, discount) => {
+          return sum + (discount.creditAmount || 0);
+        }, 0);
+
+        console.log("💸 Total Purchase Discounts:", purchaseDiscountsTotal);
+        setTotalPurchaseDiscounts(purchaseDiscountsTotal);
+      } catch (err) {
+        console.warn("⚠️ Could not fetch purchase discounts:", err);
+        setPurchaseDiscounts([]);
+        setTotalPurchaseDiscounts(0);
+      }
+
     } catch (error) {
       console.error("❌ Error loading revenue data:", error);
       setError(error.message || "Failed to load revenue data");
@@ -343,10 +575,20 @@ function ProfitLoss() {
       setSaleReturns([]);
       setSaleDiscounts([]);
       setExpenses([]);
+      setOtherIncome([]);
+      setProducts([]);
+      setPurchaseReturns([]);
+      setPurchaseDiscounts([]);
       setTotalSales(0);
       setTotalReturns(0);
       setTotalDiscounts(0);
       setTotalExpenses(0);
+      setTotalOtherIncome(0);
+      setOpeningStock(0);
+      setPurchases(0);
+      setTotalPurchaseReturns(0);
+      setTotalPurchaseDiscounts(0);
+      setClosingStock(0);
     } finally {
       setLoading(false);
     }
@@ -367,8 +609,9 @@ function ProfitLoss() {
   };
 
   const netRevenue = totalSales - totalReturns - totalDiscounts;
-  const discountPercentage = totalSales > 0 ? ((totalDiscounts / totalSales) * 100).toFixed(2) : 0;
-  const returnPercentage = totalSales > 0 ? ((totalReturns / totalSales) * 100).toFixed(2) : 0;
+  const cogs = openingStock + purchases - totalPurchaseReturns - totalPurchaseDiscounts - closingStock;
+  const grossProfit = netRevenue - cogs;
+  const netProfit = grossProfit - totalExpenses + totalOtherIncome;
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "20px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -515,7 +758,6 @@ function ProfitLoss() {
           backgroundColor: "#fff",
           padding: "20px 30px"
         }}>
-          {/* Sales Row */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -534,7 +776,6 @@ function ProfitLoss() {
             </span>
           </div>
 
-          {/* Sale Return Row */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -559,7 +800,6 @@ function ProfitLoss() {
             </span>
           </div>
 
-          {/* Sales Discount Row */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -586,7 +826,6 @@ function ProfitLoss() {
             </span>
           </div>
 
-          {/* Total Revenues Row */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -627,106 +866,7 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Detailed Revenue Breakdown */}
-      {selectedDate && !loading && (sales.length > 0 || saleReturns.length > 0 || saleDiscounts.length > 0) && (
-        <div style={{
-          marginTop: "30px",
-          padding: "20px",
-          backgroundColor: "#fff",
-          borderRadius: "8px",
-          border: "1px solid #dee2e6",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
-        }}>
-          <h4 style={{ 
-            marginTop: 0, 
-            marginBottom: "20px",
-            color: "#212529",
-            fontSize: "16px",
-            fontWeight: "700",
-            borderBottom: "2px solid #e9ecef",
-            paddingBottom: "10px"
-          }}>
-            📈 Revenue Breakdown - Year {new Date(selectedDate).getFullYear()}
-          </h4>
-          
-          <div style={{ 
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "15px",
-            fontSize: "14px"
-          }}>
-            <div style={{ 
-              padding: "15px",
-              backgroundColor: "#d1e7dd",
-              borderRadius: "6px",
-              border: "1px solid #badbcc"
-            }}>
-              <div style={{ color: "#0f5132", fontWeight: "600", marginBottom: "8px" }}>
-                💰 Total Sales
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: "700", color: "#198754" }}>
-                PKR {formatCurrency(totalSales)}
-              </div>
-              <div style={{ fontSize: "12px", color: "#0f5132", marginTop: "5px" }}>
-                {sales.length} invoices
-              </div>
-            </div>
-
-            <div style={{ 
-              padding: "15px",
-              backgroundColor: "#fff3cd",
-              borderRadius: "6px",
-              border: "1px solid #ffecb5"
-            }}>
-              <div style={{ color: "#664d03", fontWeight: "600", marginBottom: "8px" }}>
-                🔄 Sale Returns
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: "700", color: "#856404" }}>
-                PKR {formatCurrency(totalReturns)}
-              </div>
-              <div style={{ fontSize: "12px", color: "#664d03", marginTop: "5px" }}>
-                {saleReturns.length} return entries
-              </div>
-            </div>
-
-            <div style={{ 
-              padding: "15px",
-              backgroundColor: "#f8d7da",
-              borderRadius: "6px",
-              border: "1px solid #f5c2c7"
-            }}>
-              <div style={{ color: "#842029", fontWeight: "600", marginBottom: "8px" }}>
-                💸 Sale Discounts
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: "700", color: "#dc3545" }}>
-                PKR {formatCurrency(totalDiscounts)}
-              </div>
-              <div style={{ fontSize: "12px", color: "#842029", marginTop: "5px" }}>
-                {saleDiscounts.length} discount entries
-              </div>
-            </div>
-
-            <div style={{ 
-              padding: "15px",
-              backgroundColor: "#cfe2ff",
-              borderRadius: "6px",
-              border: "1px solid #b6d4fe"
-            }}>
-              <div style={{ color: "#084298", fontWeight: "600", marginBottom: "8px" }}>
-                📊 Net Revenue
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: "700", color: "#0d6efd" }}>
-                PKR {formatCurrency(netRevenue)}
-              </div>
-              <div style={{ fontSize: "12px", color: "#084298", marginTop: "5px" }}>
-                After returns & discounts
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Other Sections Placeholders */}
+      {/* Cost of Goods Sold */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -737,6 +877,224 @@ function ProfitLoss() {
       }}>
         Cost of Goods Sold
       </div>
+
+      {loading ? (
+        <div style={{ 
+          padding: "20px", 
+          textAlign: "center",
+          color: "#6c757d",
+          backgroundColor: "#fff"
+        }}>
+          <p>Loading COGS data...</p>
+        </div>
+      ) : selectedDate ? (
+        <div style={{ 
+          backgroundColor: "#fff",
+          padding: "20px 30px"
+        }}>
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            alignItems: "center"
+          }}>
+            <span style={{ fontSize: "15px", color: "#000", paddingLeft: "20px" }}>
+              Opening Stock
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(openingStock)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            alignItems: "center"
+          }}>
+            <span style={{ fontSize: "15px", color: "#000" }}>
+              Add: Purchases
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(purchases)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            alignItems: "center"
+          }}>
+            <span style={{ 
+              fontSize: "15px", 
+              color: "#000",
+              paddingLeft: "20px"
+            }}>
+              Less: Purchase Return
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(totalPurchaseReturns)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            alignItems: "center",
+            borderBottom: "1px solid #000",
+            paddingBottom: "12px"
+          }}>
+            <span style={{ 
+              fontSize: "15px", 
+              color: "#000",
+              paddingLeft: "20px"
+            }}>
+              Less: Purchase Discount
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(totalPurchaseDiscounts)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "12px 0 8px 0",
+            alignItems: "center"
+          }}>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              paddingLeft: "20px"
+            }}>
+              Cost of Goods Available for Sale
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(openingStock + purchases - totalPurchaseReturns - totalPurchaseDiscounts)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            alignItems: "center",
+            borderBottom: "1px solid #000",
+            paddingBottom: "12px"
+          }}>
+            <span style={{ 
+              fontSize: "15px", 
+              color: "#000",
+              paddingLeft: "20px"
+            }}>
+              Less: Closing Stock
+            </span>
+            <span style={{ 
+              fontSize: "15px",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(closingStock)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "12px 0 8px 0",
+            alignItems: "center"
+          }}>
+            <span style={{ 
+              fontSize: "16px",
+              fontWeight: "bold",
+              color: "#000"
+            }}>
+              Cost of Goods Sold
+            </span>
+            <span style={{ 
+              fontSize: "16px",
+              fontWeight: "bold",
+              color: "#000",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(cogs)}
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            padding: "12px 0 8px 0",
+            marginTop: "12px",
+            borderTop: "2px solid #000",
+            alignItems: "center",
+            backgroundColor: "#f0f0f0"
+          }}>
+            <span style={{ 
+              fontSize: "16px",
+              fontWeight: "bold",
+              color: "#000"
+            }}>
+              Gross Profit (Loss)
+            </span>
+            <span style={{ 
+              fontSize: "16px",
+              fontWeight: "bold",
+              color: grossProfit >= 0 ? "#059669" : "#dc2626",
+              fontFamily: "monospace",
+              minWidth: "120px",
+              textAlign: "right"
+            }}>
+              {formatCurrency(grossProfit)}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ 
+          padding: "20px", 
+          textAlign: "center",
+          color: "#6c757d",
+          backgroundColor: "#f8f9fa"
+        }}>
+          <p>Please select a date to view COGS</p>
+        </div>
+      )}
 
       {/* Expenses Section */}
       <div style={{
@@ -766,12 +1124,16 @@ function ProfitLoss() {
         }}>
           {expenses.length > 0 ? (
             <>
-              {/* List all expenses */}
               {expenses.map((expense, index) => {
                 return (
                   <div 
                     key={expense.voucherNo + '-' + index}
-                  
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "8px 0",
+                      alignItems: "center"
+                    }}
                   >
                     <div style={{ flex: 1 }}>
                       <span style={{ 
@@ -780,16 +1142,37 @@ function ProfitLoss() {
                         display: "block"
                       }}>
                         {expense.accountName}
-                        
+                        {expense.accountCode && ` (${expense.accountCode})`}
+                        {expense.voucherType && (
+                          <span style={{ 
+                            fontSize: "11px", 
+                            color: "#666",
+                            marginLeft: "8px",
+                            padding: "2px 6px",
+                            backgroundColor: "#f0f0f0",
+                            borderRadius: "3px"
+                          }}>
+                            {expense.voucherType}
+                          </span>
+                        )}
                       </span>
-                     
+                      {expense.description && (
+                        <span style={{ 
+                          fontSize: "12px", 
+                          color: "#666",
+                          display: "block",
+                          marginTop: "2px"
+                        }}>
+                          {expense.description}
+                        </span>
+                      )}
                     </div>
                     <span style={{ 
                       fontSize: "15px",
                       color: "#000",
                       fontFamily: "monospace",
                       minWidth: "120px",
-                      marginLeft: "92%",
+                      textAlign: "right"
                     }}>
                       {formatCurrency(expense.amount)}
                     </span>
@@ -797,7 +1180,6 @@ function ProfitLoss() {
                 );
               })}
 
-              {/* Total Expenses Row */}
               <div style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -826,7 +1208,6 @@ function ProfitLoss() {
               </div>
             </>
           ) : (
-            /* Show zero when no expenses */
             <div style={{
               display: "flex",
               justifyContent: "space-between",
@@ -864,6 +1245,7 @@ function ProfitLoss() {
         </div>
       )}
 
+      {/* Other Income Section */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -874,6 +1256,262 @@ function ProfitLoss() {
       }}>
         Income from Other Sources
       </div>
+
+      {loading ? (
+        <div style={{ 
+          padding: "20px", 
+          textAlign: "center",
+          color: "#6c757d",
+          backgroundColor: "#fff"
+        }}>
+          <p>Loading other income...</p>
+        </div>
+      ) : selectedDate ? (
+        <div style={{ 
+          backgroundColor: "#fff",
+          padding: "20px 30px"
+        }}>
+          {otherIncome.length > 0 ? (
+            <>
+              {otherIncome.map((income, index) => {
+                return (
+                  <div 
+                    key={income.voucherNo + '-' + index}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "8px 0",
+                      alignItems: "center"
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <span style={{ 
+                        fontSize: "15px", 
+                        color: "#000",
+                        display: "block"
+                      }}>
+                        {income.accountName}
+                        {income.accountCode && ` (${income.accountCode})`}
+                        {income.voucherType && (
+                          <span style={{ 
+                            fontSize: "11px", 
+                            color: "#666",
+                            marginLeft: "8px",
+                            padding: "2px 6px",
+                            backgroundColor: "#d1f2eb",
+                            borderRadius: "3px"
+                          }}>
+                            {income.voucherType}
+                          </span>
+                        )}
+                      </span>
+                      {income.description && (
+                        <span style={{ 
+                          fontSize: "12px", 
+                          color: "#666",
+                          display: "block",
+                          marginTop: "2px"
+                        }}>
+                          {income.description}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ 
+                      fontSize: "15px",
+                      color: "#000",
+                      fontFamily: "monospace",
+                      minWidth: "120px",
+                      textAlign: "right"
+                    }}>
+                      {formatCurrency(income.amount)}
+                    </span>
+                  </div>
+                );
+              })}
+
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: "12px 0 8px 0",
+                marginTop: "8px",
+                borderTop: "1px solid #000",
+                alignItems: "center"
+              }}>
+                <span style={{ 
+                  fontSize: "16px",
+                  fontWeight: "bold",
+                  color: "#000"
+                }}>
+                  Total Income from Other Sources
+                </span>
+                <span style={{ 
+                  fontSize: "16px",
+                  fontWeight: "bold",
+                  color: "#000",
+                  fontFamily: "monospace",
+                  minWidth: "120px",
+                  textAlign: "right"
+                }}>
+                  {formatCurrency(totalOtherIncome)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "12px 0 8px 0",
+              alignItems: "center"
+            }}>
+              <span style={{ 
+                fontSize: "16px",
+                fontWeight: "bold",
+                color: "#000"
+              }}>
+                Total Income from Other Sources
+              </span>
+              <span style={{ 
+                fontSize: "16px",
+                fontWeight: "bold",
+                color: "#000",
+                fontFamily: "monospace",
+                minWidth: "120px",
+                textAlign: "right"
+              }}>
+                {formatCurrency(0)}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ 
+          padding: "20px", 
+          textAlign: "center",
+          color: "#6c757d",
+          backgroundColor: "#f8f9fa"
+        }}>
+          <p>Please select a date to view other income</p>
+        </div>
+      )}
+
+      {/* Net Profit/Loss Section */}
+      <div style={{
+        backgroundColor: "#2c5ca9",
+        color: "white",
+        fontWeight: "bold",
+        padding: "15px 30px",
+        marginTop: "30px",
+        fontSize: "18px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderRadius: "6px"
+      }}>
+        <span>NET PROFIT (LOSS)</span>
+        <span style={{
+          fontSize: "20px",
+          fontFamily: "monospace",
+          color: netProfit >= 0 ? "#4ade80" : "#f87171"
+        }}>
+          {formatCurrency(netProfit)}
+        </span>
+      </div>
+
+      {/* Summary Cards */}
+      {selectedDate && !loading && (
+        <div style={{
+          marginTop: "30px",
+          padding: "20px",
+          backgroundColor: "#fff",
+          borderRadius: "8px",
+          border: "1px solid #dee2e6",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+        }}>
+          <h4 style={{ 
+            marginTop: 0, 
+            marginBottom: "20px",
+            color: "#212529",
+            fontSize: "16px",
+            fontWeight: "700",
+            borderBottom: "2px solid #e9ecef",
+            paddingBottom: "10px"
+          }}>
+            📈 Financial Summary - Year {new Date(selectedDate).getFullYear()}
+          </h4>
+          
+          <div style={{ 
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: "15px",
+            fontSize: "14px"
+          }}>
+            <div style={{ 
+              padding: "15px",
+              backgroundColor: "#d1e7dd",
+              borderRadius: "6px",
+              border: "1px solid #badbcc"
+            }}>
+              <div style={{ color: "#0f5132", fontWeight: "600", marginBottom: "8px" }}>
+                💰 Gross Profit
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "700", color: grossProfit >= 0 ? "#198754" : "#dc3545" }}>
+                PKR {formatCurrency(grossProfit)}
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: "15px",
+              backgroundColor: "#fff3cd",
+              borderRadius: "6px",
+              border: "1px solid #ffecb5"
+            }}>
+              <div style={{ color: "#664d03", fontWeight: "600", marginBottom: "8px" }}>
+                💼 Total Expenses
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "700", color: "#856404" }}>
+                PKR {formatCurrency(totalExpenses)}
+              </div>
+              <div style={{ fontSize: "12px", color: "#664d03", marginTop: "5px" }}>
+                {expenses.length} expense entries
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: "15px",
+              backgroundColor: "#cfe2ff",
+              borderRadius: "6px",
+              border: "1px solid #b6d4fe"
+            }}>
+              <div style={{ color: "#084298", fontWeight: "600", marginBottom: "8px" }}>
+                📊 Other Income
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "700", color: "#0d6efd" }}>
+                PKR {formatCurrency(totalOtherIncome)}
+              </div>
+              <div style={{ fontSize: "12px", color: "#084298", marginTop: "5px" }}>
+                {otherIncome.length} income entries
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: "15px",
+              backgroundColor: netProfit >= 0 ? "#d1f2eb" : "#f8d7da",
+              borderRadius: "6px",
+              border: `1px solid ${netProfit >= 0 ? "#a3e4d7" : "#f5c2c7"}`
+            }}>
+              <div style={{ color: netProfit >= 0 ? "#0a5034" : "#842029", fontWeight: "600", marginBottom: "8px" }}>
+                🎯 Net Profit/Loss
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: "700", color: netProfit >= 0 ? "#198754" : "#dc3545" }}>
+                PKR {formatCurrency(netProfit)}
+              </div>
+              <div style={{ fontSize: "12px", color: netProfit >= 0 ? "#0a5034" : "#842029", marginTop: "5px" }}>
+                {netProfit >= 0 ? "Profitable" : "Loss"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
