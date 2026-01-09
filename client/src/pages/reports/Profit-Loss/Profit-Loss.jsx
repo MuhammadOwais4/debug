@@ -51,7 +51,8 @@ function ProfitLoss() {
 
       // Fetch Trial Balance accounts for Opening Stock
       console.log("📊 Fetching Trial Balance accounts...");
-      const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      // const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) {
