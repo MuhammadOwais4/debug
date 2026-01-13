@@ -200,6 +200,15 @@ const reportsDropdownRef = useRef(null);
                   >
                     General Ledger
                   </button>
+    <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => {
+                      handleTabChange("Trial Balance");
+                      setAccountsDropdownOpen(false);
+                    }}
+                  >
+                   Trial Balance
+                  </button>
       <button
         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
         onClick={() => {
@@ -376,15 +385,6 @@ const reportsDropdownRef = useRef(null);
                     }}
                   >
                     Sales Discount Voucher 
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Trial Balance");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                   Trial Balance
                   </button>
                   <button
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
