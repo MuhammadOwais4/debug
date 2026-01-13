@@ -332,6 +332,117 @@ const updateProduct = async (req, res) => {
   }
 }
 
+const getProductStock = async (req, res) => {
+  try {
+    const { category, lowStock, expiryStatus } = req.query
+    const filter = {}
+
+    if (category) {
+      filter.category = category
+    }
+
+    if (lowStock === "true") {
+      filter.quantity = { $lt: 5 }
+    }
+
+    if (expiryStatus) {
+      const now = new Date()
+      switch (expiryStatus) {
+        case "expired":
+          filter.expiryDate = { $lt: now }
+          break
+        case "expiring_soon":
+          const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+          filter.expiryDate = { $gte: now, $lte: weekFromNow }
+          break
+        case "expiring_month":
+          const monthFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+          filter.expiryDate = { $gte: now, $lte: monthFromNow }
+          break
+      }
+    }
+
+    const products = await Product.find(filter)
+      .populate("vendorName", "name code balance description")
+      .populate("purchaseType", "name type code description")
+      .sort({ quantity: 1 })
+
+    const stockData = products.map(product => ({
+      productId: product._id,
+      productName: product.name,
+      category: product.category,
+      grn: product.grn,
+      
+      // Current Stock
+      currentQuantity: product.quantity,
+      balanceAmount: product.balanceAmount,
+      
+      // Purchase Information
+      purchaseQuantity: product.purchaseQuantity,
+      purchaseRate: product.purchaseRate,
+      purchaseAmount: product.purchaseAmount,
+      
+      // Sales Information
+      totalSoldQuantity: product.totalSoldQuantity,
+      saleRate: product.saleRate,
+      
+      // Return Information
+      returnQuantity: product.ReturnQuantity || 0,
+      returnedAmount: product.ReturnedAmount || 0,
+      
+      // Calculated Values
+      stockPercentage: product.purchaseQuantity > 0 
+        ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2) 
+        : 0,
+      totalValue: product.quantity * product.purchaseRate,
+      potentialRevenue: product.quantity * product.saleRate,
+      potentialProfit: (product.quantity * product.saleRate) - (product.quantity * product.purchaseRate),
+      
+      // Additional Details
+      serialNumber: product.serialNumber,
+      expiryDate: product.expiryDate,
+      vendorName: product.vendorName,
+      purchaseType: product.purchaseType,
+      
+      // Status Indicators
+      isLowStock: product.quantity < 5,
+      isExpired: product.expiryDate ? new Date(product.expiryDate) < new Date() : false,
+      isExpiringSoon: product.expiryDate 
+        ? new Date(product.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) 
+        : false,
+      
+      // Timestamps
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    }))
+
+    // Calculate summary statistics
+    const summary = {
+      totalProducts: stockData.length,
+      totalStockValue: stockData.reduce((sum, p) => sum + p.totalValue, 0),
+      totalPotentialRevenue: stockData.reduce((sum, p) => sum + p.potentialRevenue, 0),
+      totalPotentialProfit: stockData.reduce((sum, p) => sum + p.potentialProfit, 0),
+      lowStockCount: stockData.filter(p => p.isLowStock).length,
+      expiredCount: stockData.filter(p => p.isExpired).length,
+      expiringSoonCount: stockData.filter(p => p.isExpiringSoon).length,
+    }
+
+    res.json({
+      success: true,
+      summary,
+      data: stockData
+    })
+  } catch (error) {
+    console.error("Error fetching product stock:", error)
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching product stock", 
+      error: error.message 
+    })
+  }
+}
+
+
 // Update product stock
 const updateStock = async (req, res) => {
   try {
@@ -862,6 +973,7 @@ module.exports = {
   getVendors,
   getPurchaseTypes,
   getProductSummary,
+  getProductStock,
   getProductsWithSummary,
   processPurchaseReturn,
   getPurchaseReturns, // Exported new function

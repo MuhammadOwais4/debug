@@ -60,6 +60,7 @@ const productSchema = new mongoose.Schema(
       min: [0, "Purchase amount cannot be negative"],
       default: 0,
     },
+    balanceAmount: { type: Number, default: 0 },
 
     // CURRENT/BALANCE DATA (Changes with each transaction)
     quantity: {

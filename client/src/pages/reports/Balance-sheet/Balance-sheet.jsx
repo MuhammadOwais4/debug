@@ -6,23 +6,20 @@ function BalanceSheet() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Vendors and Liabilities
   const [vendors, setVendors] = useState([]);
   const [loadingVendors, setLoadingVendors] = useState(false);
   
-  // Assets
   const [currentAssets, setCurrentAssets] = useState([]);
   const [fixedAssets, setFixedAssets] = useState([]);
   const [otherAssets, setOtherAssets] = useState([]);
   
-  // Liabilities
   const [currentLiabilities, setCurrentLiabilities] = useState([]);
   const [longTermLiabilities, setLongTermLiabilities] = useState([]);
   
-  // Equity
   const [equity, setEquity] = useState([]);
   
-  // Totals
+  const [closingStock, setClosingStock] = useState(0);
+  
   const [totalCurrentAssets, setTotalCurrentAssets] = useState(0);
   const [totalFixedAssets, setTotalFixedAssets] = useState(0);
   const [totalOtherAssets, setTotalOtherAssets] = useState(0);
@@ -35,7 +32,6 @@ function BalanceSheet() {
   const [totalEquity, setTotalEquity] = useState(0);
   const [totalLiabilitiesEquity, setTotalLiabilitiesEquity] = useState(0);
 
-  // Automatically set today's date
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setSelectedDate(today);
@@ -58,8 +54,7 @@ function BalanceSheet() {
       setLoadingVendors(true);
       console.log("📋 Loading vendors from liabilities...");
       
-      // const response = await fetch(`http://localhost:5000/api/chart-of-accounts/liabilities`);
-      const response =await fetch (`https://debug-nxby.vercel.app/api/chart-of-accounts/liabilities`)
+      const response = await fetch(`https://debug-nxby.vercel.app/api/chart-of-accounts/liabilities`);
       const data = await response.json();
       
       if (!data.success) {
@@ -70,15 +65,60 @@ function BalanceSheet() {
       const vendorList = liabilities.filter((liability) => liability.type === "PAYABLES");
       
       setVendors(vendorList);
-      console.log(`✅ Loaded ${vendorList.length} vendors from liabilities:`);
-      vendorList.forEach(v => {
-        console.log(`   - ${v.name} (${v.code}): Balance = ${v.balance || 0}`);
-      });
+      console.log(`✅ Loaded ${vendorList.length} vendors from liabilities`);
     } catch (err) {
       console.error("❌ Error loading vendors:", err);
       setVendors([]);
     } finally {
       setLoadingVendors(false);
+    }
+  };
+
+  const loadClosingStock = async () => {
+    try {
+      console.log("📦 Fetching Closing Stock from /products/get-stock...");
+      
+      const response = await fetch(`https://debug-nxby.vercel.app/api/products/get-stock`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log("📦 Stock API response:", data);
+      
+      // Handle response format: { success: true, summary: {...}, data: [...] }
+      if (!data.success) {
+        console.warn("❌ API returned success: false");
+        setClosingStock(0);
+        return 0;
+      }
+      
+      let totalClosingStock = 0;
+      
+      // Get products array from data
+      const products = data.data || [];
+      
+      console.log(`📦 Processing ${products.length} products`);
+      
+      // Calculate total closing stock from balanceAmount
+      totalClosingStock = products.reduce((sum, product) => {
+        const balance = product.balanceAmount || 0;
+        console.log(`  - ${product.productName}: ${balance}`);
+        return sum + balance;
+      }, 0);
+      
+      console.log(`📦 Total Closing Stock (balanceAmount): ${totalClosingStock}`);
+      console.log(`📦 Calculated from ${products.length} products`);
+      
+      setClosingStock(totalClosingStock);
+      return totalClosingStock;
+    } catch (err) {
+      console.error("❌ Error loading closing stock:", err);
+      console.error("❌ Error details:", err.message);
+      setClosingStock(0);
+      return 0;
     }
   };
 
@@ -89,11 +129,11 @@ function BalanceSheet() {
       
       const asOfDate = new Date(selectedDate);
       console.log("📊 Fetching Balance Sheet as of:", asOfDate.toLocaleDateString());
-      console.log("📊 Available vendors:", vendors.length);
 
-      // Fetch all accounts from Trial Balance/Ledger
-      // const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
-      const accountsResponse =await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`)
+      // Load closing stock first
+      const stockValue = await loadClosingStock();
+
+      const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) {
@@ -102,7 +142,6 @@ function BalanceSheet() {
 
       console.log(`✅ Loaded ${accountsData.count} accounts from ledger`);
 
-      // Categorize accounts
       const currentAssetsList = [];
       const fixedAssetsList = [];
       const otherAssetsList = [];
@@ -110,35 +149,29 @@ function BalanceSheet() {
       const longTermLiabilitiesList = [];
       const equityList = [];
 
-      // First, add all vendors to current liabilities with their CLOSING balance from ledger
+      // Load vendor balances from ledger
       for (const vendor of vendors) {
         try {
-          // Fetch vendor's ledger to get closing balance
           const params = new URLSearchParams({
             accountCode: vendor.code || "",
             accountName: vendor.name || "",
-            fromDate: "2020-01-01", // Get all transactions
+            fromDate: "2020-01-01",
             toDate: selectedDate,
           });
 
           const ledgerResponse = await fetch(
-            // `http://localhost:5000/api/ledgers/account-ledger?${params}`
-            `https://debug-nxby.vercel.app/api/account-ledger?${params}`
+            `https://debug-nxby.vercel.app/api/ledgers/account-ledger?${params}`
           );
           const ledgerData = await ledgerResponse.json();
 
           let vendorBalance = 0;
           
           if (ledgerData.success && ledgerData.data) {
-            // Get closing balance from ledger summary
             vendorBalance = Math.abs(ledgerData.data.summary?.closingBalance || 0);
-            console.log(`📋 Vendor ${vendor.name} (${vendor.code}) - Ledger Closing Balance: ${vendorBalance}`);
           }
           
-          // If no balance from ledger, try vendor record balance
           if (vendorBalance === 0) {
             vendorBalance = Math.abs(vendor.balance || 0);
-            console.log(`   Fallback to vendor record balance: ${vendorBalance}`);
           }
           
           const vendorData = {
@@ -146,7 +179,7 @@ function BalanceSheet() {
             name: `${vendor.name} (${vendor.code})`,
             originalName: vendor.name,
             type: 'PAYABLES',
-            balance: vendorBalance, 
+            balance: vendorBalance,
             category: 'Liabilities',
             vendorInfo: vendor,
             isVendor: true
@@ -155,7 +188,6 @@ function BalanceSheet() {
           currentLiabilitiesList.push(vendorData);
         } catch (err) {
           console.error(`Error loading ledger for vendor ${vendor.name}:`, err);
-          // Add vendor with zero balance if ledger fetch fails
           currentLiabilitiesList.push({
             code: vendor.code,
             name: `${vendor.name} (${vendor.code})`,
@@ -169,30 +201,29 @@ function BalanceSheet() {
         }
       }
 
-      // Then process other accounts from trial balance
+      // Process other accounts
       accountsData.data.forEach(account => {
         const balance = account.balance || 0;
         const absBalance = Math.abs(balance);
         
-        // Check if this is a vendor account
+        // Skip vendor accounts (already loaded above)
         const isVendorAccount = account.category === 'Liabilities' && 
                                (account.type === 'PAYABLES' || account.type?.toLowerCase().includes('payable'));
         
-        // Skip if it's a vendor (already added) or zero balance non-vendor
         if (isVendorAccount) {
-          console.log(`⏭️ Skipping vendor account from trial balance: ${account.name} (already added from vendors)`);
+          console.log(`⏭️ Skipping vendor account: ${account.name}`);
           return;
         }
         
+        // Skip zero balance accounts
         if (absBalance === 0) {
           console.log(`⏭️ Skipping zero balance account: ${account.name}`);
           return;
         }
 
-        // Get proper display name
         let displayName = account.name || account.accountName || 'Unknown Account';
         
-        // If it's a customer (Asset/Receivables), show customer name
+        // Mark customer accounts
         if (account.category === 'Assets' && (account.type === 'RECEIVABLES' || account.type?.toLowerCase().includes('receivable'))) {
           displayName = `${displayName} (Customer)`;
         }
@@ -207,32 +238,27 @@ function BalanceSheet() {
           isVendor: false
         };
 
-        // Categorize by account category and type
         if (account.category === 'Assets') {
           const typeLower = (account.type || '').toLowerCase();
           
-          // Skip inventory/stock accounts (not shown on Balance Sheet)
+          // Skip inventory/stock accounts (will be replaced by closing stock)
           if (typeLower.includes('inventory') || 
               typeLower.includes('stock') ||
-              typeLower.includes('raw material')) {
+              typeLower.includes('raw material') ||
+              typeLower.includes('purchases')) {
             console.log(`⏭️ Skipping inventory account: ${account.name}`);
             return;
           }
           
+          // Categorize as current or fixed assets
           if (typeLower.includes('current') || 
               typeLower.includes('cash') || 
               typeLower.includes('bank') ||
               typeLower.includes('receivable') ||
               typeLower === 'receivables') {
             currentAssetsList.push(accountData);
-          } else if (typeLower.includes('fixed') || 
-                     typeLower.includes('property') ||
-                     typeLower.includes('equipment') ||
-                     typeLower.includes('building') ||
-                     typeLower.includes('furniture')) {
-            fixedAssetsList.push(accountData);
           } else {
-            otherAssetsList.push(accountData);
+            fixedAssetsList.push(accountData);
           }
         } else if (account.category === 'Liabilities') {
           const typeLower = (account.type || '').toLowerCase();
@@ -249,17 +275,20 @@ function BalanceSheet() {
         }
       });
 
-      console.log("📋 Categorization complete:", {
-        currentAssets: currentAssetsList.length,
-        fixedAssets: fixedAssetsList.length,
-        otherAssets: otherAssetsList.length,
-        currentLiabilities: currentLiabilitiesList.length,
-        vendors: currentLiabilitiesList.filter(l => l.isVendor).length,
-        longTermLiabilities: longTermLiabilitiesList.length,
-        equity: equityList.length
+      // Add Closing Stock to Current Assets (always, even if 0)
+      currentAssetsList.push({
+        code: 'CLOSING_STOCK',
+        name: 'Closing Stock (Inventory)',
+        originalName: 'Closing Stock',
+        type: 'INVENTORY',
+        balance: stockValue,
+        category: 'Assets',
+        isClosingStock: true
       });
 
-      // Set state
+      console.log(`📦 Added Closing Stock to Current Assets: ${stockValue}`);
+
+      // Set states
       setCurrentAssets(currentAssetsList);
       setFixedAssets(fixedAssetsList);
       setOtherAssets(otherAssetsList);
@@ -270,8 +299,7 @@ function BalanceSheet() {
       // Calculate totals
       const currentAssetsTotal = currentAssetsList.reduce((sum, acc) => sum + acc.balance, 0);
       const fixedAssetsTotal = fixedAssetsList.reduce((sum, acc) => sum + acc.balance, 0);
-      const otherAssetsTotal = otherAssetsList.reduce((sum, acc) => sum + acc.balance, 0);
-      const assetsTotal = currentAssetsTotal + fixedAssetsTotal + otherAssetsTotal;
+      const assetsTotal = currentAssetsTotal + fixedAssetsTotal;
 
       const currentLiabilitiesTotal = currentLiabilitiesList.reduce((sum, acc) => sum + acc.balance, 0);
       const longTermLiabilitiesTotal = longTermLiabilitiesList.reduce((sum, acc) => sum + acc.balance, 0);
@@ -282,7 +310,7 @@ function BalanceSheet() {
 
       setTotalCurrentAssets(currentAssetsTotal);
       setTotalFixedAssets(fixedAssetsTotal);
-      setTotalOtherAssets(otherAssetsTotal);
+      setTotalOtherAssets(0);
       setTotalAssets(assetsTotal);
 
       setTotalCurrentLiabilities(currentLiabilitiesTotal);
@@ -292,9 +320,16 @@ function BalanceSheet() {
       setTotalEquity(equityTotal);
       setTotalLiabilitiesEquity(liabilitiesEquityTotal);
 
-      console.log("💰 Totals calculated:", {
+      console.log("💰 Balance Sheet Totals:", {
+        currentAssets: currentAssetsTotal,
+        fixedAssets: fixedAssetsTotal,
         totalAssets: assetsTotal,
+        currentLiabilities: currentLiabilitiesTotal,
+        longTermLiabilities: longTermLiabilitiesTotal,
+        totalLiabilities: liabilitiesTotal,
+        equity: equityTotal,
         totalLiabilitiesEquity: liabilitiesEquityTotal,
+        closingStock: stockValue,
         balanced: Math.abs(assetsTotal - liabilitiesEquityTotal) < 0.01
       });
 
@@ -331,7 +366,7 @@ function BalanceSheet() {
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "20px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      {/* Date Picker Section */}
+      {/* Header Controls */}
       <div style={{ 
         marginBottom: "30px", 
         padding: "20px",
@@ -416,11 +451,9 @@ function BalanceSheet() {
             ⏳ Loading vendor information...
           </div>
         )}
-        {!loadingVendors && vendors.length > 0 && (
-          <div style={{ marginTop: "10px", fontSize: "12px", color: "#198754" }}>
-            ✅ Loaded {vendors.length} vendors from liabilities
-          </div>
-        )}
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "#198754", fontWeight: "600" }}>
+          📦 Closing Stock Value: {formatCurrency(closingStock)}
+        </div>
       </div>
 
       {/* Error Message */}
@@ -437,7 +470,7 @@ function BalanceSheet() {
         </div>
       )}
 
-      {/* Balance Sheet Title */}
+      {/* Title */}
       <h2 style={{
         color: "#2c5ca9",
         textAlign: "center",
@@ -451,7 +484,6 @@ function BalanceSheet() {
         Balance Sheet
       </h2>
 
-      {/* Date Range */}
       <p style={{
         textAlign: "center",
         fontWeight: "500",
@@ -462,6 +494,7 @@ function BalanceSheet() {
         {formatDate()}
       </p>
 
+      {/* Loading State */}
       {loading ? (
         <div style={{ 
           textAlign: "center", 
@@ -482,7 +515,7 @@ function BalanceSheet() {
         </div>
       ) : (
         <>
-          {/* ========== ASSETS ========== */}
+          {/* ASSETS SECTION */}
           <div style={{
             backgroundColor: "#3f64a8",
             color: "white",
@@ -493,7 +526,7 @@ function BalanceSheet() {
             Assets
           </div>
 
-          {/* CURRENT ASSETS */}
+          {/* Current Assets */}
           <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "10px" }}>
             Current Assets
           </div>
@@ -505,17 +538,24 @@ function BalanceSheet() {
                   display: "flex",
                   justifyContent: "space-between",
                   padding: "6px 15px 6px 0",
-                  borderBottom: "1px solid #f0f0f0"
+                  borderBottom: "1px solid #f0f0f0",
+                  backgroundColor: asset.isClosingStock ? "#f0fff4" : "#fff"
                 }}>
-                  <span style={{ fontSize: "15px", color: "#000" }}>
+                  <span style={{ fontSize: "15px", color: "#000", fontWeight: asset.isClosingStock ? "600" : "normal" }}>
                     {asset.name}
+                    {asset.isClosingStock && (
+                      <span style={{ fontSize: "11px", color: "#16a34a", marginLeft: "8px" }}>
+                        [From Products Stock]
+                      </span>
+                    )}
                   </span>
                   <span style={{
                     fontSize: "15px",
-                    color: "#000",
+                    color: asset.isClosingStock ? "#16a34a" : "#000",
                     fontFamily: "monospace",
                     minWidth: "120px",
-                    textAlign: "right"
+                    textAlign: "right",
+                    fontWeight: asset.isClosingStock ? "600" : "normal"
                   }}>
                     {formatCurrency(asset.balance)}
                   </span>
@@ -540,7 +580,7 @@ function BalanceSheet() {
             <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalCurrentAssets)}</span>
           </div>
 
-          {/* FIXED ASSETS */}
+          {/* Fixed Assets */}
           <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
             Fixed (Long-Term) Assets
           </div>
@@ -587,52 +627,7 @@ function BalanceSheet() {
             <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalFixedAssets)}</span>
           </div>
 
-          {/* OTHER ASSETS */}
-          {otherAssets.length > 0 && (
-            <>
-              <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
-                Other Assets
-              </div>
-
-              <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-                {otherAssets.map((asset, index) => (
-                  <div key={index} style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "6px 15px 6px 0",
-                    borderBottom: "1px solid #f0f0f0"
-                  }}>
-                    <span style={{ fontSize: "15px", color: "#000" }}>
-                      {asset.name}
-                    </span>
-                    <span style={{
-                      fontSize: "15px",
-                      color: "#000",
-                      fontFamily: "monospace",
-                      minWidth: "120px",
-                      textAlign: "right"
-                    }}>
-                      {formatCurrency(asset.balance)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "10px 15px",
-                backgroundColor: "#f8f9fa",
-                fontWeight: "600",
-                borderTop: "1px solid #dee2e6"
-              }}>
-                <span>Total Other Assets</span>
-                <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalOtherAssets)}</span>
-              </div>
-            </>
-          )}
-
-          {/* TOTAL ASSETS */}
+          {/* Total Assets */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -648,7 +643,7 @@ function BalanceSheet() {
             <span style={{ fontFamily: "monospace", color: "#0f5132" }}>{formatCurrency(totalAssets)}</span>
           </div>
 
-          {/* ========== LIABILITIES & EQUITY ========== */}
+          {/* LIABILITIES & EQUITY SECTION */}
           <div style={{
             backgroundColor: "#3f64a8",
             color: "white",
@@ -660,7 +655,7 @@ function BalanceSheet() {
             Liabilities and Owner's Equity
           </div>
 
-          {/* CURRENT LIABILITIES */}
+          {/* Current Liabilities */}
           <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "10px" }}>
             Current Liabilities ({vendorCount} vendors)
           </div>
@@ -714,7 +709,7 @@ function BalanceSheet() {
             <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalCurrentLiabilities)}</span>
           </div>
 
-          {/* LONG TERM LIABILITIES */}
+          {/* Long-Term Liabilities */}
           {longTermLiabilities.length > 0 && (
             <>
               <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
@@ -759,7 +754,7 @@ function BalanceSheet() {
             </>
           )}
 
-          {/* OWNER'S EQUITY */}
+          {/* Owner's Equity */}
           <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
             Owner's Equity
           </div>
@@ -806,7 +801,7 @@ function BalanceSheet() {
             <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalEquity)}</span>
           </div>
 
-          {/* TOTAL LIABILITIES & EQUITY */}
+          {/* Total Liabilities & Equity */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
