@@ -58,7 +58,8 @@ function BalanceSheet() {
       setLoadingVendors(true);
       console.log("📋 Loading vendors from liabilities...");
       
-      const response = await fetch(`http://localhost:5000/api/chart-of-accounts/liabilities`);
+      // const response = await fetch(`http://localhost:5000/api/chart-of-accounts/liabilities`);
+      const response =await fetch (`https://debug-nxby.vercel.app/api/chart-of-accounts/liabilities`)
       const data = await response.json();
       
       if (!data.success) {
