@@ -91,7 +91,8 @@ function BalanceSheet() {
       console.log("📊 Available vendors:", vendors.length);
 
       // Fetch all accounts from Trial Balance/Ledger
-      const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      // const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      const accountsResponse =await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`)
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) {
@@ -120,7 +121,8 @@ function BalanceSheet() {
           });
 
           const ledgerResponse = await fetch(
-            `http://localhost:5000/api/ledgers/account-ledger?${params}`
+            // `http://localhost:5000/api/ledgers/account-ledger?${params}`
+            `https://debug-nxby.vercel.app/api/account-ledger?${params}`
           );
           const ledgerData = await ledgerResponse.json();
 
