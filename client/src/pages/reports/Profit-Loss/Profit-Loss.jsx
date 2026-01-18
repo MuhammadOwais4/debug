@@ -1408,7 +1408,7 @@ function ProfitLoss() {
         alignItems: "center",
         borderRadius: "6px"
       }}>
-        <span>NET PROFIT (LOSS)</span>
+        <span>NET PROFIT/LOSS</span>
         <span style={{
           fontSize: "20px",
           fontFamily: "monospace",

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Calendar, RefreshCw, Printer } from "lucide-react";
 
 function BalanceSheet() {
-  const [selectedDate, setSelectedDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -34,20 +35,22 @@ function BalanceSheet() {
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
-    setSelectedDate(today);
+    const firstDayOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    setStartDate(firstDayOfYear);
+    setEndDate(today);
   }, []);
 
   useEffect(() => {
-    if (selectedDate) {
+    if (startDate && endDate) {
       loadVendors();
     }
-  }, [selectedDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
-    if (selectedDate && vendors.length >= 0) {
+    if (startDate && endDate && vendors.length >= 0) {
       loadBalanceSheetData();
     }
-  }, [selectedDate, vendors]);
+  }, [startDate, endDate, vendors]);
 
   const loadVendors = async () => {
     try {
@@ -88,7 +91,6 @@ function BalanceSheet() {
       
       console.log("📦 Stock API response:", data);
       
-      // Handle response format: { success: true, summary: {...}, data: [...] }
       if (!data.success) {
         console.warn("❌ API returned success: false");
         setClosingStock(0);
@@ -96,13 +98,10 @@ function BalanceSheet() {
       }
       
       let totalClosingStock = 0;
-      
-      // Get products array from data
       const products = data.data || [];
       
       console.log(`📦 Processing ${products.length} products`);
       
-      // Calculate total closing stock from balanceAmount
       totalClosingStock = products.reduce((sum, product) => {
         const balance = product.balanceAmount || 0;
         console.log(`  - ${product.productName}: ${balance}`);
@@ -127,8 +126,7 @@ function BalanceSheet() {
       setLoading(true);
       setError(null);
       
-      const asOfDate = new Date(selectedDate);
-      console.log("📊 Fetching Balance Sheet as of:", asOfDate.toLocaleDateString());
+      console.log(`📊 Fetching Balance Sheet from ${startDate} to ${endDate}`);
 
       // Load closing stock first
       const stockValue = await loadClosingStock();
@@ -155,8 +153,8 @@ function BalanceSheet() {
           const params = new URLSearchParams({
             accountCode: vendor.code || "",
             accountName: vendor.name || "",
-            fromDate: "2020-01-01",
-            toDate: selectedDate,
+            fromDate: startDate,
+            toDate: endDate,
           });
 
           const ledgerResponse = await fetch(
@@ -348,11 +346,16 @@ function BalanceSheet() {
     }).format(value || 0);
   };
 
-  const formatDate = () => {
-    if (!selectedDate) return "";
-    const date = new Date(selectedDate);
-    return `As of ${date.toLocaleDateString('en-US', { 
-      month: 'long', 
+  const formatDateRange = () => {
+    if (!startDate || !endDate) return "";
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return `From ${start.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    })} to ${end.toLocaleDateString('en-US', { 
+      month: 'short', 
       day: 'numeric', 
       year: 'numeric' 
     })}`;
@@ -374,7 +377,7 @@ function BalanceSheet() {
         borderRadius: "8px",
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "15px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "15px", flexWrap: "wrap" }}>
           <div style={{ flex: "1", minWidth: "200px" }}>
             <label style={{ 
               display: "block",
@@ -384,12 +387,37 @@ function BalanceSheet() {
               fontSize: "14px"
             }}>
               <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
-              As of Date:
+              Start Date:
             </label>
             <input
               type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "2px solid #dee2e6",
+                borderRadius: "6px",
+                fontSize: "14px",
+                fontWeight: "500"
+              }}
+            />
+          </div>
+          <div style={{ flex: "1", minWidth: "200px" }}>
+            <label style={{ 
+              display: "block",
+              marginBottom: "8px", 
+              fontWeight: "600",
+              color: "#495057",
+              fontSize: "14px"
+            }}>
+              <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
+              End Date:
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -405,7 +433,7 @@ function BalanceSheet() {
               loadVendors();
               loadBalanceSheetData();
             }}
-            disabled={loading || loadingVendors || !selectedDate}
+            disabled={loading || loadingVendors || !startDate || !endDate}
             style={{
               padding: "10px 20px",
               backgroundColor: loading || loadingVendors ? "#6c757d" : "#0d6efd",
@@ -446,14 +474,6 @@ function BalanceSheet() {
             Print
           </button>
         </div>
-        {loadingVendors && (
-          <div style={{ marginTop: "10px", fontSize: "12px", color: "#6c757d" }}>
-            ⏳ Loading vendor information...
-          </div>
-        )}
-        <div style={{ marginTop: "10px", fontSize: "12px", color: "#198754", fontWeight: "600" }}>
-          📦 Closing Stock Value: {formatCurrency(closingStock)}
-        </div>
       </div>
 
       {/* Error Message */}
@@ -491,7 +511,7 @@ function BalanceSheet() {
         color: "#6c757d",
         marginBottom: "40px"
       }}>
-        {formatDate()}
+        {formatDateRange()}
       </p>
 
       {/* Loading State */}
@@ -794,7 +814,7 @@ function BalanceSheet() {
             justifyContent: "space-between",
             padding: "10px 15px",
             backgroundColor: "#f8f9fa",
-            fontWeight: "600",
+             fontWeight: "600",
             borderTop: "1px solid #dee2e6"
           }}>
             <span>Total Owner's Equity</span>
