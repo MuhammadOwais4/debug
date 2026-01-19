@@ -25,7 +25,6 @@ function ProfitLoss() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Automatically set today's date when component loads
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setSelectedDate(today);
@@ -49,10 +48,7 @@ function ProfitLoss() {
       console.log("📅 Fetching data for year:", year);
       console.log("🔍 Date range:", startDate, "to", endDate);
 
-      // Fetch Trial Balance accounts for Opening Stock
-      console.log("📊 Fetching Trial Balance accounts...");
-      // const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
-      const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
+      const accountsResponse = await fetch(`${ApiHandler.baseURL}/ledgers/accounts`);
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) {
@@ -61,7 +57,6 @@ function ProfitLoss() {
 
       console.log(`✅ Loaded ${accountsData.count} accounts from Trial Balance`);
 
-      // Find Stock account from Trial Balance and get its balance
       let openingStockValue = 0;
       const stockAccount = accountsData.data.find(acc => 
         acc.name?.toUpperCase().includes('STOCK') || 
@@ -83,7 +78,6 @@ function ProfitLoss() {
 
       setOpeningStock(openingStockValue);
 
-      // Fetch sales data with filters
       const salesResponse = await ApiHandler.getSales({
         startDate,
         endDate
@@ -91,7 +85,6 @@ function ProfitLoss() {
       
       console.log("📊 Sales Response:", salesResponse);
 
-      // Handle API response structure
       let salesData = [];
       if (salesResponse && salesResponse.success && Array.isArray(salesResponse.data)) {
         salesData = salesResponse.data;
@@ -104,7 +97,6 @@ function ProfitLoss() {
       console.log("✅ Processed Sales Data:", salesData.length, "records");
       setSales(salesData);
       
-      // Calculate total sales from totalAmount field
       const salesTotal = salesData.reduce((sum, sale) => {
         const amount = sale.totalAmount || 0;
         return sum + amount;
@@ -113,14 +105,12 @@ function ProfitLoss() {
       console.log("💰 Total Sales Calculated:", salesTotal);
       setTotalSales(salesTotal);
 
-      // Fetch sale returns
       const returnsResponse = await ApiHandler.getReturns({
         startDate,
         endDate
       });
       console.log("🔄 Returns Response:", returnsResponse);
 
-      // Handle returns response structure
       let returnsData = [];
       if (returnsResponse && returnsResponse.success && Array.isArray(returnsResponse.data)) {
         returnsData = returnsResponse.data;
@@ -133,7 +123,6 @@ function ProfitLoss() {
       console.log("✅ Processed Returns Data:", returnsData.length, "records");
       setSaleReturns(returnsData);
 
-      // Calculate total returns (using refundAmount)
       const returnsTotal = returnsData.reduce((sum, returnItem) => {
         return sum + (returnItem.refundAmount || 0);
       }, 0);
@@ -141,11 +130,9 @@ function ProfitLoss() {
       console.log("🔙 Total Returns Calculated:", returnsTotal);
       setTotalReturns(returnsTotal);
 
-      // Fetch sale discounts
       const discountsResponse = await ApiHandler.getSaleDiscounts();
       console.log("🎯 Discounts Response:", discountsResponse);
       
-      // Handle discounts response structure
       let discountsData = [];
       if (discountsResponse && discountsResponse.success && Array.isArray(discountsResponse.data)) {
         discountsData = discountsResponse.data;
@@ -155,7 +142,6 @@ function ProfitLoss() {
         discountsData = discountsResponse;
       }
       
-      // Filter discounts for the selected year
       const yearDiscounts = discountsData.filter(discount => {
         const discountDate = new Date(discount.date);
         const discountYear = discountDate.getFullYear();
@@ -165,7 +151,6 @@ function ProfitLoss() {
       console.log("✅ Filtered Discounts:", yearDiscounts.length, "records for year", year);
       setSaleDiscounts(yearDiscounts);
       
-      // Calculate total discounts using creditAmount
       const discountsTotal = yearDiscounts.reduce((sum, discount) => {
         return sum + (discount.creditAmount || 0);
       }, 0);
@@ -173,7 +158,6 @@ function ProfitLoss() {
       console.log("💸 Total Discounts Calculated:", discountsTotal);
       setTotalDiscounts(discountsTotal);
 
-      // Fetch Chart of Accounts - Expenses to get all expense account codes
       let expenseAccountCodes = new Set();
       let stockAccountCode = null;
       
@@ -189,7 +173,6 @@ function ProfitLoss() {
           chartExpenses = chartExpensesResponse;
         }
         
-        // Extract all expense account codes
         chartExpenses.forEach(exp => {
           if (exp.code) {
             expenseAccountCodes.add(exp.code);
@@ -201,7 +184,6 @@ function ProfitLoss() {
         console.warn("⚠️ Could not load chart of accounts, will use debit logic only");
       }
 
-      // Get Stock account code from Assets
       try {
         const chartAssetsResponse = await ApiHandler.getAssets();
         let chartAssets = [];
@@ -228,14 +210,12 @@ function ProfitLoss() {
         console.warn("⚠️ Could not load assets chart");
       }
 
-      // Fetch expenses from vouchers (CPV & BPV - Cash/Bank Payment Vouchers with DR entries)
       const vouchersResponse = await ApiHandler.getVouchers({
         startDate,
         endDate
       });
       console.log("💼 Vouchers Response:", vouchersResponse);
 
-      // Handle vouchers response structure
       let vouchersData = [];
       if (vouchersResponse && vouchersResponse.success && Array.isArray(vouchersResponse.data)) {
         vouchersData = vouchersResponse.data;
@@ -247,9 +227,8 @@ function ProfitLoss() {
 
       console.log("✅ Total Vouchers Found:", vouchersData.length);
 
-      // Extract expense entries from CPV, BPV, and JV vouchers
       let expensesData = [];
-      const processedVoucherEntries = new Set(); // Track to avoid duplicates
+      const processedVoucherEntries = new Set();
       
       console.log("🔍 Processing vouchers for expenses...");
       
@@ -267,7 +246,7 @@ function ProfitLoss() {
               const entryKey = `${voucher.voucherNo}-${entry.serialNo || idx}`;
               
               if (processedVoucherEntries.has(entryKey)) {
-                return; // Skip duplicate
+                return;
               }
               
               const isDebit = (entry.debitAmount && entry.debitAmount > 0);
@@ -298,7 +277,6 @@ function ProfitLoss() {
               
               const isExpenseAccount = isExpenseByCode || isExpenseByName;
               
-              // Skip Stock account from JV (goes to COGS, not expenses)
               const isStockAccount = stockAccountCode && accountCode === stockAccountCode;
               
               if (isDebit && isExpenseAccount && !isStockAccount) {
@@ -382,7 +360,6 @@ function ProfitLoss() {
       console.log("✅ Total Expense Entries Found:", expensesData.length);
       setExpenses(expensesData);
 
-      // Calculate total expenses
       const expensesTotal = expensesData.reduce((sum, expense) => {
         return sum + (expense.amount || 0);
       }, 0);
@@ -390,7 +367,6 @@ function ProfitLoss() {
       console.log("💵 Total Expenses Calculated:", expensesTotal);
       setTotalExpenses(expensesTotal);
 
-      // Fetch Revenue accounts from Chart of Accounts
       let revenueAccountCodes = new Set();
       let saleAccountCodes = new Set();
       try {
@@ -422,7 +398,6 @@ function ProfitLoss() {
         console.warn("⚠️ Could not load revenue chart");
       }
 
-      // Fetch Income from Other Sources from CRV & BRV vouchers
       let otherIncomeData = [];
       
       for (const voucher of vouchersData) {
@@ -483,7 +458,6 @@ function ProfitLoss() {
       console.log("💰 Total Other Income Calculated:", otherIncomeTotal);
       setTotalOtherIncome(otherIncomeTotal);
 
-      // Fetch products for COGS calculation
       const productsResponse = await ApiHandler.getProducts();
       let productsData = [];
       
@@ -498,7 +472,6 @@ function ProfitLoss() {
       console.log("📦 Products fetched:", productsData.length);
       setProducts(productsData);
 
-      // Calculate Total Purchases
       const purchasesValue = productsData.reduce((sum, product) => {
         return sum + (product.purchaseAmount || 0);
       }, 0);
@@ -506,7 +479,6 @@ function ProfitLoss() {
       console.log("💰 Total Purchases:", purchasesValue);
       setPurchases(purchasesValue);
 
-      // Calculate Closing Stock
       const closingStockValue = productsData.reduce((sum, product) => {
         return sum + (product.balanceAmount || 0);
       }, 0);
@@ -514,7 +486,6 @@ function ProfitLoss() {
       console.log("📦 Closing Stock:", closingStockValue);
       setClosingStock(closingStockValue);
 
-      // Get Purchase Returns
       try {
         const productsWithReturns = productsData.filter(product => 
           product.ReturnQuantity && product.ReturnQuantity > 0
@@ -535,7 +506,6 @@ function ProfitLoss() {
         setTotalPurchaseReturns(0);
       }
 
-      // Get Purchase Discounts
       try {
         const purchaseDiscountsResponse = await ApiHandler.getPurchaseDiscounts();
         
@@ -571,7 +541,6 @@ function ProfitLoss() {
     } catch (error) {
       console.error("❌ Error loading revenue data:", error);
       setError(error.message || "Failed to load revenue data");
-      // Set defaults on error
       setSales([]);
       setSaleReturns([]);
       setSaleDiscounts([]);
@@ -616,7 +585,6 @@ function ProfitLoss() {
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "20px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      {/* Date Picker Section */}
       <div style={{ 
         marginBottom: "30px", 
         padding: "20px",
@@ -679,7 +647,6 @@ function ProfitLoss() {
         )}
       </div>
 
-      {/* Error Message */}
       {error && (
         <div style={{
           padding: "15px",
@@ -693,7 +660,6 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Income Statement Heading */}
       <h2 style={{ 
         color: "#2c5ca9", 
         textAlign: "center",
@@ -705,7 +671,6 @@ function ProfitLoss() {
         Income Statement
       </h2>
 
-      {/* Years Line */}
       <p style={{ 
         textAlign: "center",
         fontWeight: "500",
@@ -716,7 +681,6 @@ function ProfitLoss() {
         {formatYearText()}
       </p>
 
-      {/* Revenue Section */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -867,7 +831,6 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Cost of Goods Sold */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -1097,7 +1060,6 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Expenses Section */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -1125,61 +1087,71 @@ function ProfitLoss() {
         }}>
           {expenses.length > 0 ? (
             <>
-              {expenses.map((expense, index) => {
-                return (
-                  <div 
-                    key={expense.voucherNo + '-' + index}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "8px 0",
-                      alignItems: "center"
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <span style={{ 
-                        fontSize: "15px", 
-                        color: "#000",
-                        display: "block"
-                      }}>
-                        {expense.accountName}
-                        {expense.accountCode && ` (${expense.accountCode})`}
-                        {expense.voucherType && (
-                          <span style={{ 
-                            fontSize: "11px", 
-                            color: "#666",
-                            marginLeft: "8px",
-                            padding: "2px 6px",
-                            backgroundColor: "#f0f0f0",
-                            borderRadius: "3px"
-                          }}>
-                            {expense.voucherType}
-                          </span>
-                        )}
-                      </span>
-                      {expense.description && (
+              {(() => {
+                const groupedExpenses = {};
+                
+                expenses.forEach(expense => {
+                  const key = `${expense.accountName}-${expense.accountCode}`;
+                  
+                  if (groupedExpenses[key]) {
+                    groupedExpenses[key].amount += expense.amount;
+                    groupedExpenses[key].count += 1;
+                  } else {
+                    groupedExpenses[key] = {
+                      accountName: expense.accountName,
+                      accountCode: expense.accountCode,
+                      amount: expense.amount,
+                      count: 1
+                    };
+                  }
+                });
+                
+                return Object.values(groupedExpenses).map((expense, index) => {
+                  return (
+                    <div 
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "8px 0",
+                        alignItems: "center"
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
                         <span style={{ 
-                          fontSize: "12px", 
-                          color: "#666",
-                          display: "block",
-                          marginTop: "2px"
+                          fontSize: "15px", 
+                          color: "#000",
+                          display: "block"
                         }}>
-                          {expense.description}
+                          {expense.accountName}
+                          {expense.accountCode && ` (${expense.accountCode})`}
+                          {expense.count > 1 && (
+                            <span style={{ 
+                              fontSize: "11px", 
+                              color: "#666",
+                              marginLeft: "8px",
+                              padding: "2px 6px",
+                              backgroundColor: "#e3f2fd",
+                              borderRadius: "3px"
+                            }}>
+                              {expense.count} entries
+                            </span>
+                          )}
                         </span>
-                      )}
+                      </div>
+                      <span style={{ 
+                        fontSize: "15px",
+                        color: "#000",
+                        fontFamily: "monospace",
+                        minWidth: "120px",
+                        textAlign: "right"
+                      }}>
+                        {formatCurrency(expense.amount)}
+                      </span>
                     </div>
-                    <span style={{ 
-                      fontSize: "15px",
-                      color: "#000",
-                      fontFamily: "monospace",
-                      minWidth: "120px",
-                      textAlign: "right"
-                    }}>
-                      {formatCurrency(expense.amount)}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
 
               <div style={{
                 display: "flex",
@@ -1246,7 +1218,6 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Other Income Section */}
       <div style={{
         backgroundColor: "#3f64a8",
         color: "white",
@@ -1274,61 +1245,71 @@ function ProfitLoss() {
         }}>
           {otherIncome.length > 0 ? (
             <>
-              {otherIncome.map((income, index) => {
-                return (
-                  <div 
-                    key={income.voucherNo + '-' + index}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "8px 0",
-                      alignItems: "center"
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <span style={{ 
-                        fontSize: "15px", 
-                        color: "#000",
-                        display: "block"
-                      }}>
-                        {income.accountName}
-                        {income.accountCode && ` (${income.accountCode})`}
-                        {income.voucherType && (
-                          <span style={{ 
-                            fontSize: "11px", 
-                            color: "#666",
-                            marginLeft: "8px",
-                            padding: "2px 6px",
-                            backgroundColor: "#d1f2eb",
-                            borderRadius: "3px"
-                          }}>
-                            {income.voucherType}
-                          </span>
-                        )}
-                      </span>
-                      {income.description && (
+              {(() => {
+                const groupedIncome = {};
+                
+                otherIncome.forEach(income => {
+                  const key = `${income.accountName}-${income.accountCode}`;
+                  
+                  if (groupedIncome[key]) {
+                    groupedIncome[key].amount += income.amount;
+                    groupedIncome[key].count += 1;
+                  } else {
+                    groupedIncome[key] = {
+                      accountName: income.accountName,
+                      accountCode: income.accountCode,
+                      amount: income.amount,
+                      count: 1
+                    };
+                  }
+                });
+                
+                return Object.values(groupedIncome).map((income, index) => {
+                  return (
+                    <div 
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "8px 0",
+                        alignItems: "center"
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
                         <span style={{ 
-                          fontSize: "12px", 
-                          color: "#666",
-                          display: "block",
-                          marginTop: "2px"
+                          fontSize: "15px", 
+                          color: "#000",
+                          display: "block"
                         }}>
-                          {income.description}
+                          {income.accountName}
+                          {income.accountCode && ` (${income.accountCode})`}
+                          {income.count > 1 && (
+                            <span style={{ 
+                              fontSize: "11px", 
+                              color: "#666",
+                              marginLeft: "8px",
+                              padding: "2px 6px",
+                              backgroundColor: "#d1f2eb",
+                              borderRadius: "3px"
+                            }}>
+                              {income.count} entries
+                            </span>
+                          )}
                         </span>
-                      )}
+                      </div>
+                      <span style={{ 
+                        fontSize: "15px",
+                        color: "#000",
+                        fontFamily: "monospace",
+                        minWidth: "120px",
+                        textAlign: "right"
+                      }}>
+                        {formatCurrency(income.amount)}
+                      </span>
                     </div>
-                    <span style={{ 
-                      fontSize: "15px",
-                      color: "#000",
-                      fontFamily: "monospace",
-                      minWidth: "120px",
-                      textAlign: "right"
-                    }}>
-                      {formatCurrency(income.amount)}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
 
               <div style={{
                 display: "flex",
@@ -1395,7 +1376,6 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Net Profit/Loss Section */}
       <div style={{
         backgroundColor: "#2c5ca9",
         color: "white",
@@ -1418,7 +1398,6 @@ function ProfitLoss() {
         </span>
       </div>
 
-      {/* Summary Cards */}
       {selectedDate && !loading && (
         <div style={{
           marginTop: "30px",
@@ -1473,7 +1452,14 @@ function ProfitLoss() {
                 PKR {formatCurrency(totalExpenses)}
               </div>
               <div style={{ fontSize: "12px", color: "#664d03", marginTop: "5px" }}>
-                {expenses.length} expense entries
+                {(() => {
+                  const grouped = {};
+                  expenses.forEach(e => {
+                    const k = `${e.accountName}-${e.accountCode}`;
+                    grouped[k] = true;
+                  });
+                  return Object.keys(grouped).length;
+                })()} unique accounts
               </div>
             </div>
 
@@ -1490,7 +1476,14 @@ function ProfitLoss() {
                 PKR {formatCurrency(totalOtherIncome)}
               </div>
               <div style={{ fontSize: "12px", color: "#084298", marginTop: "5px" }}>
-                {otherIncome.length} income entries
+                {(() => {
+                  const grouped = {};
+                  otherIncome.forEach(i => {
+                    const k = `${i.accountName}-${i.accountCode}`;
+                    grouped[k] = true;
+                  });
+                  return Object.keys(grouped).length;
+                })()} unique accounts
               </div>
             </div>
 
