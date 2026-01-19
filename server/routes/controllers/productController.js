@@ -79,7 +79,6 @@ const getProduct = async (req, res) => {
   }
 }
 
-// Create a new product
 const createProduct = async (req, res) => {
   try {
     const {
@@ -129,17 +128,27 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    if (serialNumber) {
-      const existingProduct = await Product.findOne({ serialNumber })
+    // Check for duplicate serial number ONLY if provided and not empty
+    if (serialNumber && serialNumber.trim() !== "") {
+      const existingProduct = await Product.findOne({ serialNumber: serialNumber.trim() })
       if (existingProduct) {
         return res.status(400).json({ message: "Serial number already exists" })
       }
     }
 
-    if (vendorBillNumber) {
-      const existingBill = await Product.findOne({ vendorBillNumber })
+    // Check for duplicate vendor bill number ONLY if provided and not empty
+    if (vendorBillNumber && vendorBillNumber.trim() !== "") {
+      const existingBill = await Product.findOne({ vendorBillNumber: vendorBillNumber.trim() })
       if (existingBill) {
         return res.status(400).json({ message: "Vendor bill number already exists" })
+      }
+    }
+
+    // Check for duplicate GRN ONLY if provided and not empty
+    if (grn && grn.trim() !== "") {
+      const existingGRN = await Product.findOne({ grn: grn.trim() })
+      if (existingGRN) {
+        return res.status(400).json({ message: "GRN already exists" })
       }
     }
 
@@ -159,13 +168,14 @@ const createProduct = async (req, res) => {
       purchaseType,
     }
 
-    if (serialNumber) productData.serialNumber = serialNumber
+    // Only add optional fields if they are provided and not empty
+    if (serialNumber && serialNumber.trim() !== "") productData.serialNumber = serialNumber.trim()
     if (expiryDate) productData.expiryDate = new Date(expiryDate)
     if (vendorName) productData.vendorName = vendorName
     if (vendorPhone) productData.vendorPhone = vendorPhone
-    if (vendorBillNumber) productData.vendorBillNumber = vendorBillNumber
+    if (vendorBillNumber && vendorBillNumber.trim() !== "") productData.vendorBillNumber = vendorBillNumber.trim()
     if (notes) productData.notes = notes
-    if (grn) productData.grn = grn
+    if (grn && grn.trim() !== "") productData.grn = grn.trim()
 
     const product = new Product(productData)
     const savedProduct = await product.save()
@@ -177,17 +187,28 @@ const createProduct = async (req, res) => {
   } catch (error) {
     console.error("Error creating product:", error)
     if (error.code === 11000) {
-      if (error.keyPattern?.name) {
-        res.status(400).json({ message: "Product name already exists" })
-      } else if (error.keyPattern?.serialNumber) {
-        res.status(400).json({ message: "Serial number already exists" })
-      } else if (error.keyPattern?.vendorBillNumber) {
-        res.status(400).json({ message: "Vendor bill number already exists" })
-      } else if (error.keyPattern?.grn) {
-        res.status(400).json({ message: "GRN already exists" })
-      } else {
-        res.status(400).json({ message: "Duplicate entry detected" })
+      // Handle duplicate key errors more specifically
+      const field = Object.keys(error.keyPattern)[0]
+      let message = "Duplicate entry detected"
+      
+      switch(field) {
+        case 'name':
+          message = "Product name already exists"
+          break
+        case 'serialNumber':
+          message = "Serial number already exists"
+          break
+        case 'vendorBillNumber':
+          message = "Vendor bill number already exists"
+          break
+        case 'grn':
+          message = "GRN already exists"
+          break
+        default:
+          message = `Duplicate ${field} detected`
       }
+      
+      res.status(400).json({ message })
     } else if (error.name === "ValidationError") {
       const validationErrors = Object.values(error.errors).map((err) => err.message)
       res.status(400).json({ message: "Validation error", errors: validationErrors })
@@ -197,7 +218,7 @@ const createProduct = async (req, res) => {
   }
 }
 
-// Update a product
+// Update a product - FIXED VERSION
 const updateProduct = async (req, res) => {
   try {
     const {
@@ -249,9 +270,10 @@ const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    if (serialNumber) {
+    // Check for duplicate serial number ONLY if provided, not empty, and different from current
+    if (serialNumber && serialNumber.trim() !== "") {
       const existingProduct = await Product.findOne({
-        serialNumber,
+        serialNumber: serialNumber.trim(),
         _id: { $ne: req.params.id },
       })
       if (existingProduct) {
@@ -259,13 +281,25 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    if (vendorBillNumber) {
+    // Check for duplicate vendor bill number ONLY if provided, not empty, and different from current
+    if (vendorBillNumber && vendorBillNumber.trim() !== "") {
       const existingBill = await Product.findOne({
-        vendorBillNumber,
+        vendorBillNumber: vendorBillNumber.trim(),
         _id: { $ne: req.params.id },
       })
       if (existingBill) {
         return res.status(400).json({ message: "Vendor bill number already exists" })
+      }
+    }
+
+    // Check for duplicate GRN ONLY if provided, not empty, and different from current
+    if (grn && grn.trim() !== "") {
+      const existingGRN = await Product.findOne({
+        grn: grn.trim(),
+        _id: { $ne: req.params.id },
+      })
+      if (existingGRN) {
+        return res.status(400).json({ message: "GRN already exists" })
       }
     }
 
@@ -276,7 +310,7 @@ const updateProduct = async (req, res) => {
 
     const updateData = {}
 
-    if (grn !== undefined) updateData.grn = grn
+    if (grn !== undefined) updateData.grn = grn && grn.trim() !== "" ? grn.trim() : null
     if (name !== undefined) updateData.name = name
     if (category !== undefined) updateData.category = category
     if (purchaseRate !== undefined) {
@@ -289,11 +323,11 @@ const updateProduct = async (req, res) => {
       const rate = purchaseRate !== undefined ? purchaseRate : currentProduct.purchaseRate
       updateData.balanceAmount = quantity * rate
     }
-    if (serialNumber !== undefined) updateData.serialNumber = serialNumber
+    if (serialNumber !== undefined) updateData.serialNumber = serialNumber && serialNumber.trim() !== "" ? serialNumber.trim() : null
     if (expiryDate !== undefined) updateData.expiryDate = expiryDate ? new Date(expiryDate) : null
     if (vendorName !== undefined) updateData.vendorName = vendorName
     if (vendorPhone !== undefined) updateData.vendorPhone = vendorPhone
-    if (vendorBillNumber !== undefined) updateData.vendorBillNumber = vendorBillNumber
+    if (vendorBillNumber !== undefined) updateData.vendorBillNumber = vendorBillNumber && vendorBillNumber.trim() !== "" ? vendorBillNumber.trim() : null
     if (notes !== undefined) updateData.notes = notes
     if (purchaseType !== undefined) updateData.purchaseType = purchaseType
 
@@ -312,17 +346,28 @@ const updateProduct = async (req, res) => {
   } catch (error) {
     console.error("Error updating product:", error)
     if (error.code === 11000) {
-      if (error.keyPattern?.name) {
-        res.status(400).json({ message: "Product name already exists" })
-      } else if (error.keyPattern?.serialNumber) {
-        res.status(400).json({ message: "Serial number already exists" })
-      } else if (error.keyPattern?.vendorBillNumber) {
-        res.status(400).json({ message: "Vendor bill number already exists" })
-      } else if (error.keyPattern?.grn) {
-        res.status(400).json({ message: "GRN already exists" })
-      } else {
-        res.status(400).json({ message: "Duplicate entry detected" })
+      // Handle duplicate key errors more specifically
+      const field = Object.keys(error.keyPattern)[0]
+      let message = "Duplicate entry detected"
+      
+      switch(field) {
+        case 'name':
+          message = "Product name already exists"
+          break
+        case 'serialNumber':
+          message = "Serial number already exists"
+          break
+        case 'vendorBillNumber':
+          message = "Vendor bill number already exists"
+          break
+        case 'grn':
+          message = "GRN already exists"
+          break
+        default:
+          message = `Duplicate ${field} detected`
       }
+      
+      res.status(400).json({ message })
     } else if (error.name === "ValidationError") {
       const validationErrors = Object.values(error.errors).map((err) => err.message)
       res.status(400).json({ message: "Validation error", errors: validationErrors })

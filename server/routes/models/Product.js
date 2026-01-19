@@ -14,6 +14,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       unique: true,
       default: generateGRN,
+      sparse: true,
       maxlength: [20, "GRN cannot exceed 20 characters"],
     },
     name: {
