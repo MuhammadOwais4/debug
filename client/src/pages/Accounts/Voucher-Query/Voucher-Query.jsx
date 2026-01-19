@@ -3,7 +3,8 @@ import { Search, Filter, Calendar, FileText, AlertCircle, Loader2 } from "lucide
 
 const ApiHandler = {
   getVouchers: async (filters) => {
-    const response = await fetch(`https://stock-management-system-lime.vercel.app/api/vouchers?${new URLSearchParams(filters)}`);
+    // const response = await fetch(`https://stock-management-system-lime.vercel.app/api/vouchers?${new URLSearchParams(filters)}`);
+    const response = await fetch(`https://debug-henna.vercel.app/api/vouchers?${new URLSearchParams(filters)}`);
     if (!response.ok) throw new Error("Failed to fetch vouchers");
     return await response.json();
   },
