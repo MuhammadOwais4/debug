@@ -48,7 +48,8 @@ function ProfitLoss() {
       console.log("📅 Fetching data for year:", year);
       console.log("🔍 Date range:", startDate, "to", endDate);
 
-      const accountsResponse = await fetch(`${ApiHandler.baseURL}/ledgers/accounts`);
+      // const accountsResponse = await fetch(`http://localhost:5000/api/ledgers/accounts`);
+      const accountsResponse = await ApiHandler("https://debug-nxby.vercel.app/api/ledgers/accounts");
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) {
