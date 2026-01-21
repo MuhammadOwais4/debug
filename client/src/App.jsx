@@ -492,7 +492,7 @@ const reportsDropdownRef = useRef(null);
         {activeTab === "ProfitLoss" && <ProfitLoss />}
         {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
         {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
-        {activeTab === "Product-Management" && <Product-Management />}
+        {activeTab === "Product Management" && <Product-Management />}
       
         
 
