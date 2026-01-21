@@ -27,6 +27,7 @@ import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
 import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers"
+import ProductManagementDashboard from "./pages/Product Management/Product-Management";
 
 // Sample initial data
 const initialProducts = [];
@@ -492,7 +493,7 @@ const reportsDropdownRef = useRef(null);
         {activeTab === "ProfitLoss" && <ProfitLoss />}
         {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
         {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
-        {activeTab === "Product Management" && <Product-Management />}
+        {activeTab === "Product Management" && <ProductManagementDashboard />}
       
         
 
