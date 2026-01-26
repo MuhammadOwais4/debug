@@ -133,6 +133,8 @@ const ProductManagementDashboard = () => {
     category: '',
     lowStock: '',
     vendorName: '',
+    startDate: '',
+    endDate: '',
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,12 +173,16 @@ const ProductManagementDashboard = () => {
           if (filters.category) cleanFilters.category = filters.category;
           if (filters.vendorName) cleanFilters.vendorName = filters.vendorName;
           if (filters.lowStock === 'true') cleanFilters.lowStock = 'true';
+          if (filters.startDate) cleanFilters.startDate = filters.startDate;
+          if (filters.endDate) cleanFilters.endDate = filters.endDate;
           data = await productAPI.getProducts(cleanFilters);
           break;
           
         case 'lowStock':
           if (filters.search) cleanFilters.search = filters.search;
           if (filters.category) cleanFilters.category = filters.category;
+          if (filters.startDate) cleanFilters.startDate = filters.startDate;
+          if (filters.endDate) cleanFilters.endDate = filters.endDate;
           cleanFilters.threshold = 5;
           data = await productAPI.getLowStockProducts(cleanFilters);
           break;
@@ -184,6 +190,8 @@ const ProductManagementDashboard = () => {
         case 'expiring':
           if (filters.search) cleanFilters.search = filters.search;
           if (filters.category) cleanFilters.category = filters.category;
+          if (filters.startDate) cleanFilters.startDate = filters.startDate;
+          if (filters.endDate) cleanFilters.endDate = filters.endDate;
           cleanFilters.days = 30;
           data = await productAPI.getExpiringProducts(cleanFilters);
           break;
@@ -191,6 +199,8 @@ const ProductManagementDashboard = () => {
         case 'expired':
           if (filters.search) cleanFilters.search = filters.search;
           if (filters.category) cleanFilters.category = filters.category;
+          if (filters.startDate) cleanFilters.startDate = filters.startDate;
+          if (filters.endDate) cleanFilters.endDate = filters.endDate;
           data = await productAPI.getExpiredProducts(cleanFilters);
           break;
           
@@ -236,6 +246,8 @@ const ProductManagementDashboard = () => {
       category: '',
       lowStock: '',
       vendorName: '',
+      startDate: '',
+      endDate: '',
     });
     setSearchQuery('');
     setTimeout(loadProducts, 100);
@@ -351,7 +363,7 @@ const ProductManagementDashboard = () => {
           {/* Advanced Filters */}
           {showFilters && (
             <div className="pt-4 border-t border-slate-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
                   <select
@@ -364,6 +376,17 @@ const ProductManagementDashboard = () => {
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Vendor Name</label>
+                  <input
+                    type="text"
+                    value={filters.vendorName}
+                    onChange={(e) => handleFilterChange('vendorName', e.target.value)}
+                    placeholder="Search vendor..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 
                 {activeTab === 'all' && (
@@ -379,14 +402,25 @@ const ProductManagementDashboard = () => {
                     </select>
                   </div>
                 )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Vendor Name</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">End Date</label>
                   <input
-                    type="text"
-                    value={filters.vendorName}
-                    onChange={(e) => handleFilterChange('vendorName', e.target.value)}
-                    placeholder="Search vendor..."
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => handleFilterChange('endDate', e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -452,7 +486,7 @@ const ProductManagementDashboard = () => {
               {activeTab === 'expired' && 'No expired products found'}
               {activeTab === 'all' && 'No products available. Try adjusting your filters.'}
             </p>
-            {(filters.search || filters.category || filters.vendorName) && (
+            {(filters.search || filters.category || filters.vendorName || filters.startDate || filters.endDate) && (
               <button
                 onClick={clearFilters}
                 className="text-blue-500 hover:text-blue-600 underline"

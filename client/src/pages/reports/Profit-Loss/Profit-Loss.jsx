@@ -3,7 +3,8 @@ import ApiHandler from "@/Api/apihandle";
 import { Calendar, RefreshCw, TrendingUp, DollarSign, Percent } from "lucide-react";
 
 function ProfitLoss() {
-  const [selectedDate, setSelectedDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [sales, setSales] = useState([]);
   const [saleDiscounts, setSaleDiscounts] = useState([]);
   const [saleReturns, setSaleReturns] = useState([]);
@@ -27,26 +28,26 @@ function ProfitLoss() {
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
-    setSelectedDate(today);
+    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    setStartDate(yearStart);
+    setEndDate(today);
   }, []);
 
-  useEffect(() => {
-    if (selectedDate) {
-      loadRevenueData();
-    }
-  }, [selectedDate]);
-
   const loadRevenueData = async () => {
+    if (!startDate || !endDate) {
+      setError("Please select both start and end dates");
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      setError("Start date cannot be after end date");
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      
-      const year = new Date(selectedDate).getFullYear();
-      const startDate = `${year}-01-01`;
-      const endDate = `${year}-12-31`;
 
-      console.log("📅 Fetching data for year:", year);
-      console.log("🔍 Date range:", startDate, "to", endDate);
 
       const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
       const accountsData = await accountsResponse.json();
@@ -142,16 +143,15 @@ function ProfitLoss() {
         discountsData = discountsResponse;
       }
       
-      const yearDiscounts = discountsData.filter(discount => {
+      const filteredDiscounts = discountsData.filter(discount => {
         const discountDate = new Date(discount.date);
-        const discountYear = discountDate.getFullYear();
-        return discountYear === year;
+        return discountDate >= new Date(startDate) && discountDate <= new Date(endDate);
       });
       
-      console.log("✅ Filtered Discounts:", yearDiscounts.length, "records for year", year);
-      setSaleDiscounts(yearDiscounts);
+      console.log("✅ Filtered Discounts:", filteredDiscounts.length, "records for date range");
+      setSaleDiscounts(filteredDiscounts);
       
-      const discountsTotal = yearDiscounts.reduce((sum, discount) => {
+      const discountsTotal = filteredDiscounts.reduce((sum, discount) => {
         return sum + (discount.creditAmount || 0);
       }, 0);
       
@@ -518,15 +518,15 @@ function ProfitLoss() {
           purchaseDiscountsData = purchaseDiscountsResponse;
         }
 
-        const yearPurchaseDiscounts = purchaseDiscountsData.filter(discount => {
-          const discountYear = new Date(discount.date).getFullYear();
-          return discountYear === year;
+        const filteredPurchaseDiscounts = purchaseDiscountsData.filter(discount => {
+          const discountDate = new Date(discount.date);
+          return discountDate >= new Date(startDate) && discountDate <= new Date(endDate);
         });
 
-        console.log("💸 Purchase Discounts:", yearPurchaseDiscounts.length);
-        setPurchaseDiscounts(yearPurchaseDiscounts);
+        console.log("💸 Purchase Discounts:", filteredPurchaseDiscounts.length);
+        setPurchaseDiscounts(filteredPurchaseDiscounts);
 
-        const purchaseDiscountsTotal = yearPurchaseDiscounts.reduce((sum, discount) => {
+        const purchaseDiscountsTotal = filteredPurchaseDiscounts.reduce((sum, discount) => {
           return sum + (discount.creditAmount || 0);
         }, 0);
 
@@ -571,11 +571,9 @@ function ProfitLoss() {
     }).format(value || 0);
   };
 
-  const formatYearText = () => {
-    if (!selectedDate) return "";
-    const year = new Date(selectedDate).getFullYear();
-    const prevYear = year - 1;
-    return `For the Years Ending [Dec 31, ${year} and Dec 31, ${prevYear}]`;
+  const formatDateRange = () => {
+    if (!startDate || !endDate) return "";
+    return `From ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}`;
   };
 
   const netRevenue = totalSales - totalReturns - totalDiscounts;
@@ -592,7 +590,7 @@ function ProfitLoss() {
         borderRadius: "8px",
         boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "15px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: "15px", flexWrap: "wrap" }}>
           <div style={{ flex: "1", minWidth: "200px" }}>
             <label style={{ 
               display: "block",
@@ -602,12 +600,37 @@ function ProfitLoss() {
               fontSize: "14px"
             }}>
               <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
-              Select Date:
+              Start Date:
             </label>
             <input
               type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "2px solid #dee2e6",
+                borderRadius: "6px",
+                fontSize: "14px",
+                fontWeight: "500"
+              }}
+            />
+          </div>
+          <div style={{ flex: "1", minWidth: "200px" }}>
+            <label style={{ 
+              display: "block",
+              marginBottom: "8px", 
+              fontWeight: "600",
+              color: "#495057",
+              fontSize: "14px"
+            }}>
+              <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
+              End Date:
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -620,31 +643,29 @@ function ProfitLoss() {
           </div>
           <button
             onClick={loadRevenueData}
-            disabled={loading || !selectedDate}
+            disabled={loading || !startDate || !endDate}
             style={{
               padding: "10px 20px",
               backgroundColor: loading ? "#6c757d" : "#0d6efd",
               color: "white",
               border: "none",
               borderRadius: "6px",
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: loading || !startDate || !endDate ? "not-allowed" : "pointer",
               fontWeight: "500",
               fontSize: "14px",
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              marginTop: "24px"
+              height: "42px"
             }}
           >
             <RefreshCw style={{ width: "16px", height: "16px" }} />
-            {loading ? "Loading..." : "Refresh Data"}
+            {loading ? "Loading..." : "Load Data"}
           </button>
         </div>
-        {selectedDate && (
-          <div style={{ marginTop: "12px", fontSize: "13px", color: "#6c757d" }}>
-            📊 Viewing data for entire year: <strong>{new Date(selectedDate).getFullYear()}</strong>
-          </div>
-        )}
+        {startDate && endDate && (
+     <></>
+     )}
       </div>
 
       {error && (
@@ -678,7 +699,7 @@ function ProfitLoss() {
         color: "#6c757d",
         marginBottom: "40px"
       }}>
-        {formatYearText()}
+        {startDate && endDate ? formatDateRange() : "Please select date range"}
       </p>
 
       <div style={{
@@ -718,7 +739,7 @@ function ProfitLoss() {
           <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
           <p style={{ marginTop: "15px", fontWeight: "500" }}>Loading revenue data...</p>
         </div>
-      ) : selectedDate ? (
+      ) : startDate && endDate ? (
         <div style={{ 
           backgroundColor: "#fff",
           padding: "20px 30px"
@@ -827,7 +848,7 @@ function ProfitLoss() {
           borderRadius: "0 0 6px 6px"
         }}>
           <Calendar style={{ width: "48px", height: "48px", margin: "0 auto 15px", opacity: 0.3 }} />
-          <p style={{ fontSize: "15px", fontWeight: "500" }}>Please select a date to view revenue data</p>
+          <p style={{ fontSize: "15px", fontWeight: "500" }}>Please select start and end dates to view revenue data</p>
         </div>
       )}
 
@@ -851,7 +872,7 @@ function ProfitLoss() {
         }}>
           <p>Loading COGS data...</p>
         </div>
-      ) : selectedDate ? (
+      ) : startDate && endDate ? (
         <div style={{ 
           backgroundColor: "#fff",
           padding: "20px 30px"
@@ -1056,7 +1077,7 @@ function ProfitLoss() {
           color: "#6c757d",
           backgroundColor: "#f8f9fa"
         }}>
-          <p>Please select a date to view COGS</p>
+          <p>Please select dates to view COGS</p>
         </div>
       )}
 
@@ -1080,7 +1101,7 @@ function ProfitLoss() {
         }}>
           <p>Loading expenses...</p>
         </div>
-      ) : selectedDate ? (
+      ) : startDate && endDate ? (
         <div style={{ 
           backgroundColor: "#fff",
           padding: "20px 30px"
@@ -1214,7 +1235,7 @@ function ProfitLoss() {
           color: "#6c757d",
           backgroundColor: "#f8f9fa"
         }}>
-          <p>Please select a date to view expenses</p>
+          <p>Please select dates to view expenses</p>
         </div>
       )}
 
@@ -1238,7 +1259,7 @@ function ProfitLoss() {
         }}>
           <p>Loading other income...</p>
         </div>
-      ) : selectedDate ? (
+      ) : startDate && endDate ? (
         <div style={{ 
           backgroundColor: "#fff",
           padding: "20px 30px"
@@ -1372,7 +1393,7 @@ function ProfitLoss() {
           color: "#6c757d",
           backgroundColor: "#f8f9fa"
         }}>
-          <p>Please select a date to view other income</p>
+          <p>Please select dates to view other income</p>
         </div>
       )}
 
@@ -1398,7 +1419,7 @@ function ProfitLoss() {
         </span>
       </div>
 
-      {selectedDate && !loading && (
+      {startDate && endDate && !loading && (
         <div style={{
           marginTop: "30px",
           padding: "20px",
@@ -1416,7 +1437,7 @@ function ProfitLoss() {
             borderBottom: "2px solid #e9ecef",
             paddingBottom: "10px"
           }}>
-            📈 Financial Summary - Year {new Date(selectedDate).getFullYear()}
+            📈 Financial Summary - {formatDateRange()}
           </h4>
           
           <div style={{ 
