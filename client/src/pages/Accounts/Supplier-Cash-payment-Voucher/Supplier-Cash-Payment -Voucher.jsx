@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 
-const BASE_URL = "http://localhost:5000";
+// const BASE_URL = "http://localhost:5000";
+const BASE_URL = "https://debug-nxby.vercel.app/api";
+
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 const http = {
