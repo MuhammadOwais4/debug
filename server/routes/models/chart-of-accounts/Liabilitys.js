@@ -38,11 +38,11 @@ const liabilitySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 )
 
-// Index for faster queries
 liabilitySchema.index({ code: 1 })
 liabilitySchema.index({ type: 1 })
 
-module.exports = mongoose.model("Liability", liabilitySchema)
+// ✅ FIX: Check if already compiled
+module.exports = mongoose.models.Liability || mongoose.model("Liability", liabilitySchema)

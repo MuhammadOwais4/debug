@@ -1,7 +1,7 @@
 const Asset = require("../models/chart-of-accounts/Asset")
 const Equity = require("../models/chart-of-accounts/Equity")
 const Expense = require("../models/chart-of-accounts/Expense")
-const Liability = require("../models/chart-of-accounts/Liability")
+const Liability = require("../models/chart-of-accounts/Liabilitys")
 const Revenue = require("../models/chart-of-accounts/Revenue")
 const Product = require("../models/Product")
 const Sale = require("../models/Sale")
@@ -9,6 +9,7 @@ const Voucher = require("../models/Voucher")
 const Ledger = require("../models/Leader")
 const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
+const SupplierPaymentVoucher = require("../models/Supplierpaymentvouchers")
 
 // ========== EXPORTED FUNCTIONS ==========
 
@@ -243,6 +244,81 @@ const getAccountLedger = async (req, res) => {
             })
           }
         })
+      })
+    }
+
+    // ========== PROCESS SUPPLIER PAYMENT VOUCHERS (SPV) ==========
+    const spvVouchers = await SupplierPaymentVoucher.find({
+      voucherDate: { $gte: from, $lte: to },
+      status: { $in: ["SAVED", "POSTED"] },
+    })
+      .populate("accCrBank", "name code")
+      .populate("accDrSupplier", "name code")
+      .sort({ voucherDate: 1 })
+      .lean()
+
+    console.log(`✅ Found ${spvVouchers.length} supplier payment vouchers`)
+
+    // Only process SPV if NOT a discount account
+    if (!isDiscountAccount) {
+      spvVouchers.forEach((spv) => {
+        const bankName = spv.accCrBank?.name || spv.accCrBankName || ""
+        const bankCode = spv.accCrBank?.code || ""
+        const supplierName = spv.accDrSupplier?.name || spv.accDrSupplierName || ""
+        const supplierCode = spv.accDrSupplier?.code || ""
+        const voucherType = spv.voucherNumber?.includes("SPV") ? "SPV" : "Payment"
+        
+        const totalAmount = parseFloat(spv.voucherAmount || 0)
+
+        // Vendor/Supplier Account (DEBIT) - Reduces liability
+        if (
+          matchAccount(supplierName, accountCode, accountName) ||
+          matchAccount(supplierCode, accountCode, accountName)
+        ) {
+          if (normalBalance === "debit") {
+            runningBalance += totalAmount
+          } else {
+            runningBalance -= totalAmount
+          }
+
+          ledgerEntries.push({
+            id: `spv-${spv._id}-supplier`,
+            date: spv.voucherDate,
+            voucherNo: spv.voucherNumber,
+            voucherType: voucherType,
+            description: spv.narration || `Payment to ${supplierName}`,
+            debit: totalAmount,
+            credit: 0,
+            balance: runningBalance,
+            grn: spv.lines?.[0]?.purchaseDetail || null,
+            sourceId: spv._id,
+          })
+        }
+
+        // Cash/Bank Account (CREDIT) - Reduces asset
+        if (
+          matchAccount(bankName, accountCode, accountName) ||
+          matchAccount(bankCode, accountCode, accountName)
+        ) {
+          if (normalBalance === "debit") {
+            runningBalance -= totalAmount
+          } else {
+            runningBalance += totalAmount
+          }
+
+          ledgerEntries.push({
+            id: `spv-${spv._id}-bank`,
+            date: spv.voucherDate,
+            voucherNo: spv.voucherNumber,
+            voucherType: voucherType,
+            description: spv.narration || `Payment from ${bankName} to ${supplierName}`,
+            debit: 0,
+            credit: totalAmount,
+            balance: runningBalance,
+            grn: spv.lines?.[0]?.purchaseDetail || null,
+            sourceId: spv._id,
+          })
+        }
       })
     }
 
@@ -699,6 +775,7 @@ const getAccountLedger = async (req, res) => {
         voucherNo: entry.voucherNo,
         voucherType: entry.voucherType,
         sourceType: entry.id.includes('voucher') ? 'Voucher' : 
+                    entry.id.includes('spv') ? 'SupplierPaymentVoucher' :
                     entry.id.includes('sale-return') ? 'SaleReturn' :
                     entry.id.includes('sale-discount') ? 'SaleDiscount' :
                     entry.id.includes('purchase-discount') ? 'PurchaseDiscount' :
@@ -825,7 +902,7 @@ async function findAccountInfo(accountIdentifier) {
       }
     }
 
-    const [asset, equity, expense, liability, revenue] = await Promise.all([
+    const [asset, equity, expense, Liability, revenue] = await Promise.all([
       Asset.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
       Equity.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
       Expense.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
@@ -836,7 +913,7 @@ async function findAccountInfo(accountIdentifier) {
     if (asset) return { ...asset, category: "Assets", normalBalance: "debit" }
     if (equity) return { ...equity, category: "Equity", normalBalance: "credit" }
     if (expense) return { ...expense, category: "Expenses", normalBalance: "debit" }
-    if (liability) return { ...liability, category: "Liabilities", normalBalance: "credit" }
+    if (Liability) return { ...Liability, category: "Liabilities", normalBalance: "credit" }
     if (revenue) return { ...revenue, category: "Revenue", normalBalance: "credit" }
 
     return null
@@ -862,7 +939,7 @@ function determineEntryType(voucherType, debit, credit) {
     return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_DISCOUNT"
   } else if (voucherType === "CRV" || voucherType === "BRV") {
     return voucherType === "CRV" ? "CASH" : "BANK"
-  } else if (voucherType === "CPV" || voucherType === "BPV") {
+  } else if (voucherType === "CPV" || voucherType === "BPV" || voucherType === "SPV") {
     return "EXPENSE"
   } else if (voucherType === "JV") {
     return "JOURNAL"

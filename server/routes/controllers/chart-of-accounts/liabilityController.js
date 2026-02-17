@@ -1,4 +1,4 @@
-const Liability = require("../../models/chart-of-accounts/Liability")
+const Liability = require("../../models/chart-of-accounts/Liabilitys")
 
 // Get all liabilities
 const getAllLiabilities = async (req, res) => {

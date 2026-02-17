@@ -38,7 +38,7 @@ app.use("/api/vouchers", require("./routes/vouchersRoute"))
 app.use("/api/accounts", require("./routes/accountsRoute"))
 app.use("/api/trial-balance", require("./routes/trial-balance-route"))
 app.use("/api/ledgers", require("./routes/ledgerRoutes"))
-
+app.use("/api/supplier-payment", require("./routes/supplierPaymentRoutes"))
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack)

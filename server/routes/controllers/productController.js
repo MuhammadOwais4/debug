@@ -1,5 +1,5 @@
 const Product = require("../models/Product")
-const Liability = require("../models/chart-of-accounts/Liability")
+const Liability = require("../models/chart-of-accounts/Liabilitys")
 const Asset = require("../models/chart-of-accounts/Asset")
 
 // Get all products with optional filters

@@ -1703,7 +1703,128 @@ getAccountLedger: async ({ accountCode, accountName, fromDate, toDate }) => {
       throw new Error(error.response?.data?.message || error.message || "Failed to fetch accounts by type")
     }
   },
+// "//  Vendorpaymentvoucherroutes ========"
+// ============================================
 
+  // ============ VENDOR PAYMENT VOUCHER ENDPOINTS ============
+  
+  // Get Cash/Bank Accounts
+  getVendorPaymentCashBankAccounts: async () => {
+    try {
+      const response = await apiClient.get('/vendor-payment-vouchers/cash-bank-accounts');
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch cash/bank accounts");
+    }
+  },
+
+  // Get Vendors
+  getVendorPaymentVendors: async () => {
+    try {
+      const response = await apiClient.get('/vendor-payment-vouchers/vendors');
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch vendors");
+    }
+  },
+
+  // Get Vendor Purchase Details
+  getVendorPurchaseDetails: async (vendorId) => {
+    try {
+      const response = await apiClient.get(`/vendor-payment-vouchers/vendor-purchases/${vendorId}`);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch vendor purchase details");
+    }
+  },
+
+  // Create Vendor Payment Voucher
+  createVendorPaymentVoucher: async (voucherData) => {
+    try {
+      const response = await apiClient.post('/vendor-payment-vouchers', voucherData);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to create vendor payment voucher");
+    }
+  },
+
+  // Get All Vendor Payment Vouchers
+  getAllVendorPaymentVouchers: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams();
+      Object.keys(filters).forEach((key) => {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") {
+          params.append(key, filters[key]);
+        }
+      });
+
+      const url = params.toString() 
+        ? `/vendor-payment-vouchers?${params.toString()}` 
+        : '/vendor-payment-vouchers';
+      
+      const response = await apiClient.get(url);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch vendor payment vouchers");
+    }
+  },
+
+  // Get Single Vendor Payment Voucher
+  getVendorPaymentVoucher: async (id) => {
+    try {
+      const response = await apiClient.get(`/vendor-payment-vouchers/${id}`);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to fetch vendor payment voucher");
+    }
+  },
+
+  // Update Vendor Payment Voucher
+  updateVendorPaymentVoucher: async (id, voucherData) => {
+    try {
+      const response = await apiClient.put(`/vendor-payment-vouchers/${id}`, voucherData);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to update vendor payment voucher");
+    }
+  },
+
+  // Delete Vendor Payment Voucher
+  deleteVendorPaymentVoucher: async (id) => {
+    try {
+      const response = await apiClient.delete(`/vendor-payment-vouchers/${id}`);
+      return response.data;
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.");
+      }
+      throw new Error(error.response?.data?.message || error.message || "Failed to delete vendor payment voucher");
+    }
+  },
+
+
+  // ============ END OF VENDOR PAYMENT VOUCHER ENDPOINTS ============
   // ============ UTILITY METHODS ============
 
   // Generic GET request
