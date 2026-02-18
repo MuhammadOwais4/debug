@@ -29,7 +29,7 @@ import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sale
 import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers"
 import ProductManagementDashboard from "./pages/Product Management/Product-Management";
 import SupplierPaymentVoucher from"./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher"
-import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/customer-Receip-Voucher";
+import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 
 // Sample initial data
 const initialProducts = [];
