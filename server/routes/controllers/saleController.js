@@ -111,6 +111,7 @@ exports.createSale = async (req, res) => {
       saleRate,
       itemName,
       date,
+      customer,        // ← YEH ADD KARO
       customerName,
       customerPhone,
       notes,
@@ -118,128 +119,75 @@ exports.createSale = async (req, res) => {
       saleAccount,
     } = req.body
 
-    // Use new field names if available, fallback to old ones
     const finalQuantity = saleQuantity || quantity
     const finalSaleRate = saleRate || salePrice
 
-    // Validate required fields
     if (!productId || !finalQuantity || !finalSaleRate) {
-      return res.status(400).json({
-        success: false,
-        message: "Product, sale quantity, and sale rate are required",
-      })
+      return res.status(400).json({ success: false, message: "Product, sale quantity, and sale rate are required" })
     }
 
-    // Validate phone number if provided
     if (customerPhone && !/^\+?[1-9]\d{1,14}$/.test(customerPhone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid phone number",
-      })
+      return res.status(400).json({ success: false, message: "Please enter a valid phone number" })
     }
 
-    // Check if product exists and has enough stock
     const product = await Product.findById(productId)
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      })
-    }
-
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" })
     if (product.quantity < finalQuantity) {
-      return res.status(400).json({
-        success: false,
-        message: `Not enough stock available. Only ${product.quantity} units in stock.`,
-      })
+      return res.status(400).json({ success: false, message: `Not enough stock available. Only ${product.quantity} units in stock.` })
     }
 
-    // Create sale (invoice will be auto-generated in pre-save hook)
     const sale = await Sale.create({
-      product: productId,
-      itemName: itemName || product.name,
-      saleQuantity: Number.parseInt(finalQuantity),
-      saleRate: Number.parseFloat(finalSaleRate),
-      // Legacy fields for backward compatibility
-      quantity: Number.parseInt(finalQuantity),
-      salePrice: Number.parseFloat(finalSaleRate),
-      date: date || new Date(),
-      customerName: customerName || "",
+      product:       productId,
+      itemName:      itemName || product.name,
+      saleQuantity:  Number.parseInt(finalQuantity),
+      saleRate:      Number.parseFloat(finalSaleRate),
+      quantity:      Number.parseInt(finalQuantity),
+      salePrice:     Number.parseFloat(finalSaleRate),
+      date:          date || new Date(),
+      customer:      customer || null,       // ← YEH ADD KARO (ObjectId save hoga)
+      customerName:  customerName || "",
       customerPhone: customerPhone || "",
-      notes: notes || "",
-      saleType: saleType || "",
-      saleAccount: saleAccount || null,
+      notes:         notes || "",
+      saleType:      saleType || "",
+      saleAccount:   saleAccount || null,
     })
 
-    // Update product stock
     product.quantity -= Number.parseInt(finalQuantity)
     await product.save()
 
-    // Populate the sale with product details for response
     const populatedSale = await Sale.findById(sale._id).populate("product", "name purchaseRate saleRate")
 
-    // Create notification for sale with invoice number
     try {
       await Notification.create({
-        type: "sale",
-        title: "Sale Recorded",
+        type: "sale", title: "Sale Recorded",
         message: `Sale ${sale.invoice || "recorded"}: ${finalQuantity} ${product.name} for PKR ${(finalQuantity * finalSaleRate).toFixed(2)}`,
-        priority: "medium",
-        relatedId: sale._id,
-        relatedModel: "Sale",
+        priority: "medium", relatedId: sale._id, relatedModel: "Sale",
       })
-    } catch (notifError) {
-      console.warn("Failed to create sale notification:", notifError)
-    }
+    } catch (notifError) { console.warn("Failed to create sale notification:", notifError) }
 
-    // Check if product is now low in stock (using product's lowStockThreshold or default 5)
     const threshold = product.lowStockThreshold || 5
     if (product.quantity <= threshold) {
       try {
         await Notification.create({
-          type: "lowStock",
-          title: "Low Stock Alert",
+          type: "lowStock", title: "Low Stock Alert",
           message: `Low stock alert: ${product.name} (${product.quantity} remaining)`,
-          priority: "high",
-          relatedId: product._id,
-          relatedModel: "Product",
+          priority: "high", relatedId: product._id, relatedModel: "Product",
         })
-      } catch (notifError) {
-        console.warn("Failed to create low stock notification:", notifError)
-      }
+      } catch (notifError) { console.warn("Failed to create low stock notification:", notifError) }
     }
 
     res.status(201).json({
-      success: true,
-      data: populatedSale,
+      success: true, data: populatedSale,
       message: `Sale recorded successfully with Invoice: ${sale.invoice}`,
     })
   } catch (error) {
     console.error("Error in createSale:", error)
-
-    // Handle duplicate key error specifically
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Duplicate invoice number. Please try again.",
-      })
-    }
-
+    if (error.code === 11000) return res.status(400).json({ success: false, message: "Duplicate invoice number. Please try again." })
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((val) => val.message)
-      return res.status(400).json({
-        success: false,
-        message: "Validation Error",
-        error: messages,
-      })
+      return res.status(400).json({ success: false, message: "Validation Error", error: messages })
     }
-
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error: error.message,
-    })
+    res.status(500).json({ success: false, message: "Server Error", error: error.message })
   }
 }
 

@@ -36,22 +36,24 @@ const http = {
 
 const ledgerAPI = { getAllAccounts: () => http.get("/api/ledgers/accounts") };
 
-const spvAPI = {
-  getVendors: () => http.get("/api/supplier-payment/vendors"),
-  getPurchaseJournalByVendor: ({ vendorId, fromDate, toDate }) => {
-    const p = new URLSearchParams({ vendorId: vendorId || "", fromDate: fromDate || "", toDate: toDate || "" });
-    return http.get(`/api/supplier-payment/purchase-journal?${p}`);
+// ── CRV API ───────────────────────────────────────────────────────────────────
+const crvAPI = {
+  getCustomers:           () => http.get("/api/customer-receipt/customers"),
+  getSaleJournalByCustomer: ({ customerId, fromDate, toDate }) => {
+    const p = new URLSearchParams({ customerId: customerId || "", fromDate: fromDate || "", toDate: toDate || "" });
+    return http.get(`/api/customer-receipt/sale-journal?${p}`);
   },
-  saveVoucher: (payload) => http.post("/api/supplier-payment", payload),
-  getHistory:  (vendorId) => http.get(vendorId ? `/api/supplier-payment?vendorId=${vendorId}` : `/api/supplier-payment`),
+  saveVoucher: (payload)  => http.post("/api/customer-receipt", payload),
+  getHistory:  (customerId) =>
+    http.get(customerId ? `/api/customer-receipt?customerId=${customerId}` : `/api/customer-receipt`),
 };
 
 // ── Tax options ───────────────────────────────────────────────────────────────
 const TAX_OPTIONS = [
-  { label: "No Tax (0%)",  value: 0     },
-  { label: "0.25%",        value: 0.0025 },
-  { label: "0.50%",        value: 0.005  },
-  { label: "1%",           value: 0.01   },
+  { label: "No Tax (0%)", value: 0      },
+  { label: "0.25%",       value: 0.0025 },
+  { label: "0.50%",       value: 0.005  },
+  { label: "1%",          value: 0.01   },
 ];
 
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -60,24 +62,24 @@ const fmtNum   = (n) => Number(n || 0).toLocaleString("en-PK", { minimumFraction
 
 const S = {
   wrap:    { fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", fontSize: 13, backgroundColor: "#f0f4f8", minHeight: "100vh", color: "#222" },
-  header:  { background: "linear-gradient(90deg,#1a3c5e 0%,#2563a8 100%)", color: "#fff", padding: "10px 18px", fontSize: 15, fontWeight: 600, letterSpacing: 0.3 },
+  header:  { background: "linear-gradient(90deg,#14532d 0%,#16a34a 100%)", color: "#fff", padding: "10px 18px", fontSize: 15, fontWeight: 600, letterSpacing: 0.3 },
   toolbar: { background: "#e8edf2", borderBottom: "1px solid #c8d3de", padding: "6px 14px", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" },
   btn: (v = "default") => ({
     padding: "4px 16px", borderRadius: 3, border: "1px solid", height: 28, fontSize: 12, fontWeight: 500,
     cursor: v === "disabled" ? "not-allowed" : "pointer",
-    background:  v === "primary" ? "#2563a8" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "disabled" ? "#d1d5db" : "#fff",
+    background:  v === "primary" ? "#16a34a" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "disabled" ? "#d1d5db" : "#fff",
     color:       v === "primary" || v === "danger" || v === "success" ? "#fff" : v === "disabled" ? "#6b7280" : "#374151",
-    borderColor: v === "primary" ? "#1a4d8f" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "disabled" ? "#9ca3af" : "#9ca3af",
+    borderColor: v === "primary" ? "#15803d" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "disabled" ? "#9ca3af" : "#9ca3af",
   }),
   form:     { background: "#fff", margin: "12px 14px 0", borderRadius: 6, border: "1px solid #d1d9e0", padding: "14px 18px" },
-  row:      { display: "grid", gridTemplateColumns: "110px 1fr", alignItems: "start", marginBottom: 10, gap: 8 },
+  row:      { display: "grid", gridTemplateColumns: "120px 1fr", alignItems: "start", marginBottom: 10, gap: 8 },
   label:    { textAlign: "right", fontWeight: 600, color: "#374151", fontSize: 12, paddingRight: 4, whiteSpace: "nowrap", paddingTop: 5 },
   input:    { border: "1px solid #c8d3de", borderRadius: 3, padding: "4px 8px", fontSize: 12, width: "100%", boxSizing: "border-box", outline: "none", background: "#fff", height: 28 },
   select:   { border: "1px solid #c8d3de", borderRadius: 3, padding: "4px 8px", fontSize: 12, width: "100%", boxSizing: "border-box", outline: "none", background: "#fff", height: 28, cursor: "pointer" },
   textarea: { border: "1px solid #c8d3de", borderRadius: 3, padding: "4px 8px", fontSize: 12, width: "100%", boxSizing: "border-box", outline: "none", resize: "none", height: 28, fontFamily: "inherit" },
   divider:  { border: "none", borderTop: "1px dashed #c8d3de", margin: "10px 0 8px" },
   journalBtn: { display: "flex", justifyContent: "center", margin: "10px 0 4px" },
-  btnJournal: { background: "linear-gradient(90deg,#6b7280,#4b5563)", color: "#fff", border: "none", borderRadius: 4, padding: "7px 28px", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 },
+  btnJournal: { background: "linear-gradient(90deg,#14532d,#16a34a)", color: "#fff", border: "none", borderRadius: 4, padding: "7px 28px", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 },
   hint:     { textAlign: "center", color: "#64748b", fontSize: 11, marginBottom: 4, marginTop: 2 },
   errorBox: { background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 3, padding: "5px 10px", marginTop: 4, fontSize: 11, color: "#dc2626", lineHeight: 1.5, wordBreak: "break-word" },
   emptyPane:  { background: "#eef3f8", border: "1.5px dashed #c8d6e0", margin: "12px 14px", borderRadius: 6, padding: "60px 20px", textAlign: "center", color: "#64748b" },
@@ -86,17 +88,17 @@ const S = {
   emptyDesc:  { fontSize: 12, lineHeight: 1.7 },
   tableWrap:  { margin: "0 14px 14px", borderRadius: 6, border: "1px solid #c8d6e0", overflow: "hidden" },
   table:      { width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#fff" },
-  th:  { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "left",   fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
-  thC: { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
-  thR: { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
+  th:  { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "left",   fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
+  thC: { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
+  thR: { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
   thTax: { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "right", fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
   thTaxC:{ background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "center",fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
   td:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", verticalAlign: "middle" }),
   tdC: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "center",  verticalAlign: "middle" }),
   tdR: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "right",   verticalAlign: "middle" }),
-  tdTax:(i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fffbf5":"#fef3c7", textAlign: "right",   verticalAlign: "middle", color:"#92400e" }),
-  summaryRow: { background: "#e8f0fa", fontWeight: 700, borderTop: "2px solid #2563a8" },
-  payInput: { border: "1px solid #2563a8", borderRadius: 3, padding: "3px 6px", width: 90, textAlign: "right", fontSize: 12, outline: "none", background: "#fff" },
+  tdTax:(i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fffbf5":"#fef3c7", textAlign: "right", verticalAlign: "middle", color:"#92400e" }),
+  summaryRow: { background: "#dcfce7", fontWeight: 700, borderTop: "2px solid #16a34a" },
+  payInput: { border: "1px solid #16a34a", borderRadius: 3, padding: "3px 6px", width: 90, textAlign: "right", fontSize: 12, outline: "none", background: "#fff" },
   toast: (t) => ({
     position: "fixed", top: 18, right: 18, zIndex: 9999,
     background: t==="success"?"#16a34a": t==="error"?"#dc2626":"#2563a8",
@@ -110,53 +112,49 @@ const S = {
     background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe":"#fef9c3",
     color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8":"#92400e",
   }),
-  infoStrip:   { display:"flex", gap:20, background:"#f0f7ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"6px 12px", marginTop:8, fontSize:11, flexWrap:"wrap", alignItems:"center" },
+  infoStrip:   { display:"flex", gap:20, background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:4, padding:"6px 12px", marginTop:8, fontSize:11, flexWrap:"wrap", alignItems:"center" },
   summaryCards:{ display:"flex", gap:10, margin:"10px 14px 0", flexWrap:"wrap" },
   card: (color) => ({ flex:1, minWidth:130, background:"#fff", borderRadius:6, border:`1.5px solid ${color}`, padding:"10px 14px", borderLeft:`5px solid ${color}` }),
   cardLabel:   { fontSize:10, color:"#6b7280", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
   cardValue: (color) => ({ fontSize:17, fontWeight:700, color }),
-  paidFull:    { background:"#dcfce7", color:"#15803d", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
-  paidPartial: { background:"#fef9c3", color:"#92400e", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
-  paidNone:    { background:"#fee2e2", color:"#dc2626", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
+  recvFull:    { background:"#dcfce7", color:"#15803d", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
+  recvPartial: { background:"#fef9c3", color:"#92400e", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
+  recvNone:    { background:"#fee2e2", color:"#dc2626", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
   subRow:   { background:"#fffde7" },
   subCell:  { padding:"3px 8px 3px 26px", fontSize:11, color:"#78350f", borderBottom:"1px solid #fde68a" },
-
-  // Tax dropdown style
   taxBox: {
     display:"flex", alignItems:"center", gap:10,
     background:"linear-gradient(90deg,#fef3c7,#fffbf5)",
     border:"1.5px solid #f59e0b", borderRadius:6,
     padding:"8px 14px", margin:"10px 14px 0", flexWrap:"wrap",
   },
-  taxLabel: { fontWeight:700, color:"#92400e", fontSize:13, whiteSpace:"nowrap" },
-  taxSelect:{ border:"1.5px solid #f59e0b", borderRadius:4, padding:"4px 10px", fontSize:13, fontWeight:700, color:"#92400e", background:"#fff", height:30, cursor:"pointer", outline:"none", minWidth:160 },
-  taxBadge: { background:"#f59e0b", color:"#fff", borderRadius:10, padding:"3px 12px", fontSize:12, fontWeight:700 },
-  taxInfo:  { fontSize:11, color:"#78350f", fontStyle:"italic" },
+  taxLabel:  { fontWeight:700, color:"#92400e", fontSize:13, whiteSpace:"nowrap" },
+  taxSelect: { border:"1.5px solid #f59e0b", borderRadius:4, padding:"4px 10px", fontSize:13, fontWeight:700, color:"#92400e", background:"#fff", height:30, cursor:"pointer", outline:"none", minWidth:160 },
+  taxBadge:  { background:"#f59e0b", color:"#fff", borderRadius:10, padding:"3px 12px", fontSize:12, fontWeight:700 },
+  taxInfo:   { fontSize:11, color:"#78350f", fontStyle:"italic" },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function SupplierPaymentVoucher() {
+export default function CustomerReceiptVoucher() {
 
-  const [voucherDate,         setVoucherDate]         = useState(todayISO());
-  const [selectedBankAccount, setSelectedBankAccount] = useState("");
-  const [selectedVendor,      setSelectedVendor]      = useState("");
-  const [narration,           setNarration]           = useState("");
-  const [fromDate,            setFromDate]            = useState("");
-  const [toDate,              setToDate]              = useState(todayISO());
+  const [voucherDate,          setVoucherDate]          = useState(todayISO());
+  const [selectedBankAccount,  setSelectedBankAccount]  = useState("");
+  const [selectedCustomer,     setSelectedCustomer]     = useState("");
+  const [narration,            setNarration]            = useState("");
+  const [fromDate,             setFromDate]             = useState("");
+  const [toDate,               setToDate]               = useState(todayISO());
+  const [taxRate,              setTaxRate]              = useState(0);
 
-  // ✅ TAX STATE
-  const [taxRate,             setTaxRate]             = useState(0); // 0, 0.0025, 0.005, 0.01
-
-  const [cashBankAccounts,    setCashBankAccounts]    = useState([]);
-  const [vendors,             setVendors]             = useState([]);
-  const [invoices,            setInvoices]            = useState([]);
-  const [paymentAmounts,      setPaymentAmounts]      = useState({});
-  const [selectedInvoices,    setSelectedInvoices]    = useState({});
-  const [prevPayments,        setPrevPayments]        = useState({});
-  const [expandedRows,        setExpandedRows]        = useState({});
+  const [cashBankAccounts,  setCashBankAccounts]  = useState([]);
+  const [customers,         setCustomers]         = useState([]);
+  const [invoices,          setInvoices]          = useState([]);
+  const [receiptAmounts,    setReceiptAmounts]    = useState({});
+  const [selectedInvoices,  setSelectedInvoices]  = useState({});
+  const [prevReceipts,      setPrevReceipts]      = useState({});
+  const [expandedRows,      setExpandedRows]      = useState({});
 
   const [loadingAccounts,  setLoadingAccounts]  = useState(false);
-  const [loadingVendors,   setLoadingVendors]   = useState(false);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [loadingJournal,   setLoadingJournal]   = useState(false);
   const [saving,           setSaving]           = useState(false);
   const [journalLoaded,    setJournalLoaded]    = useState(false);
@@ -165,20 +163,20 @@ export default function SupplierPaymentVoucher() {
   const [historyData,      setHistoryData]      = useState([]);
   const [loadingHistory,   setLoadingHistory]   = useState(false);
   const [accountsError,    setAccountsError]    = useState("");
-  const [vendorsError,     setVendorsError]     = useState("");
+  const [customersError,   setCustomersError]   = useState("");
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ── Load accounts ─────────────────────────────────────────────────────────
+  // ── Load Cash/Bank accounts ───────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       setLoadingAccounts(true); setAccountsError("");
       try {
-        const res  = await ledgerAPI.getAllAccounts();
-        const list = res?.data ?? (Array.isArray(res) ? res : []);
+        const res      = await ledgerAPI.getAllAccounts();
+        const list     = res?.data ?? (Array.isArray(res) ? res : []);
         const filtered = list.filter((a) => a.type === "CASH ACCOUNT" || a.type === "BANK ACCOUNT");
         setCashBankAccounts(filtered);
         if (!filtered.length && list.length)
@@ -188,49 +186,50 @@ export default function SupplierPaymentVoucher() {
     })();
   }, []);
 
-  // ── Load vendors ──────────────────────────────────────────────────────────
+  // ── Load Customers (RECEIVABLES from Asset) ───────────────────────────────
   useEffect(() => {
     (async () => {
-      setLoadingVendors(true); setVendorsError("");
+      setLoadingCustomers(true); setCustomersError("");
       try {
-        const res  = await spvAPI.getVendors();
+        const res  = await crvAPI.getCustomers();
         const list = res?.data ?? (Array.isArray(res) ? res : []);
-        setVendors(list);
-        if (!list.length) setVendorsError("Koi vendor nahi mila. Backend mein PAYABLES type ki liability add karo.");
-      } catch (err) { setVendorsError(err.message); }
-      finally { setLoadingVendors(false); }
+        setCustomers(list);
+        if (!list.length)
+          setCustomersError("Koi customer nahi mila. Asset mein RECEIVABLES type ka account add karo.");
+      } catch (err) { setCustomersError(err.message); }
+      finally { setLoadingCustomers(false); }
     })();
   }, []);
 
-  // ── Previous payments map ─────────────────────────────────────────────────
-  const buildPrevPaymentsMap = useCallback(async (vendorId) => {
+  // ── Previous receipts map ─────────────────────────────────────────────────
+  const buildPrevReceiptsMap = useCallback(async (customerId) => {
     try {
-      const res      = await spvAPI.getHistory(vendorId);
+      const res      = await crvAPI.getHistory(customerId);
       const vouchers = res?.data ?? (Array.isArray(res) ? res : []);
       const map = {};
       vouchers.forEach((v) => {
         if (v.status === "CANCELLED") return;
         (v.lines || []).forEach((line) => {
-          const id = line.invoiceId?.toString() || line.purchaseDetail;
+          const id = line.invoiceId?.toString() || line.saleDetail;
           if (!id) return;
           if (!map[id]) map[id] = [];
           map[id].push({ voucherNumber: v.voucherNumber, date: v.voucherDate, amount: line.amount, status: v.status });
         });
       });
-      setPrevPayments(map);
+      setPrevReceipts(map);
     } catch (_) {}
   }, []);
 
-  // ── Load journal ──────────────────────────────────────────────────────────
+  // ── Load Sale Journal ─────────────────────────────────────────────────────
   const handleLoadJournal = useCallback(async () => {
-    if (!selectedVendor) { showToast("Pehle vendor select karein", "error"); return; }
+    if (!selectedCustomer) { showToast("Pehle customer select karein", "error"); return; }
     setLoadingJournal(true); setJournalLoaded(false);
-    setInvoices([]); setPaymentAmounts({}); setSelectedInvoices({});
-    setExpandedRows({}); setPrevPayments({});
+    setInvoices([]); setReceiptAmounts({}); setSelectedInvoices({});
+    setExpandedRows({}); setPrevReceipts({});
     try {
       const [jRes] = await Promise.all([
-        spvAPI.getPurchaseJournalByVendor({ vendorId: selectedVendor, fromDate, toDate }),
-        buildPrevPaymentsMap(selectedVendor),
+        crvAPI.getSaleJournalByCustomer({ customerId: selectedCustomer, fromDate, toDate }),
+        buildPrevReceiptsMap(selectedCustomer),
       ]);
       const list = jRes?.data ?? (Array.isArray(jRes) ? jRes : []);
       setInvoices(list);
@@ -239,20 +238,16 @@ export default function SupplierPaymentVoucher() {
     } catch (err) {
       showToast("Journal load error: " + err.message, "error");
     } finally { setLoadingJournal(false); }
-  }, [selectedVendor, fromDate, toDate, buildPrevPaymentsMap]);
+  }, [selectedCustomer, fromDate, toDate, buildPrevReceiptsMap]);
 
-  // ── Invoice selection helpers ─────────────────────────────────────────────
-  const getAlreadyPaid = (inv) => (prevPayments[inv._id] || []).reduce((s, p) => s + p.amount, 0);
-  const getRemaining   = (inv) => Math.max((inv.amount || 0) - getAlreadyPaid(inv), 0);
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getAlreadyReceived = (inv) => (prevReceipts[inv._id] || []).reduce((s, p) => s + p.amount, 0);
+  const getRemaining       = (inv) => Math.max((inv.amount || 0) - getAlreadyReceived(inv), 0);
 
-  // ── Tax calculation helpers ───────────────────────────────────────────────
-  // payBefore = payment amount before tax deduction (jo amount select kiya)
-  // taxAmt    = payBefore * taxRate
-  // payAfter  = payBefore - taxAmt  (vendor ko milta hai after withholding tax)
-  const calcTax = (payBefore) => {
-    const taxAmt  = payBefore * taxRate;
-    const payAfter = payBefore - taxAmt;
-    return { taxAmt, payAfter };
+  const calcTax = (recvBefore) => {
+    const taxAmt    = recvBefore * taxRate;
+    const recvAfter = recvBefore - taxAmt;
+    return { taxAmt, recvAfter };
   };
 
   const toggleInvoice = (id, remaining) => {
@@ -260,10 +255,10 @@ export default function SupplierPaymentVoucher() {
       const next = { ...prev };
       if (next[id]) {
         delete next[id];
-        setPaymentAmounts((pa) => { const n = { ...pa }; delete n[id]; return n; });
+        setReceiptAmounts((ra) => { const n = { ...ra }; delete n[id]; return n; });
       } else {
         next[id] = true;
-        setPaymentAmounts((pa) => ({ ...pa, [id]: remaining }));
+        setReceiptAmounts((ra) => ({ ...ra, [id]: remaining }));
       }
       return next;
     });
@@ -271,62 +266,70 @@ export default function SupplierPaymentVoucher() {
 
   const toggleAll = () => {
     if (Object.keys(selectedInvoices).length === invoices.length) {
-      setSelectedInvoices({}); setPaymentAmounts({});
+      setSelectedInvoices({}); setReceiptAmounts({});
     } else {
-      const sel = {}, pay = {};
-      invoices.forEach((inv) => { sel[inv._id] = true; pay[inv._id] = getRemaining(inv); });
-      setSelectedInvoices(sel); setPaymentAmounts(pay);
+      const sel = {}, rec = {};
+      invoices.forEach((inv) => { sel[inv._id] = true; rec[inv._id] = getRemaining(inv); });
+      setSelectedInvoices(sel); setReceiptAmounts(rec);
     }
   };
 
-  const handlePayAmt = (id, val, max) =>
-    setPaymentAmounts((prev) => ({ ...prev, [id]: Math.min(parseFloat(val) || 0, max) }));
+  const handleRecvAmt = (id, val, max) =>
+    setReceiptAmounts((prev) => ({ ...prev, [id]: Math.min(parseFloat(val) || 0, max) }));
 
   const toggleRow = (id) => setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totalInvoice        = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
-  const totalPrevPaid       = invoices.reduce((s, inv) => s + getAlreadyPaid(inv), 0);
-  const totalRemaining      = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
+  const totalInvoice       = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
+  const totalPrevReceived  = invoices.reduce((s, inv) => s + getAlreadyReceived(inv), 0);
+  const totalRemaining     = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
 
-  // Sum of Pay Before Tax (selected invoices' pay amounts)
-  const totalPayBefore      = Object.entries(selectedInvoices).filter(([, v]) => v)
-    .reduce((s, [id]) => s + (parseFloat(paymentAmounts[id]) || 0), 0);
+  const totalRecvBefore    = Object.entries(selectedInvoices).filter(([, v]) => v)
+    .reduce((s, [id]) => s + (parseFloat(receiptAmounts[id]) || 0), 0);
 
-  const totalTaxAmt         = totalPayBefore * taxRate;
-  const totalPayAfter       = totalPayBefore - totalTaxAmt;
-  const totalBalAfter       = Math.max(totalRemaining - totalPayBefore, 0);
+  const totalTaxAmt        = totalRecvBefore * taxRate;
+  const totalRecvAfter     = totalRecvBefore - totalTaxAmt;
+  const totalBalAfter      = Math.max(totalRemaining - totalRecvBefore, 0);
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!selectedBankAccount) return showToast("Cash/Bank account select karein", "error");
-    if (!selectedVendor)      return showToast("Vendor select karein", "error");
-    if (!totalPayBefore)      return showToast("Koi invoice select nahi / amount 0", "error");
+    if (!selectedCustomer)    return showToast("Customer select karein", "error");
+    if (!totalRecvBefore)     return showToast("Koi invoice select nahi / amount 0", "error");
 
-    const bObj  = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
-    const vObj  = vendors.find((v) => v._id === selectedVendor);
+    const bObj = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
+    const cObj = customers.find((c) => c._id === selectedCustomer);
+
     const lines = Object.entries(selectedInvoices).filter(([, v]) => v).map(([id]) => {
-      const inv      = invoices.find((i) => i._id === id);
-      const payBef   = parseFloat(paymentAmounts[id]) || 0;
-      const { taxAmt, payAfter } = calcTax(payBef);
+      const inv              = invoices.find((i) => i._id === id);
+      const recvBef          = parseFloat(receiptAmounts[id]) || 0;
+      const { taxAmt, recvAfter } = calcTax(recvBef);
       return {
-        purchaseDetail: inv?.grn || inv?._id,
+        saleDetail:     inv?.grn || inv?._id,
         invoiceId:      id,
-        amount:         payBef,
+        amount:         recvBef,
         taxRate:        taxRate,
         taxAmount:      taxAmt,
-        amountAfterTax: payAfter,
+        amountAfterTax: recvAfter,
       };
     });
 
     setSaving(true);
     try {
-      const result = await spvAPI.saveVoucher({
-        voucherDate, accCrBank: selectedBankAccount, accCrBankName: bObj?.name || "",
-        accDrSupplier: selectedVendor, accDrSupplierName: vObj?.name || "",
-        narration, voucherAmount: totalPayBefore,
-        taxRate, totalTaxAmount: totalTaxAmt, netAmount: totalPayAfter,
-        lines, status: "SAVED", period: { from: fromDate, to: toDate },
+      const result = await crvAPI.saveVoucher({
+        voucherDate,
+        accDrBank:         selectedBankAccount,
+        accDrBankName:     bObj?.name || "",
+        accCrCustomer:     selectedCustomer,
+        accCrCustomerName: cObj?.name || "",
+        narration,
+        voucherAmount:  totalRecvBefore,
+        taxRate,
+        totalTaxAmount: totalTaxAmt,
+        netAmount:      totalRecvAfter,
+        lines,
+        status: "SAVED",
+        period: { from: fromDate, to: toDate },
       });
       if (result?.success) {
         showToast(`Voucher saved! No: ${result?.data?.voucherNumber || "—"}`, "success");
@@ -343,7 +346,7 @@ export default function SupplierPaymentVoucher() {
   const handleViewHistory = async () => {
     setHistoryModal(true); setLoadingHistory(true);
     try {
-      const res = await spvAPI.getHistory(selectedVendor || undefined);
+      const res = await crvAPI.getHistory(selectedCustomer || undefined);
       setHistoryData(res?.data ?? (Array.isArray(res) ? res : []));
     } catch (err) { showToast("History load error: " + err.message, "error"); }
     finally { setLoadingHistory(false); }
@@ -351,13 +354,13 @@ export default function SupplierPaymentVoucher() {
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   const handleNew = () => {
-    setSelectedBankAccount(""); setSelectedVendor(""); setNarration("");
+    setSelectedBankAccount(""); setSelectedCustomer(""); setNarration("");
     setFromDate(""); setToDate(todayISO()); setTaxRate(0);
-    setInvoices([]); setPaymentAmounts({}); setSelectedInvoices({});
-    setJournalLoaded(false); setExpandedRows({}); setPrevPayments({});
+    setInvoices([]); setReceiptAmounts({}); setSelectedInvoices({});
+    setJournalLoaded(false); setExpandedRows({}); setPrevReceipts({});
   };
 
-  const vendorObj     = vendors.find((v) => v._id === selectedVendor);
+  const customerObj   = customers.find((c) => c._id === selectedCustomer);
   const bankObj       = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
   const bankTypeLabel = bankObj?.type === "CASH ACCOUNT" ? "💵 Cash" : bankObj?.type === "BANK ACCOUNT" ? "🏦 Bank" : "";
   const taxPct        = (taxRate * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
@@ -369,7 +372,7 @@ export default function SupplierPaymentVoucher() {
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
 
       {/* Header */}
-      <div style={S.header}>Supplier Cash / Bank Payment Voucher</div>
+      <div style={S.header}>💰 Customer Cash / Bank Receipt Voucher (CRV)</div>
 
       {/* Toolbar */}
       <div style={S.toolbar}>
@@ -381,19 +384,21 @@ export default function SupplierPaymentVoucher() {
         <button style={S.btn("default")} onClick={handleNew}>Cancel</button>
         <button
           style={{ ...S.btn(loadingJournal ? "disabled" : "default"), display:"flex", alignItems:"center", gap:4 }}
-          onClick={handleLoadJournal} disabled={loadingJournal || !selectedVendor}
+          onClick={handleLoadJournal} disabled={loadingJournal || !selectedCustomer}
         >
           <span style={{ display:"inline-block", animation: loadingJournal ? "spin 1s linear infinite" : "none" }}>🔄</span>
           {loadingJournal ? "Refreshing..." : "Refresh"}
         </button>
-        <button style={S.btn("default")} onClick={handleViewHistory}>View History ({historyData.length || 0})</button>
+        <button style={S.btn("default")} onClick={handleViewHistory}>
+          View History ({historyData.length || 0})
+        </button>
         <button style={S.btn("default")} onClick={() => window.print()}>Print</button>
       </div>
 
       {/* Form */}
       <div style={S.form}>
         {/* Voucher # + Date */}
-        <div style={{ display:"grid", gridTemplateColumns:"110px 220px 1fr 120px 180px", gap:8, marginBottom:10, alignItems:"center" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"120px 220px 1fr 120px 180px", gap:8, marginBottom:10, alignItems:"center" }}>
           <label style={{ ...S.label, paddingTop:0 }}>Voucher # :</label>
           <input style={{ ...S.input, background:"#f3f4f6", color:"#6b7280", fontStyle:"italic" }} value="Auto on save" readOnly />
           <div />
@@ -401,11 +406,13 @@ export default function SupplierPaymentVoucher() {
           <input type="date" style={S.input} value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
         </div>
 
-        {/* Cash / Bank */}
+        {/* Cash / Bank (DR side — money comes IN) */}
         <div style={S.row}>
           <label style={S.label}>Cash / Bank :</label>
           <div>
-            <select style={S.select} value={selectedBankAccount} onChange={(e) => setSelectedBankAccount(e.target.value)} disabled={loadingAccounts}>
+            <select style={S.select} value={selectedBankAccount}
+              onChange={(e) => setSelectedBankAccount(e.target.value)}
+              disabled={loadingAccounts}>
               <option value="">{loadingAccounts ? "Loading..." : "-- Select Account --"}</option>
               {cashBankAccounts.map((acc) => (
                 <option key={acc.code || acc._id} value={acc.code || acc._id}>
@@ -417,42 +424,45 @@ export default function SupplierPaymentVoucher() {
           </div>
         </div>
 
-        {/* Vendor */}
+        {/* Customer (CR side — receivable cleared) */}
         <div style={S.row}>
-          <label style={S.label}>Vendor :</label>
+          <label style={S.label}>Customer :</label>
           <div>
-            <select style={S.select} value={selectedVendor}
+            <select style={S.select} value={selectedCustomer}
               onChange={(e) => {
-                setSelectedVendor(e.target.value);
+                setSelectedCustomer(e.target.value);
                 setJournalLoaded(false); setInvoices([]);
-                setSelectedInvoices({}); setPaymentAmounts({});
-                setExpandedRows({}); setPrevPayments({});
+                setSelectedInvoices({}); setReceiptAmounts({});
+                setExpandedRows({}); setPrevReceipts({});
               }}
-              disabled={loadingVendors}>
-              <option value="">{loadingVendors ? "Loading..." : "-- Select Vendor --"}</option>
-              {vendors.map((v) => (
-                <option key={v._id} value={v._id}>{v.code ? `[${v.code}] ` : ""}{v.name}</option>
+              disabled={loadingCustomers}>
+              <option value="">{loadingCustomers ? "Loading..." : "-- Select Customer --"}</option>
+              {customers.map((c) => (
+                <option key={c._id} value={c._id}>{c.code ? `[${c.code}] ` : ""}{c.name}</option>
               ))}
             </select>
-            {vendorsError && <div style={S.errorBox}>⚠️ {vendorsError}</div>}
+            {customersError && <div style={S.errorBox}>⚠️ {customersError}</div>}
           </div>
         </div>
 
         {/* Narration */}
         <div style={S.row}>
           <label style={S.label}>Narration :</label>
-          <textarea style={S.textarea} placeholder="Payment description..." value={narration} onChange={(e) => setNarration(e.target.value)} />
+          <textarea style={S.textarea} placeholder="Receipt description..."
+            value={narration} onChange={(e) => setNarration(e.target.value)} />
         </div>
 
         {/* Period */}
-        <div style={{ display:"grid", gridTemplateColumns:"110px auto 160px auto 160px auto auto", alignItems:"center", gap:6, marginBottom:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"120px auto 160px auto 160px auto auto", alignItems:"center", gap:6, marginBottom:10 }}>
           <label style={{ ...S.label, paddingTop:0 }}>Period :</label>
           <label style={{ fontSize:12, color:"#374151", fontWeight:500 }}>From:</label>
           <input type="date" style={S.input} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <label style={{ fontSize:12, color:"#374151", fontWeight:500, marginLeft:4 }}>To:</label>
           <input type="date" style={S.input} value={toDate}   onChange={(e) => setToDate(e.target.value)} />
-          <button style={{ ...S.btn("danger"),  fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
-          <button style={{ ...S.btn("default"), fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>All dates</button>
+          <button style={{ ...S.btn("danger"),  fontSize:11, padding:"3px 10px", height:26 }}
+            onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
+          <button style={{ ...S.btn("default"), fontSize:11, padding:"3px 10px", height:26 }}
+            onClick={() => { setFromDate(""); setToDate(todayISO()); }}>All dates</button>
         </div>
 
         <hr style={S.divider} />
@@ -460,26 +470,28 @@ export default function SupplierPaymentVoucher() {
         {/* Journal Button */}
         <div style={S.journalBtn}>
           <button style={S.btnJournal} onClick={handleLoadJournal} disabled={loadingJournal}>
-            📋 {loadingJournal ? "Loading..." : "Purchase Journal Voucher Information"}
+            📋 {loadingJournal ? "Loading..." : "Sale Journal Voucher Information"}
           </button>
         </div>
-        <p style={S.hint}>{selectedVendor ? "Period select kar ke button click karein" : "Vendor select karo phir click karo"}</p>
+        <p style={S.hint}>{selectedCustomer ? "Period select kar ke button click karein" : "Customer select karo phir click karo"}</p>
 
         {/* Info Strip */}
-        {(vendorObj || bankObj) && (
+        {(customerObj || bankObj) && (
           <div style={S.infoStrip}>
-            {vendorObj && (
+            {customerObj && (
               <span>
-                🏪 <b>Vendor:</b> {vendorObj.name}
-                {vendorObj.code && <span style={{ color:"#6b7280" }}> ({vendorObj.code})</span>}
-                {vendorObj.balance != null && (
+                👤 <b>Customer:</b> {customerObj.name}
+                {customerObj.code && <span style={{ color:"#6b7280" }}> ({customerObj.code})</span>}
+                {customerObj.balance != null && (
                   <> &nbsp;|&nbsp; <b>Balance:</b>{" "}
-                    <span style={{ color: vendorObj.balance > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>Rs. {fmtNum(vendorObj.balance)}</span>
+                    <span style={{ color: customerObj.balance > 0 ? "#16a34a" : "#dc2626", fontWeight:700 }}>
+                      Rs. {fmtNum(customerObj.balance)}
+                    </span>
                   </>
                 )}
               </span>
             )}
-            {vendorObj && bankObj && <span style={{ color:"#c8d3de" }}>|</span>}
+            {customerObj && bankObj && <span style={{ color:"#c8d3de" }}>|</span>}
             {bankObj && (
               <span>
                 {bankTypeLabel} <b>Account:</b> {bankObj.code} - {bankObj.name}
@@ -489,16 +501,18 @@ export default function SupplierPaymentVoucher() {
                   </>
                 )}
                 &nbsp;|&nbsp; <b>Type:</b>{" "}
-                <span style={{ color: bankObj.type==="CASH ACCOUNT"?"#15803d":"#1d4ed8", fontWeight:700 }}>{bankObj.type}</span>
+                <span style={{ color: bankObj.type==="CASH ACCOUNT"?"#15803d":"#1d4ed8", fontWeight:700 }}>
+                  {bankObj.type}
+                </span>
               </span>
             )}
           </div>
         )}
       </div>
 
-      {/* ── TAX DROPDOWN ──────────────────────────────────────────────────── */}
+      {/* ── TAX DROPDOWN ─────────────────────────────────────────────────── */}
       <div style={S.taxBox}>
-        <span style={S.taxLabel}>🏷️ Taxes :</span>
+        <span style={S.taxLabel}>🏷️ WHT Deducted by Customer :</span>
         <select style={S.taxSelect} value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value))}>
           {TAX_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -507,20 +521,20 @@ export default function SupplierPaymentVoucher() {
         {taxRate > 0 ? (
           <>
             <span style={S.taxBadge}>WHT @ {taxPct}</span>
-            {totalPayBefore > 0 && (
+            {totalRecvBefore > 0 && (
               <span style={S.taxInfo}>
-                Pay Before Tax: <b>Rs. {fmtNum(totalPayBefore)}</b> &nbsp;→&nbsp;
-                Tax ({taxPct}): <b style={{ color:"#dc2626" }}>Rs. {fmtNum(totalTaxAmt)}</b> &nbsp;→&nbsp;
-                Pay After Tax: <b style={{ color:"#16a34a" }}>Rs. {fmtNum(totalPayAfter)}</b>
+                Recv Before Tax: <b>Rs. {fmtNum(totalRecvBefore)}</b> &nbsp;→&nbsp;
+                WHT ({taxPct}): <b style={{ color:"#dc2626" }}>Rs. {fmtNum(totalTaxAmt)}</b> &nbsp;→&nbsp;
+                Net Received: <b style={{ color:"#16a34a" }}>Rs. {fmtNum(totalRecvAfter)}</b>
               </span>
             )}
           </>
         ) : (
-          <span style={{ ...S.taxInfo, color:"#9ca3af" }}>Koi tax nahi — full amount vendor ko milega</span>
+          <span style={{ ...S.taxInfo, color:"#9ca3af" }}>Koi WHT nahi — full amount bank mein ayega</span>
         )}
       </div>
 
-      {/* ── Summary Cards ── */}
+      {/* ── Summary Cards ─────────────────────────────────────────────────── */}
       {journalLoaded && invoices.length > 0 && (
         <div style={S.summaryCards}>
           <div style={S.card("#6366f1")}>
@@ -529,31 +543,31 @@ export default function SupplierPaymentVoucher() {
             <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>{invoices.length} invoice(s)</div>
           </div>
           <div style={S.card("#16a34a")}>
-            <div style={S.cardLabel}>✅ Already Paid</div>
-            <div style={S.cardValue("#16a34a")}>Rs. {fmtNum(totalPrevPaid)}</div>
-            <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Previous payments</div>
+            <div style={S.cardLabel}>✅ Already Received</div>
+            <div style={S.cardValue("#16a34a")}>Rs. {fmtNum(totalPrevReceived)}</div>
+            <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Previous receipts</div>
           </div>
           <div style={S.card("#dc2626")}>
             <div style={S.cardLabel}>⏳ Remaining Due</div>
             <div style={S.cardValue("#dc2626")}>Rs. {fmtNum(totalRemaining)}</div>
-            <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Still unpaid</div>
+            <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Still unreceived</div>
           </div>
           <div style={S.card("#2563a8")}>
-            <div style={S.cardLabel}>💳 Pay Before Tax</div>
-            <div style={S.cardValue("#2563a8")}>Rs. {fmtNum(totalPayBefore)}</div>
+            <div style={S.cardLabel}>💳 Recv Before Tax</div>
+            <div style={S.cardValue("#2563a8")}>Rs. {fmtNum(totalRecvBefore)}</div>
             <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>{Object.keys(selectedInvoices).length} selected</div>
           </div>
           {taxRate > 0 && (
             <>
               <div style={S.card("#f59e0b")}>
-                <div style={S.cardLabel}>🏷️ Tax ({taxPct})</div>
+                <div style={S.cardLabel}>🏷️ WHT ({taxPct})</div>
                 <div style={S.cardValue("#f59e0b")}>Rs. {fmtNum(totalTaxAmt)}</div>
-                <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Withholding tax</div>
+                <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Customer ne kata</div>
               </div>
               <div style={S.card("#16a34a")}>
-                <div style={S.cardLabel}>✅ Pay After Tax</div>
-                <div style={S.cardValue("#16a34a")}>Rs. {fmtNum(totalPayAfter)}</div>
-                <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Vendor ko milega</div>
+                <div style={S.cardLabel}>✅ Net Received</div>
+                <div style={S.cardValue("#16a34a")}>Rs. {fmtNum(totalRecvAfter)}</div>
+                <div style={{ fontSize:10, color:"#6b7280", marginTop:2 }}>Bank mein ayega</div>
               </div>
             </>
           )}
@@ -565,18 +579,24 @@ export default function SupplierPaymentVoucher() {
         </div>
       )}
 
-      {/* ── Content Pane ── */}
+      {/* ── Content Pane ─────────────────────────────────────────────────── */}
       {!journalLoaded ? (
         <div style={S.emptyPane}>
           <div style={S.emptyIcon}>📋</div>
-          <div style={S.emptyTitle}>Purchase Journal Voucher Information</div>
-          <div style={S.emptyDesc}>Vendor select karein aur upar wala button click karein<br />to invoices aur payment details load ho jayegi</div>
+          <div style={S.emptyTitle}>Sale Journal Voucher Information</div>
+          <div style={S.emptyDesc}>
+            Customer select karein aur upar wala button click karein<br />
+            to invoices aur receipt details load ho jayegi
+          </div>
         </div>
       ) : invoices.length === 0 ? (
         <div style={S.emptyPane}>
           <div style={S.emptyIcon}>🔍</div>
           <div style={S.emptyTitle}>Koi Invoice Nahi Mila</div>
-          <div style={S.emptyDesc}>Is vendor ka koi pending invoice nahi hai.<br />Period change kar ke dobara try karein.</div>
+          <div style={S.emptyDesc}>
+            Is customer ka koi pending invoice nahi hai.<br />
+            Period change kar ke dobara try karein.
+          </div>
         </div>
       ) : (
         <div style={{ ...S.tableWrap, marginTop: 10 }}>
@@ -589,59 +609,59 @@ export default function SupplierPaymentVoucher() {
                     onChange={toggleAll} />
                 </th>
                 <th style={S.thC} rowSpan={2}>Prev</th>
-                <th style={S.th}  rowSpan={2}>GRN / Invoice #</th>
+                <th style={S.th}  rowSpan={2}>Invoice #</th>
                 <th style={S.th}  rowSpan={2}>Date</th>
                 <th style={S.th}  rowSpan={2}>Description</th>
                 <th style={S.thR} rowSpan={2}>Invoice Amt</th>
-                <th style={S.thR} rowSpan={2}>Already Paid</th>
+                <th style={S.thR} rowSpan={2}>Already Recv</th>
                 <th style={S.thR} rowSpan={2}>Remaining</th>
                 <th style={S.thC} rowSpan={2}>Status</th>
-                {/* Tax group header */}
                 <th style={{ ...S.thTax, textAlign:"center", borderRight:"1px solid #78350f" }}
                   colSpan={taxRate > 0 ? 4 : 1}>
-                  {taxRate > 0 ? `💳 Payment (Tax @ ${taxPct})` : "💳 Payment"}
+                  {taxRate > 0 ? `💰 Receipt (WHT @ ${taxPct})` : "💰 Receipt"}
                 </th>
                 <th style={S.thR} rowSpan={2}>Bal After</th>
               </tr>
               {taxRate > 0 ? (
                 <tr>
-                  <th style={S.thTax}>Pay Before Tax</th>
-                  <th style={S.thTax}>Tax Amt</th>
-                  <th style={S.thTax}>Pay After Tax</th>
-                  <th style={S.thTaxC}>Pay Now</th>
+                  <th style={S.thTax}>Recv Before Tax</th>
+                  <th style={S.thTax}>WHT Amt</th>
+                  <th style={S.thTax}>Net Received</th>
+                  <th style={S.thTaxC}>Recv Now</th>
                 </tr>
               ) : (
                 <tr>
-                  <th style={S.thC}>Pay Now</th>
+                  <th style={S.thC}>Recv Now</th>
                 </tr>
               )}
             </thead>
             <tbody>
               {invoices.map((inv, i) => {
-                const isSel       = !!selectedInvoices[inv._id];
-                const prevList    = prevPayments[inv._id] || [];
-                const alreadyPaid = prevList.reduce((s, p) => s + p.amount, 0);
-                const remaining   = Math.max((inv.amount || 0) - alreadyPaid, 0);
-                const payBefore   = isSel ? (parseFloat(paymentAmounts[inv._id]) || 0) : 0;
-                const { taxAmt, payAfter } = calcTax(payBefore);
-                const balAfter    = Math.max(remaining - payBefore, 0);
-                const isExpanded  = !!expandedRows[inv._id];
+                const isSel          = !!selectedInvoices[inv._id];
+                const prevList       = prevReceipts[inv._id] || [];
+                const alreadyRecvd   = prevList.reduce((s, p) => s + p.amount, 0);
+                const remaining      = Math.max((inv.amount || 0) - alreadyRecvd, 0);
+                const recvBefore     = isSel ? (parseFloat(receiptAmounts[inv._id]) || 0) : 0;
+                const { taxAmt, recvAfter } = calcTax(recvBefore);
+                const balAfter       = Math.max(remaining - recvBefore, 0);
+                const isExpanded     = !!expandedRows[inv._id];
 
-                let paidBadge;
-                if (alreadyPaid === 0)                              paidBadge = <span style={S.paidNone}>Unpaid</span>;
-                else if (alreadyPaid >= (inv.amount || 0) - 0.005) paidBadge = <span style={S.paidFull}>Full Paid</span>;
-                else                                                paidBadge = <span style={S.paidPartial}>Partial</span>;
+                let recvBadge;
+                if (alreadyRecvd === 0)                              recvBadge = <span style={S.recvNone}>Pending</span>;
+                else if (alreadyRecvd >= (inv.amount || 0) - 0.005) recvBadge = <span style={S.recvFull}>Full Recv</span>;
+                else                                                 recvBadge = <span style={S.recvPartial}>Partial</span>;
 
                 return (
                   <>
-                    <tr key={inv._id} style={isSel ? { background:"#dbeafe" } : {}}>
+                    <tr key={inv._id} style={isSel ? { background:"#dcfce7" } : {}}>
                       <td style={S.tdC(i)}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleInvoice(inv._id, remaining)} />
+                        <input type="checkbox" checked={isSel}
+                          onChange={() => toggleInvoice(inv._id, remaining)} />
                       </td>
                       <td style={S.tdC(i)}>
                         {prevList.length > 0 ? (
                           <button onClick={() => toggleRow(inv._id)}
-                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#2563a8", fontWeight:700, padding:0 }}>
+                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#16a34a", fontWeight:700, padding:0 }}>
                             {isExpanded ? "▲" : "▼"}&nbsp;{prevList.length}
                           </button>
                         ) : <span style={{ color:"#d1d5db" }}>—</span>}
@@ -650,62 +670,55 @@ export default function SupplierPaymentVoucher() {
                       <td style={S.td(i)}>{fmtDate(inv.date)}</td>
                       <td style={S.td(i)}>{inv.description || inv.narration || "—"}</td>
                       <td style={{ ...S.tdR(i), fontWeight:600 }}>Rs. {fmtNum(inv.amount)}</td>
-                      <td style={{ ...S.tdR(i), color: alreadyPaid > 0 ? "#16a34a" : "#9ca3af", fontWeight: alreadyPaid > 0 ? 700 : 400 }}>
-                        {alreadyPaid > 0 ? `Rs. ${fmtNum(alreadyPaid)}` : "—"}
+                      <td style={{ ...S.tdR(i), color: alreadyRecvd > 0 ? "#16a34a" : "#9ca3af", fontWeight: alreadyRecvd > 0 ? 700 : 400 }}>
+                        {alreadyRecvd > 0 ? `Rs. ${fmtNum(alreadyRecvd)}` : "—"}
                       </td>
                       <td style={{ ...S.tdR(i), color: remaining > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>
                         Rs. {fmtNum(remaining)}
                       </td>
-                      <td style={S.tdC(i)}>{paidBadge}</td>
+                      <td style={S.tdC(i)}>{recvBadge}</td>
 
-                      {/* ── Tax columns ── */}
                       {taxRate > 0 ? (
                         <>
-                          {/* Pay Before Tax */}
                           <td style={{ ...S.tdTax(i), fontWeight: isSel ? 700 : 400 }}>
-                            {isSel ? `Rs. ${fmtNum(payBefore)}` : <span style={{ color:"#d1d5db" }}>—</span>}
+                            {isSel ? `Rs. ${fmtNum(recvBefore)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Tax Amount */}
                           <td style={{ ...S.tdTax(i), color:"#dc2626", fontWeight: isSel ? 700 : 400 }}>
                             {isSel ? `Rs. ${fmtNum(taxAmt)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Pay After Tax */}
                           <td style={{ ...S.tdTax(i), color:"#15803d", fontWeight: isSel ? 700 : 400 }}>
-                            {isSel ? `Rs. ${fmtNum(payAfter)}` : <span style={{ color:"#d1d5db" }}>—</span>}
+                            {isSel ? `Rs. ${fmtNum(recvAfter)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Pay Now input */}
                           <td style={S.tdC(i)}>
                             {isSel ? (
                               <input type="number" style={S.payInput}
-                                value={paymentAmounts[inv._id] ?? ""} min={0} max={remaining}
-                                onChange={(e) => handlePayAmt(inv._id, e.target.value, remaining)}
+                                value={receiptAmounts[inv._id] ?? ""} min={0} max={remaining}
+                                onChange={(e) => handleRecvAmt(inv._id, e.target.value, remaining)}
                                 onFocus={(e) => e.target.select()} />
                             ) : <span style={{ color:"#9ca3af", fontSize:11 }}>—</span>}
                           </td>
                         </>
                       ) : (
-                        /* No tax — single Pay Now column */
                         <td style={S.tdC(i)}>
                           {isSel ? (
                             <input type="number" style={S.payInput}
-                              value={paymentAmounts[inv._id] ?? ""} min={0} max={remaining}
-                              onChange={(e) => handlePayAmt(inv._id, e.target.value, remaining)}
+                              value={receiptAmounts[inv._id] ?? ""} min={0} max={remaining}
+                              onChange={(e) => handleRecvAmt(inv._id, e.target.value, remaining)}
                               onFocus={(e) => e.target.select()} />
                           ) : <span style={{ color:"#9ca3af", fontSize:11 }}>—</span>}
                         </td>
                       )}
 
-                      {/* Balance After */}
                       <td style={{ ...S.tdR(i), color: isSel ? (balAfter > 0 ? "#f59e0b" : "#16a34a") : "#9ca3af", fontWeight: isSel ? 700 : 400 }}>
                         {isSel ? `Rs. ${fmtNum(balAfter)}` : "—"}
                       </td>
                     </tr>
 
-                    {/* Previous payments sub-rows */}
+                    {/* Previous receipts sub-rows */}
                     {isExpanded && prevList.map((pmt, pi) => (
                       <tr key={`${inv._id}-p${pi}`} style={S.subRow}>
                         <td colSpan={2} style={S.subCell} />
-                        <td colSpan={2} style={{ ...S.subCell, color:"#92400e", fontWeight:600 }}>↳ {pmt.voucherNumber}</td>
+                        <td colSpan={2} style={{ ...S.subCell, color:"#15803d", fontWeight:600 }}>↳ {pmt.voucherNumber}</td>
                         <td style={{ ...S.subCell, textAlign:"center" }}>{fmtDate(pmt.date)}</td>
                         <td style={S.subCell} />
                         <td style={{ ...S.subCell, textAlign:"right", color:"#16a34a", fontWeight:700 }}>Rs. {fmtNum(pmt.amount)}</td>
@@ -724,21 +737,21 @@ export default function SupplierPaymentVoucher() {
             {/* Footer */}
             <tfoot>
               <tr style={S.summaryRow}>
-                <td colSpan={5} style={{ padding:"7px 10px", fontWeight:700, color:"#1e3a8a" }}>
+                <td colSpan={5} style={{ padding:"7px 10px", fontWeight:700, color:"#14532d" }}>
                   TOTALS &nbsp;
                   <span style={{ fontSize:11, fontWeight:400, color:"#374151" }}>
                     ({Object.keys(selectedInvoices).length} of {invoices.length} selected)
                   </span>
                 </td>
                 <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent" }}>Rs. {fmtNum(totalInvoice)}</td>
-                <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent", color:"#16a34a" }}>Rs. {fmtNum(totalPrevPaid)}</td>
+                <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent", color:"#16a34a" }}>Rs. {fmtNum(totalPrevReceived)}</td>
                 <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent", color:"#dc2626" }}>Rs. {fmtNum(totalRemaining)}</td>
                 <td style={{ background:"transparent" }} />
                 {taxRate > 0 ? (
                   <>
-                    <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#2563a8" }}>Rs. {fmtNum(totalPayBefore)}</td>
+                    <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#2563a8" }}>Rs. {fmtNum(totalRecvBefore)}</td>
                     <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#dc2626" }}>Rs. {fmtNum(totalTaxAmt)}</td>
-                    <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#15803d" }}>Rs. {fmtNum(totalPayAfter)}</td>
+                    <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#15803d" }}>Rs. {fmtNum(totalRecvAfter)}</td>
                     <td style={{ background:"transparent" }} />
                   </>
                 ) : (
@@ -749,24 +762,29 @@ export default function SupplierPaymentVoucher() {
             </tfoot>
           </table>
 
-          {/* Payment Bar */}
-          {totalPayBefore > 0 && (
-            <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+          {/* Receipt Confirm Bar */}
+          {totalRecvBefore > 0 && (
+            <div style={{ background:"linear-gradient(90deg,#14532d,#16a34a)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
               <span style={{ fontSize:12 }}>
-                💳 <b>{vendorObj?.name}</b> ko payment via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
-                {taxRate > 0 && <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>WHT @ {taxPct}</span>}
+                💰 <b>{customerObj?.name}</b> se receipt via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
+                {taxRate > 0 && (
+                  <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>
+                    WHT @ {taxPct}
+                  </span>
+                )}
               </span>
               <span style={{ fontSize:13, fontWeight:700, display:"flex", gap:16, flexWrap:"wrap" }}>
                 {taxRate > 0 && (
                   <>
-                    <span>Before Tax: <b>Rs. {fmtNum(totalPayBefore)}</b></span>
-                    <span style={{ color:"#fde68a" }}>Tax: <b>Rs. {fmtNum(totalTaxAmt)}</b></span>
-                    <span style={{ color:"#86efac" }}>After Tax: <b>Rs. {fmtNum(totalPayAfter)}</b></span>
+                    <span>Before Tax: <b>Rs. {fmtNum(totalRecvBefore)}</b></span>
+                    <span style={{ color:"#fde68a" }}>WHT: <b>Rs. {fmtNum(totalTaxAmt)}</b></span>
+                    <span style={{ color:"#86efac" }}>Net Recv: <b>Rs. {fmtNum(totalRecvAfter)}</b></span>
                   </>
                 )}
-                {taxRate === 0 && <span>Total: <b>Rs. {fmtNum(totalPayBefore)}</b></span>}
+                {taxRate === 0 && <span>Total: <b>Rs. {fmtNum(totalRecvBefore)}</b></span>}
               </span>
-              <button style={{ ...S.btn("success"), fontSize:12 }} onClick={handleSave} disabled={saving}>
+              <button style={{ ...S.btn("default"), fontSize:12, background:"#fff", color:"#14532d", fontWeight:700 }}
+                onClick={handleSave} disabled={saving}>
                 {saving ? "⏳ Saving..." : "✅ Confirm & Save"}
               </button>
             </div>
@@ -779,7 +797,7 @@ export default function SupplierPaymentVoucher() {
         <div style={S.modal} onClick={() => setHistoryModal(false)}>
           <div style={S.modalBox} onClick={(e) => e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-              <h3 style={{ margin:0, color:"#1a3c5e", fontSize:14 }}>📜 Payment Voucher History</h3>
+              <h3 style={{ margin:0, color:"#14532d", fontSize:14 }}>📜 Receipt Voucher History</h3>
               <button onClick={() => setHistoryModal(false)} style={{ ...S.btn("danger"), padding:"2px 10px" }}>✕</button>
             </div>
             {loadingHistory ? (
@@ -792,11 +810,11 @@ export default function SupplierPaymentVoucher() {
                   <tr>
                     <th style={S.th}>Voucher #</th>
                     <th style={S.th}>Date</th>
-                    <th style={S.th}>Vendor</th>
+                    <th style={S.th}>Customer</th>
                     <th style={S.th}>Bank / Cash</th>
                     <th style={S.thR}>Amount</th>
-                    <th style={S.thR}>Tax</th>
-                    <th style={S.thR}>Net</th>
+                    <th style={S.thR}>WHT</th>
+                    <th style={S.thR}>Net Recv</th>
                     <th style={S.thC}>Status</th>
                   </tr>
                 </thead>
@@ -805,8 +823,8 @@ export default function SupplierPaymentVoucher() {
                     <tr key={h._id || i}>
                       <td style={S.td(i)}>{h.voucherNumber || "—"}</td>
                       <td style={S.td(i)}>{fmtDate(h.voucherDate)}</td>
-                      <td style={S.td(i)}>{h.accDrSupplierName || h.accDrSupplier?.name || "—"}</td>
-                      <td style={S.td(i)}>{h.accCrBankName || h.accCrBank?.name || "—"}</td>
+                      <td style={S.td(i)}>{h.accCrCustomerName || h.accCrCustomer?.name || "—"}</td>
+                      <td style={S.td(i)}>{h.accDrBankName || h.accDrBank?.name || "—"}</td>
                       <td style={S.tdR(i)}>Rs. {fmtNum(h.voucherAmount)}</td>
                       <td style={{ ...S.tdR(i), color:"#f59e0b" }}>
                         {h.totalTaxAmount ? `Rs. ${fmtNum(h.totalTaxAmount)}` : "—"}

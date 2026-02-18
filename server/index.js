@@ -39,7 +39,7 @@ app.use("/api/accounts", require("./routes/accountsRoute"))
 app.use("/api/trial-balance", require("./routes/trial-balance-route"))
 app.use("/api/ledgers", require("./routes/ledgerRoutes"))
 app.use("/api/supplier-payment", require("./routes/supplierPaymentRoutes"))
-// Error handling middleware
+app.use("/api/customer-receipt", require("./routes/customerReceiptRoutes"))
 app.use((err, req, res, next) => {
   console.error(err.stack)
   res.status(500).json({ message: "Something went wrong!", error: err.message })

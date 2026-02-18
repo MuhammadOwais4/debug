@@ -12,17 +12,45 @@ const ledgerSchema = new mongoose.Schema(
       enum: ["Assets", "Liabilities", "Equity", "Revenue", "Expenses"],
     },
     voucherNo: { type: String, required: true, trim: true },
-    voucherType: { type: String, required: true, enum: ["Sale", "Purchase", "CPV", "BPV", "CRV", "BRV", "JV"] },
-    sourceType: { type: String, required: true, enum: ["Sale", "Voucher", "Product"] },
-    sourceId: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "sourceType" },
+    voucherType: {
+      type: String,
+      required: true,
+      enum: [
+        "Sale", "Purchase",
+        "CPV", "BPV", "CRV", "BRV", "JV",
+        "SPV",                          // ✅ Supplier Payment Voucher
+        "Sale Return", "Purchase Return",
+        "Sale Discount", "Purchase Discount",
+        "WHT",                          // ✅ Withholding Tax entries
+      ],
+    },
+    sourceType: {
+      type: String,
+      required: true,
+      enum: [
+        "Sale", "Voucher", "Product",
+        "SupplierPaymentVoucher",       // ✅ SPV source
+        "SaleReturn", "PurchaseReturn",
+        "SaleDiscount", "PurchaseDiscount",
+      ],
+    },
+    sourceId: { type: mongoose.Schema.Types.ObjectId, required: true },
     grn: { type: String, trim: true, sparse: true },
     description: { type: String, required: true, trim: true },
-    debit: { type: Number, default: 0, min: 0 },
-    credit: { type: Number, default: 0, min: 0 },
+    debit:   { type: Number, default: 0, min: 0 },
+    credit:  { type: Number, default: 0, min: 0 },
     balance: { type: Number, default: 0 },
     entryType: {
       type: String,
-      enum: ["RECEIVABLE", "REVENUE", "PURCHASE", "PAYABLE", "EXPENSE", "CASH", "BANK", "JOURNAL"],
+      enum: [
+        "RECEIVABLE", "REVENUE",
+        "PURCHASE", "PAYABLE",
+        "EXPENSE", "CASH", "BANK", "JOURNAL",
+        "SALE_RETURN", "RECEIVABLE_REVERSAL",
+        "PAYABLE_REVERSAL", "PURCHASE_RETURN",
+        "SALE_DISCOUNT", "PURCHASE_DISCOUNT",
+        "WHT_EXPENSE", "WHT_PAYABLE",   // ✅ WHT entry types
+      ],
     },
     isActive: { type: Boolean, default: true },
   },
@@ -31,5 +59,6 @@ const ledgerSchema = new mongoose.Schema(
 
 ledgerSchema.index({ accountCode: 1, date: 1 })
 ledgerSchema.index({ accountName: 1, date: 1 })
+ledgerSchema.index({ voucherNo: 1 })
 
-module.exports = mongoose.model("Ledger", ledgerSchema)
+module.exports = mongoose.models.Ledger || mongoose.model("Ledger", ledgerSchema)

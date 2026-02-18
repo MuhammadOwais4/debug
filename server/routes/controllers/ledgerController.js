@@ -9,11 +9,59 @@ const Voucher = require("../models/Voucher")
 const Ledger = require("../models/Leader")
 const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
-const SupplierPaymentVoucher = require("../models/Supplierpaymentvouchers")
+const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
+const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher") 
 
-// ========== EXPORTED FUNCTIONS ==========
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ HARDCODED TAX ACCOUNTS
+// ═══════════════════════════════════════════════════════════════════════════════
+const HARDCODED_TAX_ACCOUNTS = [
+  {
+    code: "TAX-0025", name: "Withholding Tax 0.25%",
+    type: "TAX-EXPENSE", fullName: "TAX-0025 - Withholding Tax 0.25%",
+    category: "Expenses", normalBalance: "debit", balance: 0, rate: 0.0025,
+  },
+  {
+    code: "TAX-0050", name: "Withholding Tax 0.50%",
+    type: "TAX-EXPENSE", fullName: "TAX-0050 - Withholding Tax 0.50%",
+    category: "Expenses", normalBalance: "debit", balance: 0, rate: 0.005,
+  },
+  {
+    code: "TAX-0100", name: "Withholding Tax 1%",
+    type: "TAX-EXPENSE", fullName: "TAX-0100 - Withholding Tax 1%",
+    category: "Expenses", normalBalance: "debit", balance: 0, rate: 0.01,
+  },
+  {
+    code: "TAX-0025-PAY", name: "Withholding Tax 0.25% Payable",
+    type: "TAX-PAYABLE", fullName: "TAX-0025-PAY - WHT 0.25% Payable",
+    category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.0025,
+  },
+  {
+    code: "TAX-0050-PAY", name: "Withholding Tax 0.50% Payable",
+    type: "TAX-PAYABLE", fullName: "TAX-0050-PAY - WHT 0.50% Payable",
+    category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.005,
+  },
+  {
+    code: "TAX-0100-PAY", name: "Withholding Tax 1% Payable",
+    type: "TAX-PAYABLE", fullName: "TAX-0100-PAY - WHT 1% Payable",
+    category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.01,
+  },
+]
 
-// Get all accounts from chart of accounts
+const TAX_ACCOUNT_MAP = {}
+HARDCODED_TAX_ACCOUNTS.forEach(t => { TAX_ACCOUNT_MAP[t.code] = t })
+
+function isTaxAccount(code, name) {
+  const c = (code || "").toUpperCase()
+  const n = (name || "").toLowerCase()
+  return HARDCODED_TAX_ACCOUNTS.some(
+    t => t.code === c || t.name.toLowerCase() === n
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/ledgers/accounts
+// ═══════════════════════════════════════════════════════════════════════════════
 const getAllAccounts = async (req, res) => {
   try {
     const [assets, equity, expenses, liabilities, revenue] = await Promise.all([
@@ -24,811 +72,773 @@ const getAllAccounts = async (req, res) => {
       Revenue.find({ isActive: true }).select("code name type balance").lean(),
     ])
 
-    // Check if there are any sale or purchase discounts
-    const saleDiscountCount = await SaleDiscount.countDocuments()
+    const saleDiscountCount     = await SaleDiscount.countDocuments()
     const purchaseDiscountCount = await PurchasesDiscount.countDocuments()
 
     const allAccounts = [
-      ...assets.map((acc) => ({
-        code: acc.code,
-        name: acc.name,
-        type: acc.type,
-        balance: acc.balance || 0,
-        fullName: `${acc.code} - ${acc.name}`,
-        category: "Assets",
-        normalBalance: "debit",
+      ...assets.map(acc => ({
+        code: acc.code, name: acc.name, type: acc.type,
+        balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`,
+        category: "Assets", normalBalance: "debit",
       })),
-      ...equity.map((acc) => ({
-        code: acc.code,
-        name: acc.name,
-        type: acc.type,
-        balance: acc.balance || 0,
-        fullName: `${acc.code} - ${acc.name}`,
-        category: "Equity",
-        normalBalance: "credit",
+      ...equity.map(acc => ({
+        code: acc.code, name: acc.name, type: acc.type,
+        balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`,
+        category: "Equity", normalBalance: "credit",
       })),
-      ...expenses.map((acc) => ({
-        code: acc.code,
-        name: acc.name,
-        type: acc.type,
-        balance: acc.balance || 0,
-        fullName: `${acc.code} - ${acc.name}`,
-        category: "Expenses",
-        normalBalance: "debit",
+      ...expenses.map(acc => ({
+        code: acc.code, name: acc.name, type: acc.type,
+        balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`,
+        category: "Expenses", normalBalance: "debit",
       })),
-      ...liabilities.map((acc) => ({
-        code: acc.code,
-        name: acc.name,
-        type: acc.type,
-        balance: acc.balance || 0,
-        fullName: `${acc.code} - ${acc.name}`,
-        category: "Liabilities",
-        normalBalance: "credit",
+      ...liabilities.map(acc => ({
+        code: acc.code, name: acc.name, type: acc.type,
+        balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`,
+        category: "Liabilities", normalBalance: "credit",
       })),
-      ...revenue.map((acc) => ({
-        code: acc.code,
-        name: acc.name,
-        type: acc.type,
-        balance: acc.balance || 0,
-        fullName: `${acc.code} - ${acc.name}`,
-        category: "Revenue",
-        normalBalance: "credit",
+      ...revenue.map(acc => ({
+        code: acc.code, name: acc.name, type: acc.type,
+        balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`,
+        category: "Revenue", normalBalance: "credit",
       })),
     ]
 
-    // Add Sale Discount account if there are any sale discounts
     if (saleDiscountCount > 0) {
       allAccounts.push({
-        code: "SALES-DISC",
-        name: "SALES DISCOUNT",
-        type: "SALES DISCOUNT",
-        balance: 0,
-        fullName: `SALES-DISC - SALES DISCOUNT`,
-        category: "Expenses",
-        normalBalance: "debit",
+        code: "SALES-DISC", name: "SALES DISCOUNT", type: "SALES DISCOUNT",
+        balance: 0, fullName: "SALES-DISC - SALES DISCOUNT",
+        category: "Expenses", normalBalance: "debit",
       })
     }
-
-    // Add Purchase Discount account if there are any purchase discounts
     if (purchaseDiscountCount > 0) {
       allAccounts.push({
-        code: "PURCH-DISC",
-        name: "PURCHASES DISCOUNT",
-        type: "PURCHASES DISCOUNT",
-        balance: 0,
-        fullName: `PURCH-DISC - PURCHASES DISCOUNT`,
-        category: "Revenue",
-        normalBalance: "credit",
+        code: "PURCH-DISC", name: "PURCHASES DISCOUNT", type: "PURCHASES DISCOUNT",
+        balance: 0, fullName: "PURCH-DISC - PURCHASES DISCOUNT",
+        category: "Revenue", normalBalance: "credit",
       })
     }
 
-    // Calculate actual closing balance from ALL ledger entries for each account
+    // Check SPV tax usage
+    const spvWithTax = await SupplierPaymentVoucher.find(
+      { taxRate: { $gt: 0 } },
+      { taxRate: 1, _id: 0 }
+    ).lean()
+    const spvUsedRates = new Set(spvWithTax.map(r => parseFloat(r.taxRate)))
+
+    // ✅ Also check CRV tax usage
+    const crvWithTax = await CustomerReceiptVoucher.find(
+      { taxRate: { $gt: 0 } },
+      { taxRate: 1, _id: 0 }
+    ).lean()
+    const crvUsedRates = new Set(crvWithTax.map(r => parseFloat(r.taxRate)))
+
+    // Add WHT accounts if either SPV or CRV has tax entries
+    if (spvUsedRates.size > 0 || crvUsedRates.size > 0) {
+      HARDCODED_TAX_ACCOUNTS.forEach(taxAcc => allAccounts.push({ ...taxAcc }))
+      console.log(`✅ Adding ${HARDCODED_TAX_ACCOUNTS.length} hardcoded WHT accounts`)
+    }
+
+    // Update balances from Ledger
     for (const account of allAccounts) {
       try {
-        // For discount accounts, use the type to match
-        let searchCriteria
-        if (account.code === "SALES-DISC" || account.code === "PURCH-DISC") {
-          // For discount accounts, we need to search by the type field in ledger
-          searchCriteria = { 
-            $or: [
-              { accountName: account.name },
-              { accountCode: account.code }
-            ]
-          }
-        } else {
-          searchCriteria = { accountCode: account.code }
-        }
-        
+        const searchCriteria =
+          account.code === "SALES-DISC" || account.code === "PURCH-DISC"
+            ? { $or: [{ accountName: account.name }, { accountCode: account.code }] }
+            : { accountCode: account.code }
+
         const ledgerEntries = await Ledger.find(searchCriteria)
           .sort({ date: 1, createdAt: 1 })
           .select("debit credit balance")
           .lean()
-        
-        if (ledgerEntries && ledgerEntries.length > 0) {
-          const lastEntry = ledgerEntries[ledgerEntries.length - 1]
-          account.balance = lastEntry.balance || 0
-          console.log(`✅ ${account.code} - Balance: ${account.balance} (from ${ledgerEntries.length} entries)`)
+
+        if (ledgerEntries.length > 0) {
+          account.balance = ledgerEntries[ledgerEntries.length - 1].balance || 0
+          console.log(`✅ ${account.code} — Balance: ${account.balance} (${ledgerEntries.length} entries)`)
         } else {
-          console.log(`ℹ️ ${account.code} - No ledger entries, balance: 0`)
+          console.log(`ℹ️ ${account.code} — No ledger entries, balance: 0`)
         }
       } catch (err) {
-        console.error(`❌ Error fetching balance for ${account.code}:`, err.message)
+        console.error(`❌ Balance error for ${account.code}:`, err.message)
       }
     }
 
     allAccounts.sort((a, b) => a.code.localeCompare(b.code))
+    console.log(`\n📊 Returning ${allAccounts.length} accounts`)
 
-    console.log(`\n📊 Returning ${allAccounts.length} accounts with updated balances`)
-
-    res.status(200).json({
-      success: true,
-      count: allAccounts.length,
-      data: allAccounts,
-    })
+    res.status(200).json({ success: true, count: allAccounts.length, data: allAccounts })
   } catch (error) {
     console.error("Error fetching accounts:", error)
-    res.status(500).json({
-      success: false,
-      message: "Error fetching accounts",
-      error: error.message,
-    })
+    res.status(500).json({ success: false, message: "Error fetching accounts", error: error.message })
   }
 }
 
-// Get ledger entries for specific account
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/ledgers/account-ledger
+// ═══════════════════════════════════════════════════════════════════════════════
 const getAccountLedger = async (req, res) => {
   try {
     const { accountCode, accountName, fromDate, toDate } = req.query
 
-    if (!accountCode && !accountName) {
-      return res.status(400).json({
-        success: false,
-        message: "Account code or name is required",
-      })
-    }
-
-    if (!fromDate || !toDate) {
-      return res.status(400).json({
-        success: false,
-        message: "From date and to date are required",
-      })
-    }
+    if (!accountCode && !accountName)
+      return res.status(400).json({ success: false, message: "Account code or name is required" })
+    if (!fromDate || !toDate)
+      return res.status(400).json({ success: false, message: "From date and to date are required" })
 
     const from = new Date(fromDate + "T00:00:00")
-    const to = new Date(toDate + "T23:59:59")
+    const to   = new Date(toDate   + "T23:59:59")
 
     console.log("📊 Fetching ledger for:", { accountCode, accountName, fromDate, toDate })
 
-    // Check if this is a discount account
-    const isDiscountAccount = 
-      accountCode === "SALES-DISC" || 
-      accountCode === "PURCH-DISC" ||
-      accountName === "SALES DISCOUNT" ||
-      accountName === "PURCHASES DISCOUNT"
+    const isDiscountAccount =
+      accountCode === "SALES-DISC" || accountCode === "PURCH-DISC" ||
+      accountName === "SALES DISCOUNT" || accountName === "PURCHASES DISCOUNT"
 
-    // Determine account normal balance
-    let normalBalance = "debit"
-    const accountInfo = await findAccountInfo(accountCode || accountName)
-    if (accountInfo) {
-      normalBalance = accountInfo.normalBalance
+    const isTaxAcc = isTaxAccount(accountCode, accountName)
+    const taxAccInfo = isTaxAcc
+      ? HARDCODED_TAX_ACCOUNTS.find(
+          t => t.code === (accountCode || "").toUpperCase() ||
+               t.name.toLowerCase() === (accountName || "").toLowerCase()
+        )
+      : null
+
+    let normalBalance    = "debit"
+    let finalAccountCode = accountCode
+    let finalAccountName = accountName
+    let accountCategory  = "Assets"
+
+    if (isTaxAcc && taxAccInfo) {
+      normalBalance    = taxAccInfo.normalBalance
+      finalAccountCode = taxAccInfo.code
+      finalAccountName = taxAccInfo.name
+      accountCategory  = taxAccInfo.category
+    } else {
+      const accountInfo = await findAccountInfo(accountCode || accountName)
+      if (accountInfo) {
+        normalBalance    = accountInfo.normalBalance
+        finalAccountCode = accountInfo.code     || accountCode
+        finalAccountName = accountInfo.name     || accountName
+        accountCategory  = accountInfo.category || "Assets"
+      }
     }
-
-    const finalAccountCode = accountInfo?.code || accountCode
-    const finalAccountName = accountInfo?.name || accountName
-    const accountCategory = accountInfo?.category || "Assets"
 
     const ledgerEntries = []
     let runningBalance = 0
 
-    // ========== PROCESS VOUCHERS ==========
-    const vouchers = await Voucher.find({
-      voucherDate: { $gte: from, $lte: to },
-      status: { $ne: "cancelled" },
-    })
-      .sort({ voucherDate: 1 })
-      .lean()
+    // ══════════════════════════════════════════════════════════════════════════
+    // 1. VOUCHERS (JV, CPV, BPV, BRV etc.)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
+      const vouchers = await Voucher.find({
+        voucherDate: { $gte: from, $lte: to },
+        status: { $ne: "cancelled" },
+      }).sort({ voucherDate: 1 }).lean()
 
-    console.log(`✅ Found ${vouchers.length} vouchers`)
+      console.log(`✅ Found ${vouchers.length} vouchers`)
 
-    // Only process vouchers if NOT a discount account
-    if (!isDiscountAccount) {
       vouchers.forEach((voucher) => {
         voucher.entries?.forEach((entry) => {
-          const entryAccount = entry.account || ""
+          const entryAccount     = entry.account     || ""
           const entryAccountCode = entry.accountCode || ""
 
           if (
             matchAccount(entryAccount, accountCode, accountName) ||
             matchAccount(entryAccountCode, accountCode, accountName)
           ) {
-            const debitAmount = parseFloat(entry.debitAmount || 0)
-            const creditAmount = parseFloat(entry.creditAmount || 0)
-
-            if (normalBalance === "debit") {
-              runningBalance += debitAmount - creditAmount
-            } else {
-              runningBalance += creditAmount - debitAmount
-            }
+            const dr = parseFloat(entry.debitAmount  || 0)
+            const cr = parseFloat(entry.creditAmount || 0)
+            runningBalance += normalBalance === "debit" ? dr - cr : cr - dr
 
             ledgerEntries.push({
-              id: `voucher-${voucher._id}-${entry.serialNo}`,
-              date: voucher.voucherDate,
-              voucherNo: voucher.voucherNo,
+              id:          `voucher-${voucher._id}-${entry.serialNo}`,
+              date:        voucher.voucherDate,
+              voucherNo:   voucher.voucherNo,
               voucherType: voucher.voucherType,
               description: entry.description || voucher.narration || "No description",
-              debit: debitAmount,
-              credit: creditAmount,
-              balance: runningBalance,
-              grn: null,
-              sourceId: voucher._id,
+              debit: dr, credit: cr, balance: runningBalance,
+              grn: null, sourceId: voucher._id,
             })
           }
         })
       })
     }
 
-    // ========== PROCESS SUPPLIER PAYMENT VOUCHERS (SPV) ==========
+    // ══════════════════════════════════════════════════════════════════════════
+    // 2. SUPPLIER PAYMENT VOUCHERS (SPV)
+    //
+    //  DR  Vendor/Supplier  (voucherAmount — payable cleared)
+    //  CR  Cash/Bank        (netAmount — net paid after WHT)
+    //  DR  Tax Expense      (totalTaxAmount, if taxRate > 0)
+    //  CR  Tax Payable      (totalTaxAmount, if taxRate > 0)
+    // ══════════════════════════════════════════════════════════════════════════
     const spvVouchers = await SupplierPaymentVoucher.find({
       voucherDate: { $gte: from, $lte: to },
       status: { $in: ["SAVED", "POSTED"] },
     })
-      .populate("accCrBank", "name code")
       .populate("accDrSupplier", "name code")
       .sort({ voucherDate: 1 })
       .lean()
 
-    console.log(`✅ Found ${spvVouchers.length} supplier payment vouchers`)
+    console.log(`✅ Found ${spvVouchers.length} SPV vouchers`)
 
-    // Only process SPV if NOT a discount account
     if (!isDiscountAccount) {
       spvVouchers.forEach((spv) => {
-        const bankName = spv.accCrBank?.name || spv.accCrBankName || ""
-        const bankCode = spv.accCrBank?.code || ""
         const supplierName = spv.accDrSupplier?.name || spv.accDrSupplierName || ""
         const supplierCode = spv.accDrSupplier?.code || ""
-        const voucherType = spv.voucherNumber?.includes("SPV") ? "SPV" : "Payment"
-        
-        const totalAmount = parseFloat(spv.voucherAmount || 0)
+        const bankName     = spv.accCrBankName || ""
+        const bankCode     = spv.accCrBank     || ""
+        const vNo          = spv.voucherNumber || "SPV"
+        const vType        = "SPV"
 
-        // Vendor/Supplier Account (DEBIT) - Reduces liability
+        const fullAmt = parseFloat(spv.voucherAmount  || 0)
+        const taxAmt  = parseFloat(spv.totalTaxAmount || 0)
+        const netAmt  = parseFloat(spv.netAmount      || fullAmt)
+        const taxRate = spv.taxRate || 0
+        const taxCode = spv.taxAccountCode || ""
+        const taxName = spv.taxAccountName || ""
+        const narr    = spv.narration || `Payment to ${supplierName}`
+        const taxPct  = taxRate > 0 ? `${(taxRate * 100).toFixed(2)}%` : ""
+
+        // A. Vendor (DR fullAmt)
         if (
           matchAccount(supplierName, accountCode, accountName) ||
           matchAccount(supplierCode, accountCode, accountName)
         ) {
-          if (normalBalance === "debit") {
-            runningBalance += totalAmount
-          } else {
-            runningBalance -= totalAmount
-          }
-
+          runningBalance += normalBalance === "debit" ? fullAmt : -fullAmt
           ledgerEntries.push({
-            id: `spv-${spv._id}-supplier`,
-            date: spv.voucherDate,
-            voucherNo: spv.voucherNumber,
-            voucherType: voucherType,
-            description: spv.narration || `Payment to ${supplierName}`,
-            debit: totalAmount,
-            credit: 0,
-            balance: runningBalance,
-            grn: spv.lines?.[0]?.purchaseDetail || null,
-            sourceId: spv._id,
+            id: `spv-${spv._id}-supplier`, date: spv.voucherDate,
+            voucherNo: vNo, voucherType: vType,
+            description: taxAmt > 0
+              ? `${narr} [Before Tax: Rs.${fullAmt.toLocaleString()} | WHT ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net Paid: Rs.${netAmt.toLocaleString()}]`
+              : narr,
+            debit: fullAmt, credit: 0, balance: runningBalance,
+            grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
           })
         }
 
-        // Cash/Bank Account (CREDIT) - Reduces asset
+        // B. Cash/Bank (CR netAmt)
         if (
           matchAccount(bankName, accountCode, accountName) ||
-          matchAccount(bankCode, accountCode, accountName)
+          matchAccount(bankCode,  accountCode, accountName)
         ) {
-          if (normalBalance === "debit") {
-            runningBalance -= totalAmount
-          } else {
-            runningBalance += totalAmount
-          }
-
+          const cr = taxAmt > 0 ? netAmt : fullAmt
+          runningBalance += normalBalance === "debit" ? -cr : cr
           ledgerEntries.push({
-            id: `spv-${spv._id}-bank`,
-            date: spv.voucherDate,
-            voucherNo: spv.voucherNumber,
-            voucherType: voucherType,
-            description: spv.narration || `Payment from ${bankName} to ${supplierName}`,
-            debit: 0,
-            credit: totalAmount,
-            balance: runningBalance,
-            grn: spv.lines?.[0]?.purchaseDetail || null,
-            sourceId: spv._id,
+            id: `spv-${spv._id}-bank`, date: spv.voucherDate,
+            voucherNo: vNo, voucherType: vType,
+            description: taxAmt > 0
+              ? `${narr} — Paid Rs.${netAmt.toLocaleString()} (after WHT Rs.${taxAmt.toLocaleString()} @ ${taxPct})`
+              : `${narr} — via ${bankName}`,
+            debit: 0, credit: cr, balance: runningBalance,
+            grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
+          })
+        }
+
+        // C. WHT Expense (DR taxAmt)
+        if (
+          taxAmt > 0 && taxCode &&
+          (matchAccount(taxCode, accountCode, accountName) ||
+           matchAccount(taxName, accountCode, accountName) ||
+           (isTaxAcc && taxAccInfo?.category === "Expenses" && taxAccInfo?.rate === taxRate))
+        ) {
+          runningBalance += normalBalance === "debit" ? taxAmt : -taxAmt
+          ledgerEntries.push({
+            id: `spv-${spv._id}-wht-exp`, date: spv.voucherDate,
+            voucherNo: vNo, voucherType: "WHT",
+            description: `WHT @ ${taxPct} on payment to ${supplierName} (${vNo})`,
+            debit: taxAmt, credit: 0, balance: runningBalance,
+            grn: null, sourceId: spv._id,
+            accountCode: taxCode, accountName: taxName,
+          })
+        }
+
+        // D. WHT Payable (CR taxAmt)
+        if (
+          taxAmt > 0 && taxCode &&
+          (matchAccount(`${taxCode}-PAY`, accountCode, accountName) ||
+           matchAccount(`${taxName} Payable`, accountCode, accountName) ||
+           (isTaxAcc && taxAccInfo?.category === "Liabilities" && taxAccInfo?.rate === taxRate))
+        ) {
+          runningBalance += normalBalance === "debit" ? -taxAmt : taxAmt
+          ledgerEntries.push({
+            id: `spv-${spv._id}-wht-pay`, date: spv.voucherDate,
+            voucherNo: vNo, voucherType: "WHT",
+            description: `WHT payable to FBR/Govt @ ${taxPct} — ${supplierName} (${vNo})`,
+            debit: 0, credit: taxAmt, balance: runningBalance,
+            grn: null, sourceId: spv._id,
+            accountCode: `${taxCode}-PAY`,
+            accountName: `${taxName} Payable`,
           })
         }
       })
     }
 
-    // ========== PROCESS SALE DISCOUNTS ==========
-    const saleDiscounts = await SaleDiscount.find({
-      date: { $gte: from, $lte: to },
-    })
-      .populate("customer", "name code")
-      .lean()
+    // ══════════════════════════════════════════════════════════════════════════
+    // 3. SALE DISCOUNTS
+    // ══════════════════════════════════════════════════════════════════════════
+    const saleDiscounts = await SaleDiscount.find({ date: { $gte: from, $lte: to } })
+      .populate("customer", "name code").lean()
 
     console.log(`✅ Found ${saleDiscounts.length} sale discounts`)
 
     saleDiscounts.forEach((discount) => {
       const customerName = discount.customer?.name || ""
       const customerCode = discount.customer?.code || ""
-      const discountType = discount.type || ""
-      
-      const debitAmount = parseFloat(discount.debitAmount || 0)
-      const creditAmount = parseFloat(discount.creditAmount || 0)
+      const dr = parseFloat(discount.debitAmount  || 0)
+      const cr = parseFloat(discount.creditAmount || 0)
 
-      // Sale Discount Account (DEBIT) - Only for SALES-DISC account
       if (accountCode === "SALES-DISC" || accountName === "SALES DISCOUNT") {
-        if (normalBalance === "debit") {
-          runningBalance += debitAmount
-        } else {
-          runningBalance -= debitAmount
-        }
-
+        runningBalance += normalBalance === "debit" ? dr : -dr
         ledgerEntries.push({
           id: `sale-discount-${discount._id}-type`,
-          date: discount.date,
-          voucherNo: discount.invoice || "N/A",
+          date: discount.date, voucherNo: discount.invoice || "N/A",
           voucherType: "Sale Discount",
           description: discount.description || `Sale discount for ${customerName}`,
-          debit: debitAmount,
-          credit: 0,
-          balance: runningBalance,
-          grn: null,
-          sourceId: discount._id,
-          accountCode: "SALES-DISC",
-          accountName: "SALES DISCOUNT",
+          debit: dr, credit: 0, balance: runningBalance,
+          grn: null, sourceId: discount._id,
+          accountCode: "SALES-DISC", accountName: "SALES DISCOUNT",
         })
       }
 
-      // Customer Account (CREDIT) - Only for customer accounts
-      if (!isDiscountAccount && (matchAccount(customerName, accountCode, accountName) || matchAccount(customerCode, accountCode, accountName))) {
-        if (normalBalance === "debit") {
-          runningBalance -= creditAmount
-        } else {
-          runningBalance += creditAmount
-        }
-
+      if (!isDiscountAccount && (
+        matchAccount(customerName, accountCode, accountName) ||
+        matchAccount(customerCode, accountCode, accountName)
+      )) {
+        runningBalance += normalBalance === "debit" ? -cr : cr
         ledgerEntries.push({
           id: `sale-discount-${discount._id}-customer`,
-          date: discount.date,
-          voucherNo: discount.invoice || "N/A",
+          date: discount.date, voucherNo: discount.invoice || "N/A",
           voucherType: "Sale Discount",
           description: discount.description || `Discount allowed to ${customerName}`,
-          debit: 0,
-          credit: creditAmount,
-          balance: runningBalance,
-          grn: null,
-          sourceId: discount._id,
+          debit: 0, credit: cr, balance: runningBalance,
+          grn: null, sourceId: discount._id,
         })
       }
     })
 
-    // ========== PROCESS PURCHASE DISCOUNTS ==========
-    const purchaseDiscounts = await PurchasesDiscount.find({
-      date: { $gte: from, $lte: to },
-    })
-      .populate("vendor", "name code")
-      .lean()
+    // ══════════════════════════════════════════════════════════════════════════
+    // 4. PURCHASE DISCOUNTS
+    // ══════════════════════════════════════════════════════════════════════════
+    const purchaseDiscounts = await PurchasesDiscount.find({ date: { $gte: from, $lte: to } })
+      .populate("vendor", "name code").lean()
 
     console.log(`✅ Found ${purchaseDiscounts.length} purchase discounts`)
 
     purchaseDiscounts.forEach((discount) => {
       const vendorName = discount.vendor?.name || ""
       const vendorCode = discount.vendor?.code || ""
-      const discountType = discount.type || ""
-      
-      const debitAmount = parseFloat(discount.debitAmount || 0)
-      const creditAmount = parseFloat(discount.creditAmount || 0)
+      const dr = parseFloat(discount.debitAmount  || 0)
+      const cr = parseFloat(discount.creditAmount || 0)
 
-      // Purchase Discount Account (CREDIT) - Only for PURCH-DISC account
       if (accountCode === "PURCH-DISC" || accountName === "PURCHASES DISCOUNT") {
-        if (normalBalance === "debit") {
-          runningBalance -= creditAmount
-        } else {
-          runningBalance += creditAmount
-        }
-
+        runningBalance += normalBalance === "debit" ? -cr : cr
         ledgerEntries.push({
           id: `purchase-discount-${discount._id}-type`,
-          date: discount.date,
-          voucherNo: discount.invoice || "N/A",
+          date: discount.date, voucherNo: discount.invoice || "N/A",
           voucherType: "Purchase Discount",
           description: discount.description || `Purchase discount from ${vendorName}`,
-          debit: 0,
-          credit: creditAmount,
-          balance: runningBalance,
-          grn: null,
-          sourceId: discount._id,
-          accountCode: "PURCH-DISC",
-          accountName: "PURCHASES DISCOUNT",
+          debit: 0, credit: cr, balance: runningBalance,
+          grn: null, sourceId: discount._id,
+          accountCode: "PURCH-DISC", accountName: "PURCHASES DISCOUNT",
         })
       }
 
-      // Vendor Account (DEBIT) - Only for vendor accounts
-      if (!isDiscountAccount && (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName))) {
-        if (normalBalance === "debit") {
-          runningBalance += debitAmount
-        } else {
-          runningBalance -= debitAmount
-        }
-
+      if (!isDiscountAccount && (
+        matchAccount(vendorName, accountCode, accountName) ||
+        matchAccount(vendorCode, accountCode, accountName)
+      )) {
+        runningBalance += normalBalance === "debit" ? dr : -dr
         ledgerEntries.push({
           id: `purchase-discount-${discount._id}-vendor`,
-          date: discount.date,
-          voucherNo: discount.invoice || "N/A",
+          date: discount.date, voucherNo: discount.invoice || "N/A",
           voucherType: "Purchase Discount",
           description: discount.description || `Discount received from ${vendorName}`,
-          debit: debitAmount,
-          credit: 0,
-          balance: runningBalance,
-          grn: null,
-          sourceId: discount._id,
+          debit: dr, credit: 0, balance: runningBalance,
+          grn: null, sourceId: discount._id,
         })
       }
     })
 
-    // ========== PROCESS SALES ==========
-    // Skip sales if this is a discount account
-    if (!isDiscountAccount) {
-      const sales = await Sale.find({
-        createdAt: { $gte: from, $lte: to },
-      }).lean()
-
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5. SALES
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
+      const sales = await Sale.find({ createdAt: { $gte: from, $lte: to } }).lean()
       console.log(`✅ Found ${sales.length} sales`)
-
       const processedSaleIds = new Set()
 
       sales.forEach((sale) => {
         const customerName = sale.customerName || ""
-        if (customerName.toLowerCase().includes("test")) {
-          return
-        }
-
+        if (customerName.toLowerCase().includes("test")) return
         const amount = parseFloat(sale.totalAmount || 0)
         const saleId = `sale-${sale._id}`
-
-        if (processedSaleIds.has(saleId)) {
-          return
-        }
+        if (processedSaleIds.has(saleId)) return
         processedSaleIds.add(saleId)
 
-        // Customer Account (DEBIT)
         if (matchAccount(customerName, accountCode, accountName)) {
-          if (normalBalance === "debit") {
-            runningBalance += amount
-          } else {
-            runningBalance -= amount
-          }
-
+          runningBalance += normalBalance === "debit" ? amount : -amount
           ledgerEntries.push({
-            id: `${saleId}-customer`,
-            date: sale.createdAt,
-            voucherNo: sale.invoice || "N/A",
-            voucherType: "Sale",
+            id: `${saleId}-customer`, date: sale.createdAt,
+            voucherNo: sale.invoice || "N/A", voucherType: "Sale",
             description: `${sale.saleType} - ${sale.notes || "Sale"}`,
-            debit: amount,
-            credit: 0,
-            balance: runningBalance,
-            grn: null,
-            sourceId: sale._id,
+            debit: amount, credit: 0, balance: runningBalance,
+            grn: null, sourceId: sale._id,
           })
         }
 
-        // Revenue Account (CREDIT)
         const saleType = sale.saleType || ""
         if (matchAccount(saleType, accountCode, accountName)) {
-          if (normalBalance === "debit") {
-            runningBalance -= amount
-          } else {
-            runningBalance += amount
-          }
-
+          runningBalance += normalBalance === "debit" ? -amount : amount
           ledgerEntries.push({
-            id: `${saleId}-revenue`,
-            date: sale.createdAt,
-            voucherNo: sale.invoice || "N/A",
-            voucherType: "Sale",
-            description: `Sale to ${customerName} - ${sale.notes || "Sale transaction"}`,
-            debit: 0,
-            credit: amount,
-            balance: runningBalance,
-            grn: null,
-            sourceId: sale._id,
+            id: `${saleId}-revenue`, date: sale.createdAt,
+            voucherNo: sale.invoice || "N/A", voucherType: "Sale",
+            description: `Sale to ${customerName} - ${sale.notes || "Sale"}`,
+            debit: 0, credit: amount, balance: runningBalance,
+            grn: null, sourceId: sale._id,
           })
         }
       })
     }
 
-    // ========== PROCESS SALE RETURNS ==========
-    // Skip sale returns if this is a discount account
-    if (!isDiscountAccount) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // 6. SALE RETURNS
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
       const salesWithReturns = await Sale.find({
         returnedQuantity: { $gt: 0 },
         "returnHistory.date": { $gte: from, $lte: to },
-      })
-        .populate("product")
-        .lean()
+      }).populate("product").lean()
 
       console.log(`✅ Found ${salesWithReturns.length} sales with returns`)
 
       salesWithReturns.forEach((sale) => {
-        if (!sale.returnHistory || sale.returnHistory.length === 0) return
-
-        sale.returnHistory.forEach((returnEntry) => {
-          const returnDate = new Date(returnEntry.date)
-          if (returnDate < from || returnDate > to) return
-
-          const returnAmount = parseFloat(returnEntry.refundAmount || (returnEntry.quantity * sale.saleRate))
+        if (!sale.returnHistory?.length) return
+        sale.returnHistory.forEach((ret) => {
+          const retDate = new Date(ret.date)
+          if (retDate < from || retDate > to) return
+          const retAmt       = parseFloat(ret.refundAmount || (ret.quantity * sale.saleRate))
           const customerName = sale.customerName || ""
-          const saleType = sale.saleType || ""
+          const saleType     = sale.saleType     || ""
 
-          // Sale Return Account (DEBIT) - Reverse of revenue
           if (matchAccount(saleType, accountCode, accountName)) {
-            if (normalBalance === "debit") {
-              runningBalance += returnAmount
-            } else {
-              runningBalance -= returnAmount
-            }
-
+            runningBalance += normalBalance === "debit" ? retAmt : -retAmt
             ledgerEntries.push({
-              id: `sale-return-${sale._id}-${returnEntry._id}-revenue`,
-              date: returnDate,
-              voucherNo: sale.invoice || "N/A",
-              voucherType: "Sale Return",
-              description: `Return from ${customerName} - ${returnEntry.reason || "Sale return"}`,
-              debit: returnAmount,
-              credit: 0,
-              balance: runningBalance,
-              grn: null,
-              sourceId: sale._id,
+              id: `sale-return-${sale._id}-${ret._id}-revenue`, date: retDate,
+              voucherNo: sale.invoice || "N/A", voucherType: "Sale Return",
+              description: `Return from ${customerName} - ${ret.reason || "Sale return"}`,
+              debit: retAmt, credit: 0, balance: runningBalance,
+              grn: null, sourceId: sale._id,
             })
           }
 
-          // Customer Account (CREDIT) - Reverse of receivable
           if (matchAccount(customerName, accountCode, accountName)) {
-            if (normalBalance === "debit") {
-              runningBalance -= returnAmount
-            } else {
-              runningBalance += returnAmount
-            }
-
+            runningBalance += normalBalance === "debit" ? -retAmt : retAmt
             ledgerEntries.push({
-              id: `sale-return-${sale._id}-${returnEntry._id}-customer`,
-              date: returnDate,
-              voucherNo: sale.invoice || "N/A",
-              voucherType: "Sale Return",
-              description: `Return: ${returnEntry.quantity} units - ${returnEntry.reason || "Sale return"}`,
-              debit: 0,
-              credit: returnAmount,
-              balance: runningBalance,
-              grn: null,
-              sourceId: sale._id,
+              id: `sale-return-${sale._id}-${ret._id}-customer`, date: retDate,
+              voucherNo: sale.invoice || "N/A", voucherType: "Sale Return",
+              description: `Return: ${ret.quantity} units - ${ret.reason || "Sale return"}`,
+              debit: 0, credit: retAmt, balance: runningBalance,
+              grn: null, sourceId: sale._id,
             })
           }
         })
       })
     }
 
-    // ========== PROCESS PRODUCTS (PURCHASES) ==========
-    // Skip purchases if this is a discount account
-    if (!isDiscountAccount) {
-      const products = await Product.find({
-        createdAt: { $gte: from, $lte: to },
-      })
+    // ══════════════════════════════════════════════════════════════════════════
+    // 7. PRODUCTS (PURCHASES)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
+      const products = await Product.find({ createdAt: { $gte: from, $lte: to } })
         .populate("purchaseType", "name code")
-        .populate("vendorName", "name code")
+        .populate("vendorName",   "name code")
         .lean()
 
       console.log(`✅ Found ${products.length} products`)
 
       products.forEach((product) => {
         const amount = parseFloat(product.purchaseQuantity || 0) * parseFloat(product.purchaseRate || 0)
-
         if (amount <= 0) return
 
         const purchaseTypeName = product.purchaseType?.name || ""
         const purchaseTypeCode = product.purchaseType?.code || ""
-        const vendorName = product.vendorName?.name || ""
-        const vendorCode = product.vendorName?.code || ""
+        const vendorName       = product.vendorName?.name   || ""
+        const vendorCode       = product.vendorName?.code   || ""
 
-        // Purchase Type Account (DEBIT)
         if (
           matchAccount(purchaseTypeName, accountCode, accountName) ||
           matchAccount(purchaseTypeCode, accountCode, accountName)
         ) {
-          if (normalBalance === "debit") {
-            runningBalance += amount
-          } else {
-            runningBalance -= amount
-          }
-
-          const vendorDisplay = vendorName || "Vendor"
-
+          runningBalance += normalBalance === "debit" ? amount : -amount
           ledgerEntries.push({
-            id: `product-${product._id}-purchaseType`,
-            date: product.createdAt,
-            voucherNo: product.grn || "N/A",
-            voucherType: "Purchase",
-            description: `Purchase from ${vendorDisplay} - ${product.name}: ${product.purchaseQuantity} units @ Rs. ${product.purchaseRate}`,
-            debit: amount,
-            credit: 0,
-            balance: runningBalance,
-            grn: product.grn,
-            sourceId: product._id,
+            id: `product-${product._id}-purchaseType`, date: product.createdAt,
+            voucherNo: product.grn || "N/A", voucherType: "Purchase",
+            description: `Purchase from ${vendorName || "Vendor"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`,
+            debit: amount, credit: 0, balance: runningBalance,
+            grn: product.grn, sourceId: product._id,
           })
         }
 
-        // Vendor Account (CREDIT)
-        if (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName)) {
-          if (normalBalance === "debit") {
-            runningBalance -= amount
-          } else {
-            runningBalance += amount
-          }
-
-          const purchaseTypeDisplay = purchaseTypeName || "Purchase"
-
+        if (
+          matchAccount(vendorName, accountCode, accountName) ||
+          matchAccount(vendorCode, accountCode, accountName)
+        ) {
+          runningBalance += normalBalance === "debit" ? -amount : amount
           ledgerEntries.push({
-            id: `product-${product._id}-vendor`,
-            date: product.createdAt,
-            voucherNo: product.grn || "N/A",
-            voucherType: "Purchase",
-            description: `${purchaseTypeDisplay} - ${product.name}: ${product.purchaseQuantity} units @ Rs. ${product.purchaseRate}`,
-            debit: 0,
-            credit: amount,
-            balance: runningBalance,
-            grn: product.grn,
-            sourceId: product._id,
+            id: `product-${product._id}-vendor`, date: product.createdAt,
+            voucherNo: product.grn || "N/A", voucherType: "Purchase",
+            description: `${purchaseTypeName || "Purchase"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`,
+            debit: 0, credit: amount, balance: runningBalance,
+            grn: product.grn, sourceId: product._id,
           })
         }
       })
     }
 
-    // ========== PROCESS PURCHASE RETURNS ==========
-    // Skip purchase returns if this is a discount account
-    if (!isDiscountAccount) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // 8. PURCHASE RETURNS
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
       const productsWithReturns = await Product.find({
         ReturnQuantity: { $gt: 0 },
-        ReturnedDate: { $gte: from, $lte: to },
+        ReturnedDate:   { $gte: from, $lte: to },
       })
         .populate("purchaseType", "name code")
-        .populate("vendorName", "name code")
+        .populate("vendorName",   "name code")
         .lean()
 
       console.log(`✅ Found ${productsWithReturns.length} purchase returns`)
 
       productsWithReturns.forEach((product) => {
-        const returnAmount = parseFloat(product.ReturnedAmount || 0)
-        if (returnAmount <= 0) return
+        const retAmt = parseFloat(product.ReturnedAmount || 0)
+        if (retAmt <= 0) return
 
         const purchaseTypeName = product.purchaseType?.name || ""
         const purchaseTypeCode = product.purchaseType?.code || ""
-        const vendorName = product.vendorName?.name || ""
-        const vendorCode = product.vendorName?.code || ""
-        const returnDate = new Date(product.ReturnedDate)
+        const vendorName       = product.vendorName?.name   || ""
+        const vendorCode       = product.vendorName?.code   || ""
+        const retDate          = new Date(product.ReturnedDate)
 
-        // Vendor Account (DEBIT) - Reverse of payable
-        if (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName)) {
-          if (normalBalance === "debit") {
-            runningBalance += returnAmount
-          } else {
-            runningBalance -= returnAmount
-          }
-
+        if (
+          matchAccount(vendorName, accountCode, accountName) ||
+          matchAccount(vendorCode, accountCode, accountName)
+        ) {
+          runningBalance += normalBalance === "debit" ? retAmt : -retAmt
           ledgerEntries.push({
-            id: `purchase-return-${product._id}-vendor`,
-            date: returnDate,
-            voucherNo: product.grn || "N/A",
-            voucherType: "Purchase Return",
-            description: `Return to ${vendorName} - ${product.name}: ${product.ReturnQuantity} units @ Rs. ${product.purchaseRate}`,
-            debit: returnAmount,
-            credit: 0,
-            balance: runningBalance,
-            grn: product.grn,
-            sourceId: product._id,
+            id: `purchase-return-${product._id}-vendor`, date: retDate,
+            voucherNo: product.grn || "N/A", voucherType: "Purchase Return",
+            description: `Return to ${vendorName} - ${product.name}: ${product.ReturnQuantity} units`,
+            debit: retAmt, credit: 0, balance: runningBalance,
+            grn: product.grn, sourceId: product._id,
           })
         }
 
-        // Purchase Return Account (CREDIT) - Reverse of purchase
         if (
           matchAccount(purchaseTypeName, accountCode, accountName) ||
           matchAccount(purchaseTypeCode, accountCode, accountName)
         ) {
-          if (normalBalance === "debit") {
-            runningBalance -= returnAmount
-          } else {
-            runningBalance += returnAmount
-          }
-
-          const vendorDisplay = vendorName || "Vendor"
-
+          runningBalance += normalBalance === "debit" ? -retAmt : retAmt
           ledgerEntries.push({
-            id: `purchase-return-${product._id}-purchaseType`,
-            date: returnDate,
-            voucherNo: product.grn || "N/A",
-            voucherType: "Purchase Return",
-            description: `Return to ${vendorDisplay} - ${product.name}: ${product.ReturnQuantity} units @ Rs. ${product.purchaseRate}`,
-            debit: 0,
-            credit: returnAmount,
-            balance: runningBalance,
-            grn: product.grn,
-            sourceId: product._id,
+            id: `purchase-return-${product._id}-purchaseType`, date: retDate,
+            voucherNo: product.grn || "N/A", voucherType: "Purchase Return",
+            description: `Return to ${vendorName || "Vendor"} - ${product.name}: ${product.ReturnQuantity} units`,
+            debit: 0, credit: retAmt, balance: runningBalance,
+            grn: product.grn, sourceId: product._id,
           })
         }
       })
     }
 
-    // Sort by date
-    ledgerEntries.sort((a, b) => new Date(a.date) - new Date(b.date))
-
-    // Recalculate running balance after sorting
-    runningBalance = 0
-    let serialNumber = 1
-    
-    const ledgerDocsToSave = []
-    
-    console.log(`\n📝 Preparing to save ledger entries...`)
-    console.log(`Account: ${finalAccountCode} - ${finalAccountName}`)
-    console.log(`Category: ${accountCategory}`)
-    console.log(`Normal Balance: ${normalBalance}`)
-    
-    ledgerEntries.forEach((entry, idx) => {
-      if (normalBalance === "debit") {
-        runningBalance += entry.debit - entry.credit
-      } else {
-        runningBalance += entry.credit - entry.debit
-      }
-      entry.balance = runningBalance
-      
-      console.log(`Entry ${idx + 1}: Debit=${entry.debit}, Credit=${entry.credit}, Balance=${runningBalance}`)
-      
-      // Prepare document for saving to database
-      const docToSave = {
-        serialNumber: serialNumber++,
-        date: entry.date,
-        accountCode: entry.accountCode || finalAccountCode,
-        accountName: entry.accountName || finalAccountName,
-        accountCategory: accountCategory,
-        voucherNo: entry.voucherNo,
-        voucherType: entry.voucherType,
-        sourceType: entry.id.includes('voucher') ? 'Voucher' : 
-                    entry.id.includes('spv') ? 'SupplierPaymentVoucher' :
-                    entry.id.includes('sale-return') ? 'SaleReturn' :
-                    entry.id.includes('sale-discount') ? 'SaleDiscount' :
-                    entry.id.includes('purchase-discount') ? 'PurchaseDiscount' :
-                    entry.id.includes('sale') ? 'Sale' : 
-                    entry.id.includes('purchase-return') ? 'PurchaseReturn' : 'Product',
-        sourceId: entry.sourceId,
-        grn: entry.grn || null,
-        description: entry.description,
-        debit: entry.debit,
-        credit: entry.credit,
-        balance: runningBalance,
-        entryType: determineEntryType(entry.voucherType, entry.debit, entry.credit),
-        isActive: true,
-      }
-      
-      ledgerDocsToSave.push(docToSave)
-    })
-    
-    console.log(`\n📦 Prepared ${ledgerDocsToSave.length} documents to save`)
-
-    // Save all ledger entries to database
-    try {
-      console.log(`💾 Attempting to save ${ledgerDocsToSave.length} ledger entries...`)
-      
-      // First, delete existing ledger entries for this account and date range
-      const deleteResult = await Ledger.deleteMany({
-        accountCode: finalAccountCode,
-        date: { $gte: from, $lte: to },
+    // ══════════════════════════════════════════════════════════════════════════
+    // 9. ✅ CUSTOMER RECEIPT VOUCHERS (CRV)
+    //
+    //  For every CRV, up to 4 possible ledger lines:
+    //    DR  Cash/Bank        (voucherAmount — cash received into bank)
+    //    CR  Customer         (voucherAmount — receivable cleared)
+    //    DR  WHT Expense      (totalTaxAmount, if taxRate > 0)
+    //    CR  WHT Payable      (totalTaxAmount, if taxRate > 0)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount) {
+      const crvVouchers = await CustomerReceiptVoucher.find({
+        voucherDate: { $gte: from, $lte: to },
+        status: { $in: ["SAVED", "POSTED"] },
       })
-      console.log(`🗑️ Deleted ${deleteResult.deletedCount} existing entries`)
-      
-      // Then insert new entries
-      if (ledgerDocsToSave.length > 0) {
-        const savedEntries = await Ledger.insertMany(ledgerDocsToSave)
-        console.log(`✅ Successfully saved ${savedEntries.length} ledger entries to database`)
-      } else {
-        console.log(`⚠️ No entries to save`)
-      }
-    } catch (dbError) {
-      console.error("❌ Error saving to database:", dbError)
-      console.error("Error details:", {
-        message: dbError.message,
-        name: dbError.name,
-        code: dbError.code
+        .populate("accCrCustomer", "name code")
+        .sort({ voucherDate: 1 })
+        .lean()
+
+      console.log(`✅ Found ${crvVouchers.length} CRV vouchers`)
+
+      crvVouchers.forEach((crv) => {
+        const customerName = crv.accCrCustomer?.name || crv.accCrCustomerName || ""
+        const customerCode = crv.accCrCustomer?.code || ""
+        const bankName     = crv.accDrBankName || ""
+        const bankCode     = crv.accDrBank     || ""
+        const vNo          = crv.voucherNumber || "CRV"
+        const vType        = "CRV"
+
+        const fullAmt = parseFloat(crv.voucherAmount  || 0)  // Full amount received
+        const taxAmt  = parseFloat(crv.totalTaxAmount || 0)  // WHT deducted
+        const netAmt  = parseFloat(crv.netAmount      || fullAmt) // Net after WHT
+        const taxRate = crv.taxRate || 0
+        const taxCode = crv.taxAccountCode || ""
+        const taxName = crv.taxAccountName || ""
+        const narr    = crv.narration || `Receipt from ${customerName}`
+        const taxPct  = taxRate > 0 ? `${(taxRate * 100).toFixed(2)}%` : ""
+
+        // ── A. Cash/Bank Account (DR voucherAmount) — money received ─────────
+        if (
+          matchAccount(bankName, accountCode, accountName) ||
+          matchAccount(bankCode,  accountCode, accountName)
+        ) {
+          const dr = taxAmt > 0 ? netAmt : fullAmt
+          runningBalance += normalBalance === "debit" ? dr : -dr
+          ledgerEntries.push({
+            id:          `crv-${crv._id}-bank`,
+            date:        crv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: vType,
+            description: taxAmt > 0
+              ? `${narr} — Received Rs.${netAmt.toLocaleString()} (after WHT Rs.${taxAmt.toLocaleString()} @ ${taxPct})`
+              : `${narr} — via ${bankName}`,
+            debit: dr, credit: 0, balance: runningBalance,
+            grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id,
+          })
+        }
+
+        // ── B. Customer Account (CR voucherAmount) — receivable cleared ───────
+        if (
+          matchAccount(customerName, accountCode, accountName) ||
+          matchAccount(customerCode, accountCode, accountName)
+        ) {
+          runningBalance += normalBalance === "debit" ? -fullAmt : fullAmt
+          ledgerEntries.push({
+            id:          `crv-${crv._id}-customer`,
+            date:        crv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: vType,
+            description: taxAmt > 0
+              ? `${narr} [Total: Rs.${fullAmt.toLocaleString()} | WHT ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net Received: Rs.${netAmt.toLocaleString()}]`
+              : narr,
+            debit: 0, credit: fullAmt, balance: runningBalance,
+            grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id,
+          })
+        }
+
+        // ── C. WHT Expense Account (DR taxAmt) ───────────────────────────────
+        // Shown when viewing TAX-0025 / TAX-0050 / TAX-0100
+        if (
+          taxAmt > 0 && taxCode &&
+          (matchAccount(taxCode, accountCode, accountName) ||
+           matchAccount(taxName, accountCode, accountName) ||
+           (isTaxAcc && taxAccInfo?.category === "Expenses" && taxAccInfo?.rate === taxRate))
+        ) {
+          runningBalance += normalBalance === "debit" ? taxAmt : -taxAmt
+          ledgerEntries.push({
+            id:          `crv-${crv._id}-wht-exp`,
+            date:        crv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: "WHT",
+            description: `WHT @ ${taxPct} on receipt from ${customerName} (${vNo})`,
+            debit: taxAmt, credit: 0, balance: runningBalance,
+            grn: null, sourceId: crv._id,
+            accountCode: taxCode,
+            accountName: taxName,
+          })
+        }
+
+        // ── D. WHT Payable Account (CR taxAmt) — govt liability ───────────────
+        // Shown when viewing TAX-0025-PAY / TAX-0050-PAY / TAX-0100-PAY
+        if (
+          taxAmt > 0 && taxCode &&
+          (matchAccount(`${taxCode}-PAY`, accountCode, accountName) ||
+           matchAccount(`${taxName} Payable`, accountCode, accountName) ||
+           (isTaxAcc && taxAccInfo?.category === "Liabilities" && taxAccInfo?.rate === taxRate))
+        ) {
+          runningBalance += normalBalance === "debit" ? -taxAmt : taxAmt
+          ledgerEntries.push({
+            id:          `crv-${crv._id}-wht-pay`,
+            date:        crv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: "WHT",
+            description: `WHT payable to FBR/Govt @ ${taxPct} — ${customerName} (${vNo})`,
+            debit: 0, credit: taxAmt, balance: runningBalance,
+            grn: null, sourceId: crv._id,
+            accountCode: `${taxCode}-PAY`,
+            accountName: `${taxName} Payable`,
+          })
+        }
       })
-      // Continue even if database save fails
     }
 
-    const totalDebits = ledgerEntries.reduce((sum, entry) => sum + entry.debit, 0)
-    const totalCredits = ledgerEntries.reduce((sum, entry) => sum + entry.credit, 0)
+    // ══════════════════════════════════════════════════════════════════════════
+    // SORT + RECALCULATE + SAVE TO DB
+    // ══════════════════════════════════════════════════════════════════════════
+    ledgerEntries.sort((a, b) => new Date(a.date) - new Date(b.date))
 
-    console.log(`✅ Generated ${ledgerEntries.length} ledger entries`)
-    console.log(`📊 Total Debits: ${totalDebits}, Total Credits: ${totalCredits}, Closing Balance: ${runningBalance}`)
+    runningBalance = 0
+    let serialNumber = 1
+    const ledgerDocsToSave = []
+
+    ledgerEntries.forEach((entry) => {
+      runningBalance += normalBalance === "debit"
+        ? entry.debit - entry.credit
+        : entry.credit - entry.debit
+      entry.balance = runningBalance
+
+      // sourceType for DB
+      let srcType = "Voucher"
+      if      (entry.id.includes("crv"))                srcType = "Voucher"               // ✅ CRV → Voucher
+      else if (entry.id.includes("spv"))                srcType = "SupplierPaymentVoucher"
+      else if (entry.id.includes("sale-return"))        srcType = "SaleReturn"
+      else if (entry.id.includes("sale-discount"))      srcType = "SaleDiscount"
+      else if (entry.id.includes("purchase-discount"))  srcType = "PurchaseDiscount"
+      else if (entry.id.includes("sale"))               srcType = "Sale"
+      else if (entry.id.includes("purchase-return"))    srcType = "PurchaseReturn"
+      else if (entry.id.includes("product"))            srcType = "Product"
+
+      // voucherType — must match Ledger schema enum
+      let dbVoucherType = entry.voucherType
+      const allowedVoucherTypes = [
+        "Sale", "Purchase", "CPV", "BPV", "CRV", "BRV", "JV", "SPV",
+        "Sale Return", "Purchase Return", "Sale Discount", "Purchase Discount", "WHT",
+      ]
+      if (!allowedVoucherTypes.includes(dbVoucherType)) dbVoucherType = "JV"
+
+      ledgerDocsToSave.push({
+        serialNumber:    serialNumber++,
+        date:            entry.date,
+        accountCode:     entry.accountCode || finalAccountCode,
+        accountName:     entry.accountName || finalAccountName,
+        accountCategory: accountCategory,
+        voucherNo:       entry.voucherNo,
+        voucherType:     dbVoucherType,
+        sourceType:      srcType,
+        sourceId:        entry.sourceId,
+        grn:             entry.grn || null,
+        description:     entry.description,
+        debit:           entry.debit,
+        credit:          entry.credit,
+        balance:         runningBalance,
+        entryType:       determineEntryType(entry.voucherType, entry.debit, entry.credit),
+        isActive:        true,
+      })
+    })
+
+    // Save to DB
+    try {
+      await Ledger.deleteMany({ accountCode: finalAccountCode, date: { $gte: from, $lte: to } })
+      if (ledgerDocsToSave.length > 0) {
+        await Ledger.insertMany(ledgerDocsToSave)
+        console.log(`✅ Saved ${ledgerDocsToSave.length} ledger entries`)
+      }
+    } catch (dbError) {
+      console.error("❌ Ledger DB save error:", dbError.message)
+    }
+
+    const totalDebits  = ledgerEntries.reduce((s, e) => s + e.debit,  0)
+    const totalCredits = ledgerEntries.reduce((s, e) => s + e.credit, 0)
+
+    console.log(`📊 Entries: ${ledgerEntries.length} | DR: ${totalDebits} | CR: ${totalCredits} | Bal: ${runningBalance}`)
 
     res.status(200).json({
       success: true,
@@ -845,64 +855,43 @@ const getAccountLedger = async (req, res) => {
     })
   } catch (error) {
     console.error("Error fetching ledger entries:", error)
-    res.status(500).json({
-      success: false,
-      message: "Error fetching ledger entries",
-      error: error.message,
-    })
+    res.status(500).json({ success: false, message: "Error fetching ledger entries", error: error.message })
   }
 }
 
-// Helper: Match account
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function matchAccount(value, code, name) {
   if (!value) return false
+  const v = value.toLowerCase().trim()
+  const c = (code || "").toLowerCase().trim()
+  const n = (name || "").toLowerCase().trim()
 
-  const valueLower = value.toLowerCase().trim()
-  const codeLower = code ? code.toLowerCase().trim() : ""
-  const nameLower = name ? name.toLowerCase().trim() : ""
+  if (v === "sales discount"     || v === "sales-disc")  return c === "sales-disc"  || n === "sales discount"
+  if (v === "purchases discount" || v === "purch-disc")  return c === "purch-disc"  || n === "purchases discount"
 
-  // Special handling for discount accounts - STRICT matching only
-  if (valueLower === "sales discount" || valueLower === "sales-disc") {
-    return codeLower === "sales-disc" || nameLower === "sales discount"
-  }
-  
-  if (valueLower === "purchases discount" || valueLower === "purch-disc") {
-    return codeLower === "purch-disc" || nameLower === "purchases discount"
+  if (v.startsWith("tax-") || v.startsWith("withholding")) {
+    return v === c || v === n
   }
 
-  return (
-    valueLower === codeLower ||
-    valueLower === nameLower ||
-    valueLower.includes(codeLower) ||
-    valueLower.includes(nameLower) ||
-    codeLower.includes(valueLower) ||
-    nameLower.includes(valueLower)
-  )
+  return v === c || v === n || v.includes(c) || v.includes(n) || c.includes(v) || n.includes(v)
 }
 
-// Helper: Find account info
 async function findAccountInfo(accountIdentifier) {
   try {
-    // Check for discount accounts first
-    if (accountIdentifier === "SALES-DISC" || accountIdentifier === "SALES DISCOUNT") {
-      return {
-        code: "SALES-DISC",
-        name: "SALES DISCOUNT",
-        category: "Expenses",
-        normalBalance: "debit"
-      }
-    }
-    
-    if (accountIdentifier === "PURCH-DISC" || accountIdentifier === "PURCHASES DISCOUNT") {
-      return {
-        code: "PURCH-DISC",
-        name: "PURCHASES DISCOUNT",
-        category: "Revenue",
-        normalBalance: "credit"
-      }
-    }
+    if (accountIdentifier === "SALES-DISC" || accountIdentifier === "SALES DISCOUNT")
+      return { code: "SALES-DISC", name: "SALES DISCOUNT", category: "Expenses", normalBalance: "debit" }
+    if (accountIdentifier === "PURCH-DISC" || accountIdentifier === "PURCHASES DISCOUNT")
+      return { code: "PURCH-DISC", name: "PURCHASES DISCOUNT", category: "Revenue", normalBalance: "credit" }
 
-    const [asset, equity, expense, Liability, revenue] = await Promise.all([
+    const taxMatch = HARDCODED_TAX_ACCOUNTS.find(
+      t => t.code === accountIdentifier || t.name === accountIdentifier
+    )
+    if (taxMatch) return taxMatch
+
+    const [asset, equity, expense, liability, revenue] = await Promise.all([
       Asset.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
       Equity.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
       Expense.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
@@ -910,12 +899,11 @@ async function findAccountInfo(accountIdentifier) {
       Revenue.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
     ])
 
-    if (asset) return { ...asset, category: "Assets", normalBalance: "debit" }
-    if (equity) return { ...equity, category: "Equity", normalBalance: "credit" }
-    if (expense) return { ...expense, category: "Expenses", normalBalance: "debit" }
-    if (Liability) return { ...Liability, category: "Liabilities", normalBalance: "credit" }
-    if (revenue) return { ...revenue, category: "Revenue", normalBalance: "credit" }
-
+    if (asset)     return { ...asset,     category: "Assets",      normalBalance: "debit"  }
+    if (equity)    return { ...equity,    category: "Equity",      normalBalance: "credit" }
+    if (expense)   return { ...expense,   category: "Expenses",    normalBalance: "debit"  }
+    if (liability) return { ...liability, category: "Liabilities", normalBalance: "credit" }
+    if (revenue)   return { ...revenue,   category: "Revenue",     normalBalance: "credit" }
     return null
   } catch (error) {
     console.error("Error finding account info:", error)
@@ -923,32 +911,19 @@ async function findAccountInfo(accountIdentifier) {
   }
 }
 
-// Helper: Determine entry type
 function determineEntryType(voucherType, debit, credit) {
-  if (voucherType === "Sale") {
-    return debit > 0 ? "RECEIVABLE" : "REVENUE"
-  } else if (voucherType === "Sale Return") {
-    return debit > 0 ? "SALE_RETURN" : "RECEIVABLE_REVERSAL"
-  } else if (voucherType === "Sale Discount") {
-    return debit > 0 ? "SALE_DISCOUNT" : "RECEIVABLE_REVERSAL"
-  } else if (voucherType === "Purchase") {
-    return debit > 0 ? "PURCHASE" : "PAYABLE"
-  } else if (voucherType === "Purchase Return") {
-    return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_RETURN"
-  } else if (voucherType === "Purchase Discount") {
-    return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_DISCOUNT"
-  } else if (voucherType === "CRV" || voucherType === "BRV") {
-    return voucherType === "CRV" ? "CASH" : "BANK"
-  } else if (voucherType === "CPV" || voucherType === "BPV" || voucherType === "SPV") {
-    return "EXPENSE"
-  } else if (voucherType === "JV") {
-    return "JOURNAL"
-  }
+  if (voucherType === "WHT")               return debit > 0 ? "WHT_EXPENSE"        : "WHT_PAYABLE"
+  if (voucherType === "Sale")              return debit > 0 ? "RECEIVABLE"         : "REVENUE"
+  if (voucherType === "Sale Return")       return debit > 0 ? "SALE_RETURN"        : "RECEIVABLE_REVERSAL"
+  if (voucherType === "Sale Discount")     return debit > 0 ? "SALE_DISCOUNT"      : "RECEIVABLE_REVERSAL"
+  if (voucherType === "Purchase")          return debit > 0 ? "PURCHASE"           : "PAYABLE"
+  if (voucherType === "Purchase Return")   return debit > 0 ? "PAYABLE_REVERSAL"   : "PURCHASE_RETURN"
+  if (voucherType === "Purchase Discount") return debit > 0 ? "PAYABLE_REVERSAL"   : "PURCHASE_DISCOUNT"
+  if (voucherType === "CRV")               return debit > 0 ? "CASH"              : "RECEIVABLE_REVERSAL"
+  if (voucherType === "BRV")               return "BANK"
+  if (voucherType === "CPV" || voucherType === "BPV" || voucherType === "SPV") return "EXPENSE"
+  if (voucherType === "JV")                return "JOURNAL"
   return "JOURNAL"
 }
 
-// ========== EXPORTS ==========
-module.exports = { 
-  getAllAccounts,
-  getAccountLedger,
-}
+module.exports = { getAllAccounts, getAccountLedger }

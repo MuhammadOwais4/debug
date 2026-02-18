@@ -1,21 +1,25 @@
 const mongoose = require("mongoose")
 
-// ── Voucher Line Item (one per invoice/GRN being paid) ────────────────────────
+// ── Hardcoded Tax Accounts (saved to Ledger) ──────────────────────────────────
+// Yeh accounts ledger mein automatically create honge jab SPV post hoga
+const TAX_ACCOUNTS = {
+  0.0025: { code: "TAX-0025", name: "Withholding Tax 0.25%", rate: 0.0025, label: "0.25%" },
+  0.005:  { code: "TAX-0050", name: "Withholding Tax 0.50%", rate: 0.005,  label: "0.50%" },
+  0.01:   { code: "TAX-0100", name: "Withholding Tax 1%",    rate: 0.01,   label: "1%"    },
+}
+module.exports.TAX_ACCOUNTS = TAX_ACCOUNTS
+
+// ── Voucher Line Item ──────────────────────────────────────────────────────────
 const voucherLineSchema = new mongoose.Schema(
   {
-    purchaseDetail: {
-      type: String, // GRN number or product _id string
-      trim: true,
-    },
-    invoiceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product", // references your Product model
-    },
-    amount: {
-      type: Number,
-      required: true,
-      min: [0, "Amount cannot be negative"],
-    },
+    purchaseDetail: { type: String, trim: true },
+    invoiceId:      { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+    amount:         { type: Number, required: true, min: [0, "Amount cannot be negative"] },
+
+    // ✅ Tax fields per line
+    taxRate:        { type: Number, default: 0 },       // e.g. 0.0025
+    taxAmount:      { type: Number, default: 0 },       // amount * taxRate
+    amountAfterTax: { type: Number, default: 0 },       // amount - taxAmount
   },
   { _id: false }
 )
@@ -23,12 +27,7 @@ const voucherLineSchema = new mongoose.Schema(
 // ── Main Voucher Schema ────────────────────────────────────────────────────────
 const supplierPaymentVoucherSchema = new mongoose.Schema(
   {
-    // Auto-generated voucher number e.g. SPV-0001
-    voucherNumber: {
-      type: String,
-      unique: true,
-      trim: true,
-    },
+    voucherNumber: { type: String, unique: true, trim: true },
 
     voucherDate: {
       type: Date,
@@ -36,61 +35,40 @@ const supplierPaymentVoucherSchema = new mongoose.Schema(
       default: Date.now,
     },
 
-    // Credit side — Cash or Bank account (from Asset model)
-    accCrBank: {
-      type: String, // stores asset code OR _id
-      required: [true, "Cash/Bank account is required"],
-    },
-    accCrBankName: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+    // Credit side — Cash or Bank (Asset)
+    accCrBank:     { type: String,  required: [true, "Cash/Bank account is required"] },
+    accCrBankName: { type: String,  trim: true, default: "" },
 
-    // Debit side — Supplier / Vendor (from Liability model)
-    accDrSupplier: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Liability",
-      required: [true, "Supplier account is required"],
-    },
-    accDrSupplierName: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+    // Debit side — Vendor (Liability)
+    accDrSupplier:     { type: mongoose.Schema.Types.ObjectId, ref: "Liability", required: true },
+    accDrSupplierName: { type: String, trim: true, default: "" },
 
-    narration: {
-      type: String,
-      trim: true,
-      default: "",
-      maxlength: [500, "Narration cannot exceed 500 characters"],
-    },
+    narration: { type: String, trim: true, default: "", maxlength: [500, "Max 500 chars"] },
 
+    // ✅ Payment amounts
     voucherAmount: {
       type: Number,
       required: [true, "Voucher amount is required"],
-      min: [0, "Voucher amount cannot be negative"],
+      min: [0, "Cannot be negative"],
     },
 
-    lines: [voucherLineSchema],
+    // ✅ Tax fields at voucher level
+    taxRate:         { type: Number, default: 0     },  // e.g. 0.0025, 0.005, 0.01
+    totalTaxAmount:  { type: Number, default: 0     },  // voucherAmount * taxRate
+    netAmount:       { type: Number, default: 0     },  // voucherAmount - totalTaxAmount
 
-    status: {
-      type: String,
-      enum: ["SAVED", "POSTED", "CANCELLED"],
-      default: "SAVED",
-    },
+    // ✅ Tax account info (saved for ledger reference)
+    taxAccountCode:  { type: String, default: ""    },  // e.g. "TAX-0025"
+    taxAccountName:  { type: String, default: ""    },  // e.g. "Withholding Tax 0.25%"
 
-    period: {
-      from: { type: Date },
-      to:   { type: Date },
-    },
+    lines:  [voucherLineSchema],
+    status: { type: String, enum: ["SAVED", "POSTED", "CANCELLED"], default: "SAVED" },
+    period: { from: { type: Date }, to: { type: Date } },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 )
 
-// ── Auto-generate voucherNumber before save ───────────────────────────────────
+// ── Auto-generate voucherNumber ───────────────────────────────────────────────
 supplierPaymentVoucherSchema.pre("save", async function (next) {
   if (this.isNew && !this.voucherNumber) {
     try {
@@ -101,7 +79,7 @@ supplierPaymentVoucherSchema.pre("save", async function (next) {
         .lean()
 
       let num = 1
-      if (last && last.voucherNumber) {
+      if (last?.voucherNumber) {
         const match = last.voucherNumber.match(/SPV-(\d+)/)
         if (match) num = parseInt(match[1], 10) + 1
       }
@@ -110,15 +88,31 @@ supplierPaymentVoucherSchema.pre("save", async function (next) {
       this.voucherNumber = `SPV-${Date.now()}`
     }
   }
+
+  // ✅ Auto-calculate tax fields if taxRate provided
+  if (this.taxRate > 0) {
+    const taxInfo = TAX_ACCOUNTS[this.taxRate]
+    this.totalTaxAmount = parseFloat((this.voucherAmount * this.taxRate).toFixed(2))
+    this.netAmount      = parseFloat((this.voucherAmount - this.totalTaxAmount).toFixed(2))
+    if (taxInfo) {
+      this.taxAccountCode = taxInfo.code
+      this.taxAccountName = taxInfo.name
+    }
+  } else {
+    this.totalTaxAmount = 0
+    this.netAmount      = this.voucherAmount
+    this.taxAccountCode = ""
+    this.taxAccountName = ""
+  }
+
   next()
 })
 
-// Indexes
 supplierPaymentVoucherSchema.index({ voucherNumber: 1 })
 supplierPaymentVoucherSchema.index({ accDrSupplier: 1 })
 supplierPaymentVoucherSchema.index({ voucherDate: -1 })
 supplierPaymentVoucherSchema.index({ status: 1 })
 
-module.exports =
+module.exports.SupplierPaymentVoucher =
   mongoose.models.SupplierPaymentVoucher ||
   mongoose.model("SupplierPaymentVoucher", supplierPaymentVoucherSchema)

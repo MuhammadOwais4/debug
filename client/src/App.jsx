@@ -29,6 +29,7 @@ import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sale
 import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers"
 import ProductManagementDashboard from "./pages/Product Management/Product-Management";
 import SupplierPaymentVoucher from"./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher"
+import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/customer-Receip-Voucher";
 
 // Sample initial data
 const initialProducts = [];
@@ -391,11 +392,20 @@ const reportsDropdownRef = useRef(null);
                   <button 
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => {
-                      handleTabChange("Supplier Cash Payment Voucher");
+                      handleTabChange("Supplier Payment Voucher");
                       setAccountsDropdownOpen(false);
                     }}
                   >
-                    Supplier Cash Payment Voucher
+                    Supplier  Payment Voucher
+                  </button>
+                     <button 
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => {
+                      handleTabChange("Customer Receipt Voucher");
+                      setAccountsDropdownOpen(false);
+                    }}
+                  >
+                   Customer Receip Voucher
                   </button>
                   <button 
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -504,7 +514,9 @@ const reportsDropdownRef = useRef(null);
         {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
         {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
         {activeTab === "Product Management" && <ProductManagementDashboard />}
-        {activeTab === "Supplier Cash Payment Voucher" && <SupplierPaymentVoucher />}
+        {activeTab === "Supplier Payment Voucher" && <SupplierPaymentVoucher />}
+        {activeTab=== "Customer Receipt Voucher" && <CustomerReceiptVoucher/>}
+        
       
         
 
