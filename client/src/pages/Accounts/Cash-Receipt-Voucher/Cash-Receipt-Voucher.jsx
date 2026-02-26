@@ -712,7 +712,7 @@ export default function CashPaymentVoucher() {
               )}
             </div>
           </div>
-          <div className="text-lg font-semibold mb-3 opacity-90">Denim locker</div>
+          <div className="text-lg font-semibold mb-3 opacity-90">testing</div>
           <CardTitle className="text-3xl font-bold tracking-wide">
             Cash Receipt Voucher - CRV {isEditMode && <span className="text-sm">(Editing)</span>}
           </CardTitle>
