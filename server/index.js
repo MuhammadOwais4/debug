@@ -9,8 +9,7 @@ const app = express()
 app.use(
   cors({
     // origin: ["http://localhost:5173"],
-  //  origin: ["https://stock-management-system-sccp.vercel.app"],
-    origin: ["https://debug-henna.vercel.app"],
+origin: ["https://debug-henna.vercel.app"],
 
     credentials: true,
   }),
@@ -40,6 +39,8 @@ app.use("/api/trial-balance", require("./routes/trial-balance-route"))
 app.use("/api/ledgers", require("./routes/ledgerRoutes"))
 app.use("/api/supplier-payment", require("./routes/supplierPaymentRoutes"))
 app.use("/api/customer-receipt", require("./routes/customerReceiptRoutes"))
+app.use("/api/profit-loss",   require("./routes/Profitlossroutes "))
+
 app.use((err, req, res, next) => {
   console.error(err.stack)
   res.status(500).json({ message: "Something went wrong!", error: err.message })

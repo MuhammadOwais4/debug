@@ -13,10 +13,10 @@ const expenseSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    type: {
+    type: { 
       type: String,
       required: true,
-      enum: ["EXPENSE ACCOUNT"],
+      enum: ["EXPENSE ACCOUNT", "Purchases"],
       default: "EXPENSE ACCOUNT",
     },
     parentAccount: {

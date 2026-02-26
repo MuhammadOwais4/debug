@@ -16,7 +16,7 @@ const assetSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["CASH ACCOUNT", "BANK ACCOUNT", "RECEIVABLES", "Stock", "Purchases", "General Account"],
+      enum: ["CASH ACCOUNT", "BANK ACCOUNT", "RECEIVABLES", "Stock",  "General Account"],
       default: "General Account",
     },
     parentAccount: {

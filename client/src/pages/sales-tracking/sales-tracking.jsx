@@ -1023,7 +1023,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h2 className="text-xl font-semibold mb-4 md:mb-0 flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
+          
           Sales Invoices
           </h2>
         <div className="flex flex-wrap gap-2">
@@ -1235,7 +1235,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   <p className="text-sm font-medium text-blue-600">Total Sales</p>
                   <p className="text-2xl font-bold text-blue-900">{formatCurrency(totalSales)}</p>
                 </div>
-                <DollarSign className="h-8 w-8 text-blue-600" />
+                
               </div>
             </div>
 

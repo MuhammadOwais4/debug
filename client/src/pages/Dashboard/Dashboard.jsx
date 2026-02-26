@@ -32,9 +32,6 @@ import {
 } from "lucide-react"
 
 const COLORS = ["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"]
-
-// Real API Handler - Make sure to import this properly in your actual code
-// For this artifact, we'll use a dynamic import approach
 // const API_BASE_URL = "http://localhost:5000/api"
 const API_BASE_URL="https://debug-nxby.vercel.app/api"
 

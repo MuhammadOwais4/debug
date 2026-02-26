@@ -26,19 +26,18 @@ import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
 import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
-import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers"
+import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers";
 import ProductManagementDashboard from "./pages/Product Management/Product-Management";
-import SupplierPaymentVoucher from"./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher"
+import SupplierPaymentVoucher from "./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher";
 import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 
-// Sample initial data
 const initialProducts = [];
 const initialExpenses = [];
 const initialSales = [];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [chartOfAccountsPage, setChartOfAccountsPage] = useState("assets"); // Default to assets
+  const [chartOfAccountsPage, setChartOfAccountsPage] = useState("assets");
   const [products, setProducts] = useState(initialProducts);
   const [expenses, setExpenses] = useState(initialExpenses);
   const [sales, setSales] = useState(initialSales);
@@ -49,7 +48,9 @@ export default function App() {
 
   const accountsDropdownRef = useRef(null);
   const chartDropdownRef = useRef(null);
-const reportsDropdownRef = useRef(null);
+  const reportsDropdownRef = useRef(null);
+
+  // Low stock notifications
   useEffect(() => {
     const lowStockItems = products.filter((product) => product.quantity < 5);
     if (lowStockItems.length > 0) {
@@ -63,6 +64,7 @@ const reportsDropdownRef = useRef(null);
     }
   }, [products]);
 
+  // ✅ Single useEffect for all dropdowns outside click
   useEffect(() => {
     function handleClickOutside(event) {
       if (accountsDropdownRef.current && !accountsDropdownRef.current.contains(event.target)) {
@@ -70,6 +72,9 @@ const reportsDropdownRef = useRef(null);
       }
       if (chartDropdownRef.current && !chartDropdownRef.current.contains(event.target)) {
         setChartOfAccountsDropdownOpen(false);
+      }
+      if (reportsDropdownRef.current && !reportsDropdownRef.current.contains(event.target)) {
+        setReportsDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -93,19 +98,8 @@ const reportsDropdownRef = useRef(null);
     setNotifications(notifications.filter((n) => n.id !== id));
   };
 
-  const handleChartOfAccountsNavigation = (page) => {
-    setChartOfAccountsPage(page);
-  };
-
-  if (reportsDropdownRef.current && !reportsDropdownRef.current.contains(event.target)) {
-  setReportsDropdownOpen(false);
-}
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === "chart-of-accounts") {
-      // Default to assets page when Chart of Accounts is clicked
-      setChartOfAccountsPage("assets");
-    }
   };
 
   const handleChartOfAccountsPageChange = (page) => {
@@ -114,29 +108,14 @@ const reportsDropdownRef = useRef(null);
     setChartOfAccountsDropdownOpen(false);
   };
 
-  const getChartOfAccountsDisplayName = () => {
-    switch (chartOfAccountsPage) {
-      case "assets":
-        return "Assets";
-      case "liabilities":
-        return "Liabilities";
-      case "equity":
-        return "Equity";
-      case "expenses":
-        return "Expenses";
-      case "revenue":
-        return "Revenue";
-      default:
-        return "Chart of Accounts";
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900">
+            Denim Locker
+            <br />
             Accounting Software
           </h1>
         </div>
@@ -147,6 +126,8 @@ const reportsDropdownRef = useRef(null);
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
+
+            {/* Dashboard */}
             <button
               className={`${
                 activeTab === "dashboard"
@@ -157,6 +138,8 @@ const reportsDropdownRef = useRef(null);
             >
               Dashboard
             </button>
+
+            {/* Goods Receipt Note */}
             <button
               className={`${
                 activeTab === "stock"
@@ -165,8 +148,10 @@ const reportsDropdownRef = useRef(null);
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
               onClick={() => handleTabChange("stock")}
             >
-              Goods Receipt Note 
+              Goods Receipt Note
             </button>
+
+            {/* Sales Tracking */}
             <button
               className={`${
                 activeTab === "sales"
@@ -177,84 +162,65 @@ const reportsDropdownRef = useRef(null);
             >
               Sales Tracking
             </button>
-          <div className="relative">
-  <button
-    className={`${
-      ["Trial Balance", "Balance Sheet", "ProfitLoss"].includes(activeTab)
-        ? "border-blue-500 text-blue-600"
-        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
-    onClick={() => setReportsDropdownOpen((prev) => !prev)}
-  >
-    <span>Reports</span>
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
 
-  {reportsDropdownOpen && (
-    <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
-      <button
+            {/* ✅ Reports Dropdown */}
+            <div className="relative" ref={reportsDropdownRef}>
+              <button
+                className={`${
+                  ["General Ledger", "Trial Balance", "Balance Sheet", "ProfitLoss", "reports", "Product Management"].includes(activeTab)
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
+                onClick={() => setReportsDropdownOpen((prev) => !prev)}
+              >
+                <span>Reports</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {reportsDropdownOpen && (
+                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
+                  <button
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("General Ledger");
-                      setAccountsDropdownOpen(false);
-                    }}
+                    onClick={() => { handleTabChange("General Ledger"); setReportsDropdownOpen(false); }}
                   >
                     General Ledger
                   </button>
-    <button
+                  <button
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Trial Balance");
-                      setAccountsDropdownOpen(false);
-                    }}
+                    onClick={() => { handleTabChange("Trial Balance"); setReportsDropdownOpen(false); }}
                   >
-                   Trial Balance
+                    Trial Balance
                   </button>
-      <button
-        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        onClick={() => {
-          handleTabChange("Balance Sheet");
-          setReportsDropdownOpen(false);
-        }}
-      >
-        Balance Sheet
-      </button>
-      <button
-        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        onClick={() => {
-          handleTabChange("ProfitLoss");
-          setReportsDropdownOpen(false);
-        }}
-      >
-        Profit and Loss
-      </button>
-        <button
-        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        onClick={() => {
-          handleTabChange("reports");
-          setReportsDropdownOpen(false);
-        }}
-      >
-       Business reports
-      </button>
-      <button 
-        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-        onClick={() => {
-          handleTabChange("Product Management");
-          setReportsDropdownOpen(false);
-        }}
-      >
-       Product Management
-      </button>
-      
-    </div>
-  )}
-</div>
-            
+                  <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Balance Sheet"); setReportsDropdownOpen(false); }}
+                  >
+                    Balance Sheet
+                  </button>
+                  <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("ProfitLoss"); setReportsDropdownOpen(false); }}
+                  >
+                    Profit and Loss
+                  </button>
+                  <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("reports"); setReportsDropdownOpen(false); }}
+                  >
+                    Business Reports
+                  </button>
+                  <button
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Product Management"); setReportsDropdownOpen(false); }}
+                  >
+                    Product Management
+                  </button>
+                </div>
+              )}
+            </div>
 
-            {/* Chart of Accounts Dropdown */}
+            {/* ✅ Chart of Accounts Dropdown */}
             <div className="relative" ref={chartDropdownRef}>
               <button
                 className={`${
@@ -262,12 +228,9 @@ const reportsDropdownRef = useRef(null);
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
-                onClick={() => {
-                  handleTabChange("chart-of-accounts");
-                  setChartOfAccountsDropdownOpen((prev) => !prev);
-                }}
+                onClick={() => setChartOfAccountsDropdownOpen((prev) => !prev)}
               >
-                <span>{getChartOfAccountsDisplayName()}</span>
+                <span>Chart of Accounts</span>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -276,7 +239,7 @@ const reportsDropdownRef = useRef(null);
                 <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
                   <button
                     className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "assets" ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                      chartOfAccountsPage === "assets" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
                     }`}
                     onClick={() => handleChartOfAccountsPageChange("assets")}
                   >
@@ -284,7 +247,7 @@ const reportsDropdownRef = useRef(null);
                   </button>
                   <button
                     className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "liabilities" ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                      chartOfAccountsPage === "liabilities" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
                     }`}
                     onClick={() => handleChartOfAccountsPageChange("liabilities")}
                   >
@@ -292,7 +255,7 @@ const reportsDropdownRef = useRef(null);
                   </button>
                   <button
                     className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "equity" ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                      chartOfAccountsPage === "equity" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
                     }`}
                     onClick={() => handleChartOfAccountsPageChange("equity")}
                   >
@@ -300,15 +263,15 @@ const reportsDropdownRef = useRef(null);
                   </button>
                   <button
                     className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "revenue" ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                      chartOfAccountsPage === "revenue" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
                     }`}
                     onClick={() => handleChartOfAccountsPageChange("revenue")}
                   >
                     Revenue
                   </button>
-                   <button
+                  <button
                     className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "expenses" ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                      chartOfAccountsPage === "expenses" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
                     }`}
                     onClick={() => handleChartOfAccountsPageChange("expenses")}
                   >
@@ -322,7 +285,7 @@ const reportsDropdownRef = useRef(null);
             <div className="relative" ref={accountsDropdownRef}>
               <button
                 className={`${
-                  ["Cash Payment Voucher", "Cash Receipt Voucher", "Journal Voucher", "Bank Payment Voucher", "Bank Receipt Voucher", "General Ledger"].includes(activeTab)
+                  ["Cash Payment Voucher", "Cash Receipt Voucher", "Journal Voucher", "Bank Payment Voucher", "Bank Receipt Voucher", "purchase discoiunt Voucher", "Supplier Payment Voucher", "Customer Receipt Voucher", "sales discount Voucher", "Voucher Query"].includes(activeTab)
                     ? "border-blue-500 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
@@ -335,101 +298,51 @@ const reportsDropdownRef = useRef(null);
               </button>
               {accountsDropdownOpen && (
                 <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Cash Payment Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Cash Payment Voucher"); setAccountsDropdownOpen(false); }}>
                     Cash Payment Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Cash Receipt Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Cash Receipt Voucher"); setAccountsDropdownOpen(false); }}>
                     Cash Receipt Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Journal Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Journal Voucher"); setAccountsDropdownOpen(false); }}>
                     Journal Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Bank Payment Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Bank Payment Voucher"); setAccountsDropdownOpen(false); }}>
                     Bank Payment Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Bank Receipt Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Bank Receipt Voucher"); setAccountsDropdownOpen(false); }}>
                     Bank Receipt Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("purchase discoiunt Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                    Purchase Discount Voucher 
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("purchase discoiunt Voucher"); setAccountsDropdownOpen(false); }}>
+                    Purchase Discount Voucher
                   </button>
-                  <button 
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Supplier Payment Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                    Supplier  Payment Voucher
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Supplier Payment Voucher"); setAccountsDropdownOpen(false); }}>
+                    Supplier Payment Voucher
                   </button>
-                     <button 
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Customer Receipt Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                   Customer Receip Voucher
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Customer Receipt Voucher"); setAccountsDropdownOpen(false); }}>
+                    Customer Receipt Voucher
                   </button>
-                  <button 
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("sales discount Voucher");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                    Sales Discount Voucher 
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("sales discount Voucher"); setAccountsDropdownOpen(false); }}>
+                    Sales Discount Voucher
                   </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => {
-                      handleTabChange("Voucher Query");
-                      setAccountsDropdownOpen(false);
-                    }}
-                  >
-                   Voucher Query
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Voucher Query"); setAccountsDropdownOpen(false); }}>
+                    Voucher Query
                   </button>
-                 
                 </div>
               )}
             </div>
 
+            {/* Notifications */}
             <button
               className={`${
                 activeTab === "notifications"
@@ -445,6 +358,7 @@ const reportsDropdownRef = useRef(null);
                 </span>
               )}
             </button>
+
           </nav>
         </div>
 
@@ -478,29 +392,17 @@ const reportsDropdownRef = useRef(null);
           />
         )}
         {activeTab === "reports" && (
-          <Reports products={products} expenses={expenses} sales={sales} />         
+          <Reports products={products} expenses={expenses} sales={sales} />
         )}
-
         {activeTab === "chart-of-accounts" && (
           <>
-            {chartOfAccountsPage === "assets" && (
-              <AssetsPage onBack={() => handleChartOfAccountsPageChange("assets")} />
-            )}
-            {chartOfAccountsPage === "liabilities" && (
-              <LiabilitiesPage onBack={() => handleChartOfAccountsPageChange("liabilities")} />
-            )}
-            {chartOfAccountsPage === "equity" && (
-              <EquityPage onBack={() => handleChartOfAccountsPageChange("equity")} />
-            )}
-            {chartOfAccountsPage === "expenses" && (
-              <ExpensesPage onBack={() => handleChartOfAccountsPageChange("expenses")} />
-            )}
-            {chartOfAccountsPage === "revenue" && (
-              <RevenuePage onBack={() => handleChartOfAccountsPageChange("revenue")} />
-            )}
+            {chartOfAccountsPage === "assets" && <AssetsPage />}
+            {chartOfAccountsPage === "liabilities" && <LiabilitiesPage />}
+            {chartOfAccountsPage === "equity" && <EquityPage />}
+            {chartOfAccountsPage === "expenses" && <ExpensesPage />}
+            {chartOfAccountsPage === "revenue" && <RevenuePage />}
           </>
         )}
-
         {activeTab === "Cash Payment Voucher" && <CashPaymentVoucher />}
         {activeTab === "Cash Receipt Voucher" && <CashReceiptVoucher />}
         {activeTab === "Journal Voucher" && <JournalVoucher />}
@@ -508,27 +410,19 @@ const reportsDropdownRef = useRef(null);
         {activeTab === "Bank Receipt Voucher" && <BankReceiptVoucher />}
         {activeTab === "General Ledger" && <GeneralLedger />}
         {activeTab === "Trial Balance" && <TrialBalance />}
-        {activeTab === "Voucher Query" && <VoucherQuery/>}
+        {activeTab === "Voucher Query" && <VoucherQuery />}
         {activeTab === "Balance Sheet" && <BalanceSheet />}
         {activeTab === "ProfitLoss" && <ProfitLoss />}
         {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
         {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
         {activeTab === "Product Management" && <ProductManagementDashboard />}
         {activeTab === "Supplier Payment Voucher" && <SupplierPaymentVoucher />}
-        {activeTab=== "Customer Receipt Voucher" && <CustomerReceiptVoucher/>}
-        
-      
-        
-
+        {activeTab === "Customer Receipt Voucher" && <CustomerReceiptVoucher />}
         {activeTab === "notifications" && (
-          <Notifications
-            notifications={notifications}
-            onDismiss={dismissNotification}
-          />
+          <Notifications notifications={notifications} onDismiss={dismissNotification} />
         )}
+
       </main>
     </div>
   );
 }
-
-

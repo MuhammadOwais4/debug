@@ -1,6 +1,6 @@
 const Product = require("../models/Product")
 const Liability = require("../models/chart-of-accounts/Liabilitys")
-const Asset = require("../models/chart-of-accounts/Asset")
+const Expense = require("../models/chart-of-accounts/Expense") // ✅ Only Expense model
 
 // Get all products with optional filters
 const getProducts = async (req, res) => {
@@ -8,17 +8,9 @@ const getProducts = async (req, res) => {
     const { category, search, lowStock, expiryStatus, vendorName } = req.query
     const filter = {}
 
-    if (category) {
-      filter.category = category
-    }
-
-    if (search) {
-      filter.name = { $regex: search, $options: "i" }
-    }
-
-    if (lowStock === "true") {
-      filter.quantity = { $lt: 5 }
-    }
+    if (category) filter.category = category
+    if (search) filter.name = { $regex: search, $options: "i" }
+    if (lowStock === "true") filter.quantity = { $lt: 5 }
 
     if (vendorName) {
       const vendors = await Liability.find({
@@ -79,6 +71,7 @@ const getProduct = async (req, res) => {
   }
 }
 
+// Create a product
 const createProduct = async (req, res) => {
   try {
     const {
@@ -109,9 +102,10 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Rates and quantity must be non-negative" })
     }
 
-    const assetExists = await Asset.findById(purchaseType)
-    if (!assetExists) {
-      return res.status(400).json({ message: "Invalid purchase type. Asset not found." })
+    // ✅ Only Expense model validation
+    const expenseExists = await Expense.findById(purchaseType)
+    if (!expenseExists) {
+      return res.status(400).json({ message: "Invalid purchase type. Expense account not found." })
     }
 
     if (vendorName) {
@@ -128,7 +122,6 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    // Check for duplicate serial number ONLY if provided and not empty
     if (serialNumber && serialNumber.trim() !== "") {
       const existingProduct = await Product.findOne({ serialNumber: serialNumber.trim() })
       if (existingProduct) {
@@ -136,7 +129,6 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Check for duplicate vendor bill number ONLY if provided and not empty
     if (vendorBillNumber && vendorBillNumber.trim() !== "") {
       const existingBill = await Product.findOne({ vendorBillNumber: vendorBillNumber.trim() })
       if (existingBill) {
@@ -144,7 +136,6 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // Check for duplicate GRN ONLY if provided and not empty
     if (grn && grn.trim() !== "") {
       const existingGRN = await Product.findOne({ grn: grn.trim() })
       if (existingGRN) {
@@ -168,7 +159,6 @@ const createProduct = async (req, res) => {
       purchaseType,
     }
 
-    // Only add optional fields if they are provided and not empty
     if (serialNumber && serialNumber.trim() !== "") productData.serialNumber = serialNumber.trim()
     if (expiryDate) productData.expiryDate = new Date(expiryDate)
     if (vendorName) productData.vendorName = vendorName
@@ -187,27 +177,15 @@ const createProduct = async (req, res) => {
   } catch (error) {
     console.error("Error creating product:", error)
     if (error.code === 11000) {
-      // Handle duplicate key errors more specifically
       const field = Object.keys(error.keyPattern)[0]
       let message = "Duplicate entry detected"
-      
-      switch(field) {
-        case 'name':
-          message = "Product name already exists"
-          break
-        case 'serialNumber':
-          message = "Serial number already exists"
-          break
-        case 'vendorBillNumber':
-          message = "Vendor bill number already exists"
-          break
-        case 'grn':
-          message = "GRN already exists"
-          break
-        default:
-          message = `Duplicate ${field} detected`
+      switch (field) {
+        case "name": message = "Product name already exists"; break
+        case "serialNumber": message = "Serial number already exists"; break
+        case "vendorBillNumber": message = "Vendor bill number already exists"; break
+        case "grn": message = "GRN already exists"; break
+        default: message = `Duplicate ${field} detected`
       }
-      
       res.status(400).json({ message })
     } else if (error.name === "ValidationError") {
       const validationErrors = Object.values(error.errors).map((err) => err.message)
@@ -218,7 +196,7 @@ const createProduct = async (req, res) => {
   }
 }
 
-// Update a product - FIXED VERSION
+// Update a product
 const updateProduct = async (req, res) => {
   try {
     const {
@@ -239,20 +217,18 @@ const updateProduct = async (req, res) => {
 
     console.log("Received update data:", req.body)
 
-    if (purchaseRate !== undefined && purchaseRate < 0) {
+    if (purchaseRate !== undefined && purchaseRate < 0)
       return res.status(400).json({ message: "Purchase rate must be non-negative" })
-    }
-    if (saleRate !== undefined && saleRate < 0) {
+    if (saleRate !== undefined && saleRate < 0)
       return res.status(400).json({ message: "Sale rate must be non-negative" })
-    }
-    if (quantity !== undefined && quantity < 0) {
+    if (quantity !== undefined && quantity < 0)
       return res.status(400).json({ message: "Quantity must be non-negative" })
-    }
 
+    // ✅ Only Expense model validation
     if (purchaseType) {
-      const assetExists = await Asset.findById(purchaseType)
-      if (!assetExists) {
-        return res.status(400).json({ message: "Invalid purchase type. Asset not found." })
+      const expenseExists = await Expense.findById(purchaseType)
+      if (!expenseExists) {
+        return res.status(400).json({ message: "Invalid purchase type. Expense account not found." })
       }
     }
 
@@ -270,7 +246,6 @@ const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Expiry date must be in the future" })
     }
 
-    // Check for duplicate serial number ONLY if provided, not empty, and different from current
     if (serialNumber && serialNumber.trim() !== "") {
       const existingProduct = await Product.findOne({
         serialNumber: serialNumber.trim(),
@@ -281,7 +256,6 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Check for duplicate vendor bill number ONLY if provided, not empty, and different from current
     if (vendorBillNumber && vendorBillNumber.trim() !== "") {
       const existingBill = await Product.findOne({
         vendorBillNumber: vendorBillNumber.trim(),
@@ -292,7 +266,6 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // Check for duplicate GRN ONLY if provided, not empty, and different from current
     if (grn && grn.trim() !== "") {
       const existingGRN = await Product.findOne({
         grn: grn.trim(),
@@ -323,11 +296,14 @@ const updateProduct = async (req, res) => {
       const rate = purchaseRate !== undefined ? purchaseRate : currentProduct.purchaseRate
       updateData.balanceAmount = quantity * rate
     }
-    if (serialNumber !== undefined) updateData.serialNumber = serialNumber && serialNumber.trim() !== "" ? serialNumber.trim() : null
+    if (serialNumber !== undefined)
+      updateData.serialNumber = serialNumber && serialNumber.trim() !== "" ? serialNumber.trim() : null
     if (expiryDate !== undefined) updateData.expiryDate = expiryDate ? new Date(expiryDate) : null
     if (vendorName !== undefined) updateData.vendorName = vendorName
     if (vendorPhone !== undefined) updateData.vendorPhone = vendorPhone
-    if (vendorBillNumber !== undefined) updateData.vendorBillNumber = vendorBillNumber && vendorBillNumber.trim() !== "" ? vendorBillNumber.trim() : null
+    if (vendorBillNumber !== undefined)
+      updateData.vendorBillNumber =
+        vendorBillNumber && vendorBillNumber.trim() !== "" ? vendorBillNumber.trim() : null
     if (notes !== undefined) updateData.notes = notes
     if (purchaseType !== undefined) updateData.purchaseType = purchaseType
 
@@ -346,27 +322,15 @@ const updateProduct = async (req, res) => {
   } catch (error) {
     console.error("Error updating product:", error)
     if (error.code === 11000) {
-      // Handle duplicate key errors more specifically
       const field = Object.keys(error.keyPattern)[0]
       let message = "Duplicate entry detected"
-      
-      switch(field) {
-        case 'name':
-          message = "Product name already exists"
-          break
-        case 'serialNumber':
-          message = "Serial number already exists"
-          break
-        case 'vendorBillNumber':
-          message = "Vendor bill number already exists"
-          break
-        case 'grn':
-          message = "GRN already exists"
-          break
-        default:
-          message = `Duplicate ${field} detected`
+      switch (field) {
+        case "name": message = "Product name already exists"; break
+        case "serialNumber": message = "Serial number already exists"; break
+        case "vendorBillNumber": message = "Vendor bill number already exists"; break
+        case "grn": message = "GRN already exists"; break
+        default: message = `Duplicate ${field} detected`
       }
-      
       res.status(400).json({ message })
     } else if (error.name === "ValidationError") {
       const validationErrors = Object.values(error.errors).map((err) => err.message)
@@ -377,18 +341,14 @@ const updateProduct = async (req, res) => {
   }
 }
 
+// Get product stock
 const getProductStock = async (req, res) => {
   try {
     const { category, lowStock, expiryStatus } = req.query
     const filter = {}
 
-    if (category) {
-      filter.category = category
-    }
-
-    if (lowStock === "true") {
-      filter.quantity = { $lt: 5 }
-    }
+    if (category) filter.category = category
+    if (lowStock === "true") filter.quantity = { $lt: 5 }
 
     if (expiryStatus) {
       const now = new Date()
@@ -412,81 +372,56 @@ const getProductStock = async (req, res) => {
       .populate("purchaseType", "name type code description")
       .sort({ quantity: 1 })
 
-    const stockData = products.map(product => ({
+    const stockData = products.map((product) => ({
       productId: product._id,
       productName: product.name,
       category: product.category,
       grn: product.grn,
-      
-      // Current Stock
       currentQuantity: product.quantity,
       balanceAmount: product.balanceAmount,
-      
-      // Purchase Information
       purchaseQuantity: product.purchaseQuantity,
       purchaseRate: product.purchaseRate,
       purchaseAmount: product.purchaseAmount,
-      
-      // Sales Information
       totalSoldQuantity: product.totalSoldQuantity,
       saleRate: product.saleRate,
-      
-      // Return Information
       returnQuantity: product.ReturnQuantity || 0,
       returnedAmount: product.ReturnedAmount || 0,
-      
-      // Calculated Values
-      stockPercentage: product.purchaseQuantity > 0 
-        ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2) 
-        : 0,
+      stockPercentage:
+        product.purchaseQuantity > 0
+          ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
+          : 0,
       totalValue: product.quantity * product.purchaseRate,
       potentialRevenue: product.quantity * product.saleRate,
-      potentialProfit: (product.quantity * product.saleRate) - (product.quantity * product.purchaseRate),
-      
-      // Additional Details
+      potentialProfit: product.quantity * product.saleRate - product.quantity * product.purchaseRate,
       serialNumber: product.serialNumber,
       expiryDate: product.expiryDate,
       vendorName: product.vendorName,
       purchaseType: product.purchaseType,
-      
-      // Status Indicators
       isLowStock: product.quantity < 5,
       isExpired: product.expiryDate ? new Date(product.expiryDate) < new Date() : false,
-      isExpiringSoon: product.expiryDate 
-        ? new Date(product.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) 
+      isExpiringSoon: product.expiryDate
+        ? new Date(product.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         : false,
-      
-      // Timestamps
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
     }))
 
-    // Calculate summary statistics
     const summary = {
       totalProducts: stockData.length,
       totalStockValue: stockData.reduce((sum, p) => sum + p.totalValue, 0),
       totalPotentialRevenue: stockData.reduce((sum, p) => sum + p.potentialRevenue, 0),
       totalPotentialProfit: stockData.reduce((sum, p) => sum + p.potentialProfit, 0),
-      lowStockCount: stockData.filter(p => p.isLowStock).length,
-      expiredCount: stockData.filter(p => p.isExpired).length,
-      expiringSoonCount: stockData.filter(p => p.isExpiringSoon).length,
+      lowStockCount: stockData.filter((p) => p.isLowStock).length,
+      expiredCount: stockData.filter((p) => p.isExpired).length,
+      expiringSoonCount: stockData.filter((p) => p.isExpiringSoon).length,
     }
 
-    res.json({
-      success: true,
-      summary,
-      data: stockData
-    })
+    res.json({ success: true, summary, data: stockData })
   } catch (error) {
     console.error("Error fetching product stock:", error)
-    res.status(500).json({ 
-      success: false,
-      message: "Error fetching product stock", 
-      error: error.message 
-    })
+    res.status(500).json({ success: false, message: "Error fetching product stock", error: error.message })
   }
 }
-
 
 // Update product stock
 const updateStock = async (req, res) => {
@@ -508,7 +443,6 @@ const updateStock = async (req, res) => {
 
     if (operation === "add") {
       const additionalAmount = quantity * product.purchaseRate
-
       product.quantity += quantity
       product.purchaseQuantity += quantity
       product.purchaseAmount += additionalAmount
@@ -517,7 +451,6 @@ const updateStock = async (req, res) => {
       if (product.quantity < quantity) {
         return res.status(400).json({ message: "Insufficient stock available" })
       }
-
       product.quantity -= quantity
       product.totalSoldQuantity += quantity
       product.balanceAmount = product.quantity * product.purchaseRate
@@ -588,11 +521,7 @@ const getExpiringProducts = async (req, res) => {
     futureDate.setDate(futureDate.getDate() + Number.parseInt(days))
 
     const products = await Product.find({
-      expiryDate: {
-        $exists: true,
-        $gte: new Date(),
-        $lte: futureDate,
-      },
+      expiryDate: { $exists: true, $gte: new Date(), $lte: futureDate },
     })
       .populate("vendorName", "name code balance description")
       .populate("purchaseType", "name type code description")
@@ -609,10 +538,7 @@ const getExpiringProducts = async (req, res) => {
 const getExpiredProducts = async (req, res) => {
   try {
     const products = await Product.find({
-      expiryDate: {
-        $exists: true,
-        $lt: new Date(),
-      },
+      expiryDate: { $exists: true, $lt: new Date() },
     })
       .populate("vendorName", "name code balance description")
       .populate("purchaseType", "name type code description")
@@ -635,9 +561,7 @@ const getProductsByVendor = async (req, res) => {
       type: "PAYABLES",
     })
 
-    if (vendors.length === 0) {
-      return res.json([])
-    }
+    if (vendors.length === 0) return res.json([])
 
     const vendorIds = vendors.map((v) => v._id)
 
@@ -679,11 +603,11 @@ const getVendors = async (req, res) => {
   }
 }
 
-// Get purchase types
+// ✅ FIXED: Get purchase types — only from Expense model
 const getPurchaseTypes = async (req, res) => {
   try {
-    const purchaseTypes = await Asset.find({
-      type: { $in: ["Purchases", "Stock", "General Account"] },
+    const purchaseTypes = await Expense.find({
+      type: { $in: ["Purchases", "EXPENSE ACCOUNT"] },
       isActive: true,
     }).select("_id name code type description")
 
@@ -719,7 +643,8 @@ const getProductSummary = async (req, res) => {
         saleRate: product.saleRate,
         totalSaleAmount: product.totalSoldQuantity * product.saleRate,
         totalSaleProfit:
-          product.totalSoldQuantity * product.saleRate - product.totalSoldQuantity * product.purchaseRate,
+          product.totalSoldQuantity * product.saleRate -
+          product.totalSoldQuantity * product.purchaseRate,
       },
       currentBalance: {
         balanceQuantity: product.quantity,
@@ -754,17 +679,9 @@ const getProductsWithSummary = async (req, res) => {
     const { category, search, lowStock, expiryStatus, vendorName } = req.query
     const filter = {}
 
-    if (category) {
-      filter.category = category
-    }
-
-    if (search) {
-      filter.name = { $regex: search, $options: "i" }
-    }
-
-    if (lowStock === "true") {
-      filter.quantity = { $lt: 5 }
-    }
+    if (category) filter.category = category
+    if (search) filter.name = { $regex: search, $options: "i" }
+    if (lowStock === "true") filter.quantity = { $lt: 5 }
 
     if (vendorName) {
       const vendors = await Liability.find({
@@ -806,9 +723,12 @@ const getProductsWithSummary = async (req, res) => {
       summary: {
         totalSaleAmount: product.totalSoldQuantity * product.saleRate,
         totalSaleProfit:
-          product.totalSoldQuantity * product.saleRate - product.totalSoldQuantity * product.purchaseRate,
+          product.totalSoldQuantity * product.saleRate -
+          product.totalSoldQuantity * product.purchaseRate,
         balancePercentage:
-          product.purchaseQuantity > 0 ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2) : 0,
+          product.purchaseQuantity > 0
+            ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
+            : 0,
       },
     }))
 
@@ -819,7 +739,7 @@ const getProductsWithSummary = async (req, res) => {
   }
 }
 
-// Process Purchase Return - UPDATED WITH TRACKING
+// Process Purchase Return
 const processPurchaseReturn = async (req, res) => {
   try {
     const { productId, returnQuantity, returnDate, reason } = req.body
@@ -853,11 +773,8 @@ const processPurchaseReturn = async (req, res) => {
 
     const calculatedReturnAmount = qty * product.purchaseRate
 
-    // Update quantities
     product.quantity -= qty
     product.balanceAmount = product.quantity * product.purchaseRate
-    
-    // Update return tracking fields
     product.ReturnQuantity = (product.ReturnQuantity || 0) + qty
     product.ReturnedAmount = (product.ReturnedAmount || 0) + calculatedReturnAmount
     product.ReturnedDate = new Date(returnDate)
@@ -893,20 +810,15 @@ const processPurchaseReturn = async (req, res) => {
     })
   } catch (error) {
     console.error("[PRN] Error processing purchase return:", error)
-    res.status(500).json({
-      message: "Error processing purchase return",
-      error: error.message,
-    })
+    res.status(500).json({ message: "Error processing purchase return", error: error.message })
   }
 }
 
-// Get Purchase Return History - NEW
+// Get Purchase Return History
 const getPurchaseReturns = async (req, res) => {
   try {
     const { startDate, endDate, productId, category } = req.query
-    const filter = {
-      ReturnQuantity: { $gt: 0 },
-    }
+    const filter = { ReturnQuantity: { $gt: 0 } }
 
     if (startDate || endDate) {
       filter.ReturnedDate = {}
@@ -914,20 +826,15 @@ const getPurchaseReturns = async (req, res) => {
       if (endDate) filter.ReturnedDate.$lte = new Date(endDate)
     }
 
-    if (productId) {
-      filter._id = productId
-    }
-
-    if (category) {
-      filter.category = category
-    }
+    if (productId) filter._id = productId
+    if (category) filter.category = category
 
     const products = await Product.find(filter)
       .populate("vendorName", "name code balance description")
       .populate("purchaseType", "name type code description")
       .sort({ ReturnedDate: -1 })
 
-    const returns = products.map(product => ({
+    const returns = products.map((product) => ({
       _id: product._id,
       productId: product._id,
       productName: product.name,
@@ -945,21 +852,14 @@ const getPurchaseReturns = async (req, res) => {
 
     console.log("[PRN] Fetched returns:", returns.length)
 
-    res.json({
-      success: true,
-      count: returns.length,
-      data: returns,
-    })
+    res.json({ success: true, count: returns.length, data: returns })
   } catch (error) {
     console.error("[PRN] Error fetching purchase returns:", error)
-    res.status(500).json({
-      message: "Error fetching purchase returns",
-      error: error.message,
-    })
+    res.status(500).json({ message: "Error fetching purchase returns", error: error.message })
   }
 }
 
-// Get Single Product Return Details - NEW
+// Get Single Product Return Details
 const getPurchaseReturn = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -989,16 +889,10 @@ const getPurchaseReturn = async (req, res) => {
       status: "approved",
     }
 
-    res.json({
-      success: true,
-      data: returnDetails,
-    })
+    res.json({ success: true, data: returnDetails })
   } catch (error) {
     console.error("[PRN] Error fetching return details:", error)
-    res.status(500).json({
-      message: "Error fetching return details",
-      error: error.message,
-    })
+    res.status(500).json({ message: "Error fetching return details", error: error.message })
   }
 }
 
@@ -1009,7 +903,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   updateStock,
-  getProductsByCategory,  
+  getProductsByCategory,
   getLowStockProducts,
   getExpiringProducts,
   getExpiredProducts,
@@ -1021,6 +915,6 @@ module.exports = {
   getProductStock,
   getProductsWithSummary,
   processPurchaseReturn,
-  getPurchaseReturns, // Exported new function
-  getPurchaseReturn,  // Exported new function
+  getPurchaseReturns,
+  getPurchaseReturn,
 }

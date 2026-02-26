@@ -205,7 +205,8 @@ function EquityPage({ onBack }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Account Type <span className="text-red-500">*</span>
+                Account Type
+ <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.type}
@@ -214,7 +215,7 @@ function EquityPage({ onBack }) {
                 disabled={loading}
                 required
               >
-                <option value="EQUITY ACCOUNT">EQUITY ACCOUNT</option>
+                <option value="EQUITY ACCOUNT">Equity Account</option>
                 <option value="Capital">Capital</option>
                 <option value="Drawings">Drawings</option>
                 <option value="Retained Earnings">Retained Earnings</option>

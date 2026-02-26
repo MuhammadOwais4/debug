@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const BASE_URL = "https://debug-nxby.vercel.app";
+const BASE_URL = "https://debug-nxby.vercel.app/";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 const http = {
@@ -372,7 +372,7 @@ export default function CustomerReceiptVoucher() {
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
 
       {/* Header */}
-      <div style={S.header}>💰 Customer Cash / Bank Receipt Voucher (CRV)</div>
+      <div style={S.header}> Customer Cash / Bank Receipt Voucher (CRV)</div>
 
       {/* Toolbar */}
       <div style={S.toolbar}>

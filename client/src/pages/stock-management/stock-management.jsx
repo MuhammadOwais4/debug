@@ -19,7 +19,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 
-const productCategories = ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Other"]
+const productCategories = [ "Garments",]
 
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
@@ -107,7 +107,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const loadPurchasesAccounts = async () => {
     try {
       setLoadingPurchases(true)
-      const response = await ApiHandler.getAssets()
+      const response = await ApiHandler.getChartExpenses()
       const assets = response.data || []
       const purchasesList = assets.filter((asset) => asset.type === "Purchases")
       setPurchasesAccounts(purchasesList)

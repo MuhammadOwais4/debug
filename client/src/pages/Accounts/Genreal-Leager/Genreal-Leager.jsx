@@ -192,7 +192,7 @@ export default function GeneralLedger() {
           </div>
 
           <div className="text-center space-y-3 bg-white p-6 rounded-lg shadow-lg border print:shadow-none print:border print:bg-white">
-            <h1 className="text-2xl font-bold text-gray-800">ABC COMPANY</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Denmin locker.</h1>
             <h2 className="text-xl font-semibold text-blue-600">GENERAL LEDGER</h2>
             <div className="text-lg font-medium text-gray-700">
               Account: <span className="text-blue-600">{selectedAccount}</span>

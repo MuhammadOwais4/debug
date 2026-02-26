@@ -17,11 +17,10 @@ const ledgerSchema = new mongoose.Schema(
       required: true,
       enum: [
         "Sale", "Purchase",
-        "CPV", "BPV", "CRV", "BRV", "JV",
-        "SPV",                          // ✅ Supplier Payment Voucher
+        "CPV", "BPV", "CRV", "BRV", "JV", "SPV",
         "Sale Return", "Purchase Return",
         "Sale Discount", "Purchase Discount",
-        "WHT",                          // ✅ Withholding Tax entries
+        "WHT",
       ],
     },
     sourceType: {
@@ -29,7 +28,8 @@ const ledgerSchema = new mongoose.Schema(
       required: true,
       enum: [
         "Sale", "Voucher", "Product",
-        "SupplierPaymentVoucher",       // ✅ SPV source
+        "SupplierPaymentVoucher",
+        "CustomerReceiptVoucher",
         "SaleReturn", "PurchaseReturn",
         "SaleDiscount", "PurchaseDiscount",
       ],
@@ -49,7 +49,7 @@ const ledgerSchema = new mongoose.Schema(
         "SALE_RETURN", "RECEIVABLE_REVERSAL",
         "PAYABLE_REVERSAL", "PURCHASE_RETURN",
         "SALE_DISCOUNT", "PURCHASE_DISCOUNT",
-        "WHT_EXPENSE", "WHT_PAYABLE",   // ✅ WHT entry types
+        "WHT_EXPENSE", "WHT_PAYABLE",
       ],
     },
     isActive: { type: Boolean, default: true },
