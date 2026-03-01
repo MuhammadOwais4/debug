@@ -413,7 +413,7 @@ const BarcodeScannerScreen = () => {
 
       // ── Use native fetch — bypasses ApiHandler wrapper which breaks FormData ──
       const token = localStorage.getItem("authToken")
-      const fetchRes = await fetch("http://localhost:5000/api/barcodes/import", {
+      const fetchRes = await fetch("https://debug-nxby.vercel.app/api/barcodes/import", {
         method: "POST",
         body: form,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
