@@ -270,21 +270,30 @@ const BarcodeScannerScreen = () => {
   const fetchEntries = useCallback(async () => {
     try {
       setLoading(true)
+      // ApiHandler.get returns response.data directly (not wrapped in .data again)
       const res = await ApiHandler.get(`/barcodes?search=${encodeURIComponent(search)}&page=${page}&limit=20`)
-      const d = res?.data || res
-      setEntries(d?.data || [])
-      setTotalPages(d?.pages || 1)
-      setTotal(d?.total || 0)
+      // res = { success, total, pages, data: [...] }
+      setEntries(res?.data || [])
+      setTotalPages(res?.pages || 1)
+      setTotal(res?.total || 0)
     } catch (e) { console.error(e); setEntries([]) }
     finally { setLoading(false) }
   }, [search, page])
 
   const fetchStats = useCallback(async () => {
-    try { const r = await ApiHandler.get("/barcodes/stats"); setStats(r?.data?.data || null) } catch (e) { console.error(e) }
+    try {
+      const r = await ApiHandler.get("/barcodes/stats")
+      // r = { success, data: { total, ... } }
+      setStats(r?.data || null)
+    } catch (e) { console.error(e) }
   }, [])
 
   const fetchBatches = useCallback(async () => {
-    try { const r = await ApiHandler.get("/barcodes/batches"); setBatches(r?.data?.data || []) } catch (e) { console.error(e) }
+    try {
+      const r = await ApiHandler.get("/barcodes/batches")
+      // r = { success, data: [...] }
+      setBatches(r?.data || [])
+    } catch (e) { console.error(e) }
   }, [])
 
   const fetchGRNProducts = useCallback(async () => {
