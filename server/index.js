@@ -11,6 +11,7 @@ app.use(
     // origin: ["http://localhost:5173"],
 origin: ["https://debug-henna.vercel.app"],
 
+
     credentials: true,
   }),
 )
