@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
-const BASE_URL = "https://debug-nxby.vercel.app";
+const BASE_URL = "http://localhost:5000";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 const http = {
@@ -11,7 +11,7 @@ const http = {
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("application/json")) {
       const txt = await res.text();
-      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — URL: ${BASE_URL}${path} — Jawab: ${txt.slice(0, 120)}`);
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — Jawab: ${txt.slice(0, 120)}`);
     }
     const data = await res.json();
     if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
@@ -26,7 +26,38 @@ const http = {
     const ct = res.headers.get("content-type") || "";
     if (!ct.includes("application/json")) {
       const txt = await res.text();
-      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — URL: ${BASE_URL}${path} — Jawab: ${txt.slice(0, 120)}`);
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — Jawab: ${txt.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  // ✅ PATCH — update ke liye
+  patch: async (path, body) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      const txt = await res.text();
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — Jawab: ${txt.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  // ✅ DELETE
+  delete: async (path) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      const txt = await res.text();
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — Jawab: ${txt.slice(0, 120)}`);
     }
     const data = await res.json();
     if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
@@ -36,19 +67,20 @@ const http = {
 
 const ledgerAPI = { getAllAccounts: () => http.get("/api/ledgers/accounts") };
 
-// ── CRV API ───────────────────────────────────────────────────────────────────
 const crvAPI = {
-  getCustomers:           () => http.get("/api/customer-receipt/customers"),
+  getCustomers: ()               => http.get("/api/customer-receipt/customers"),
   getSaleJournalByCustomer: ({ customerId, fromDate, toDate }) => {
     const p = new URLSearchParams({ customerId: customerId || "", fromDate: fromDate || "", toDate: toDate || "" });
     return http.get(`/api/customer-receipt/sale-journal?${p}`);
   },
-  saveVoucher: (payload)  => http.post("/api/customer-receipt", payload),
-  getHistory:  (customerId) =>
-    http.get(customerId ? `/api/customer-receipt?customerId=${customerId}` : `/api/customer-receipt`),
+  saveVoucher:   (payload)       => http.post("/api/customer-receipt", payload),
+  // ✅ PATCH /:id
+  updateVoucher: (id, payload)   => http.patch(`/api/customer-receipt/${id}`, payload),
+  // ✅ DELETE /:id
+  deleteVoucher: (id)            => http.delete(`/api/customer-receipt/${id}`),
+  getHistory:    (customerId)    => http.get(customerId ? `/api/customer-receipt?customerId=${customerId}` : `/api/customer-receipt`),
 };
 
-// ── Tax options ───────────────────────────────────────────────────────────────
 const TAX_OPTIONS = [
   { label: "No Tax (0%)", value: 0      },
   { label: "0.25%",       value: 0.0025 },
@@ -67,9 +99,9 @@ const S = {
   btn: (v = "default") => ({
     padding: "4px 16px", borderRadius: 3, border: "1px solid", height: 28, fontSize: 12, fontWeight: 500,
     cursor: v === "disabled" ? "not-allowed" : "pointer",
-    background:  v === "primary" ? "#16a34a" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "disabled" ? "#d1d5db" : "#fff",
-    color:       v === "primary" || v === "danger" || v === "success" ? "#fff" : v === "disabled" ? "#6b7280" : "#374151",
-    borderColor: v === "primary" ? "#15803d" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "disabled" ? "#9ca3af" : "#9ca3af",
+    background:  v === "primary" ? "#16a34a" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "warning" ? "#d97706" : v === "disabled" ? "#d1d5db" : "#fff",
+    color:       v === "primary" || v === "danger" || v === "success" || v === "warning" ? "#fff" : v === "disabled" ? "#6b7280" : "#374151",
+    borderColor: v === "primary" ? "#15803d" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "warning" ? "#b45309" : v === "disabled" ? "#9ca3af" : "#9ca3af",
   }),
   form:     { background: "#fff", margin: "12px 14px 0", borderRadius: 6, border: "1px solid #d1d9e0", padding: "14px 18px" },
   row:      { display: "grid", gridTemplateColumns: "120px 1fr", alignItems: "start", marginBottom: 10, gap: 8 },
@@ -91,11 +123,11 @@ const S = {
   th:  { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "left",   fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
   thC: { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
   thR: { background: "linear-gradient(180deg,#16a34a,#15803d)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #14532d", whiteSpace: "nowrap" },
-  thTax: { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "right", fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
-  thTaxC:{ background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "center",fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
-  td:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", verticalAlign: "middle" }),
-  tdC: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "center",  verticalAlign: "middle" }),
-  tdR: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "right",   verticalAlign: "middle" }),
+  thTax:  { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
+  thTaxC: { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
+  td:   (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", verticalAlign: "middle" }),
+  tdC:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "center",  verticalAlign: "middle" }),
+  tdR:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "right",   verticalAlign: "middle" }),
   tdTax:(i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fffbf5":"#fef3c7", textAlign: "right", verticalAlign: "middle", color:"#92400e" }),
   summaryRow: { background: "#dcfce7", fontWeight: 700, borderTop: "2px solid #16a34a" },
   payInput: { border: "1px solid #16a34a", borderRadius: 3, padding: "3px 6px", width: 90, textAlign: "right", fontSize: 12, outline: "none", background: "#fff" },
@@ -105,12 +137,13 @@ const S = {
     color: "#fff", borderRadius: 5, padding: "10px 20px", fontSize: 13, fontWeight: 600,
     boxShadow: "0 4px 16px rgba(0,0,0,0.18)", maxWidth: 420,
   }),
-  modal:    { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" },
-  modalBox: { background:"#fff", borderRadius:8, padding:22, minWidth:500, maxWidth:820, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.22)" },
+  modal:      { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" },
+  modalBox:   { background:"#fff", borderRadius:8, padding:22, minWidth:500, maxWidth:820, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.22)" },
+  confirmBox: { background:"#fff", borderRadius:8, padding:28, minWidth:340, maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.22)", textAlign:"center" },
   badge: (c) => ({
     display:"inline-block", padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:700,
-    background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe":"#fef9c3",
-    color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8":"#92400e",
+    background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe": c==="CANCELLED"?"#fee2e2":"#fef9c3",
+    color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8": c==="CANCELLED"?"#dc2626":"#92400e",
   }),
   infoStrip:   { display:"flex", gap:20, background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:4, padding:"6px 12px", marginTop:8, fontSize:11, flexWrap:"wrap", alignItems:"center" },
   summaryCards:{ display:"flex", gap:10, margin:"10px 14px 0", flexWrap:"wrap" },
@@ -132,18 +165,51 @@ const S = {
   taxSelect: { border:"1.5px solid #f59e0b", borderRadius:4, padding:"4px 10px", fontSize:13, fontWeight:700, color:"#92400e", background:"#fff", height:30, cursor:"pointer", outline:"none", minWidth:160 },
   taxBadge:  { background:"#f59e0b", color:"#fff", borderRadius:10, padding:"3px 12px", fontSize:12, fontWeight:700 },
   taxInfo:   { fontSize:11, color:"#78350f", fontStyle:"italic" },
+  editBanner: {
+    background:"linear-gradient(90deg,#92400e,#b45309)",
+    color:"#fff", padding:"7px 16px", margin:"8px 14px 0",
+    borderRadius:5, display:"flex", alignItems:"center", gap:12,
+    fontSize:12, fontWeight:600, flexWrap:"wrap",
+  },
 };
+
+// ── Print Styles ──────────────────────────────────────────────────────────────
+const printStyles = `
+@media print {
+  body * { visibility: hidden !important; }
+  #crv-print-area, #crv-print-area * { visibility: visible !important; }
+  #crv-print-area { position: fixed; left: 0; top: 0; width: 100%; z-index: 99999; background: #fff; }
+  .no-print { display: none !important; }
+}
+@page { size: A4; margin: 15mm; }
+`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function CustomerReceiptVoucher() {
 
-  const [voucherDate,          setVoucherDate]          = useState(todayISO());
-  const [selectedBankAccount,  setSelectedBankAccount]  = useState("");
-  const [selectedCustomer,     setSelectedCustomer]     = useState("");
-  const [narration,            setNarration]            = useState("");
-  const [fromDate,             setFromDate]             = useState("");
-  const [toDate,               setToDate]               = useState(todayISO());
-  const [taxRate,              setTaxRate]              = useState(0);
+  const [voucherDate,         setVoucherDate]         = useState(todayISO());
+  const [selectedBankAccount, setSelectedBankAccount] = useState("");
+  const [selectedCustomer,    setSelectedCustomer]    = useState("");
+  const [narration,           setNarration]           = useState("");
+  const [fromDate,            setFromDate]            = useState("");
+  const [toDate,              setToDate]              = useState(todayISO());
+  const [taxRate,             setTaxRate]             = useState(0);
+
+  // ── EDIT STATE ────────────────────────────────────────────────────────────
+  const [editMode,          setEditMode]          = useState(false);
+  const [editVoucherId,     setEditVoucherId]     = useState(null);
+  const [editVoucherNumber, setEditVoucherNumber] = useState("");
+  const [editSelectModal,   setEditSelectModal]   = useState(false);
+  const [editSelectData,    setEditSelectData]    = useState([]);
+  const [loadingEditList,   setLoadingEditList]   = useState(false);
+
+  // ── DELETE STATE ──────────────────────────────────────────────────────────
+  const [deleteConfirm,     setDeleteConfirm]     = useState(null);
+  const [deleting,          setDeleting]          = useState(false);
+
+  // ── PRINT STATE ───────────────────────────────────────────────────────────
+  const [printData,         setPrintData]         = useState(null);
+  const [printModal,        setPrintModal]        = useState(false);
 
   const [cashBankAccounts,  setCashBankAccounts]  = useState([]);
   const [customers,         setCustomers]         = useState([]);
@@ -170,7 +236,6 @@ export default function CustomerReceiptVoucher() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ── Load Cash/Bank accounts ───────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       setLoadingAccounts(true); setAccountsError("");
@@ -186,7 +251,6 @@ export default function CustomerReceiptVoucher() {
     })();
   }, []);
 
-  // ── Load Customers (RECEIVABLES from Asset) ───────────────────────────────
   useEffect(() => {
     (async () => {
       setLoadingCustomers(true); setCustomersError("");
@@ -194,21 +258,20 @@ export default function CustomerReceiptVoucher() {
         const res  = await crvAPI.getCustomers();
         const list = res?.data ?? (Array.isArray(res) ? res : []);
         setCustomers(list);
-        if (!list.length)
-          setCustomersError("Koi customer nahi mila. Asset mein RECEIVABLES type ka account add karo.");
+        if (!list.length) setCustomersError("Koi customer nahi mila.");
       } catch (err) { setCustomersError(err.message); }
       finally { setLoadingCustomers(false); }
     })();
   }, []);
 
-  // ── Previous receipts map ─────────────────────────────────────────────────
-  const buildPrevReceiptsMap = useCallback(async (customerId) => {
+  const buildPrevReceiptsMap = useCallback(async (customerId, excludeVoucherId = null) => {
     try {
       const res      = await crvAPI.getHistory(customerId);
       const vouchers = res?.data ?? (Array.isArray(res) ? res : []);
       const map = {};
       vouchers.forEach((v) => {
         if (v.status === "CANCELLED") return;
+        if (excludeVoucherId && (v._id === excludeVoucherId || v.id === excludeVoucherId)) return;
         (v.lines || []).forEach((line) => {
           const id = line.invoiceId?.toString() || line.saleDetail;
           if (!id) return;
@@ -220,16 +283,17 @@ export default function CustomerReceiptVoucher() {
     } catch (_) {}
   }, []);
 
-  // ── Load Sale Journal ─────────────────────────────────────────────────────
-  const handleLoadJournal = useCallback(async () => {
-    if (!selectedCustomer) { showToast("Pehle customer select karein", "error"); return; }
+  const handleLoadJournal = useCallback(async (overrideCustomerId = null, overrideExcludeId = null) => {
+    const customerId = overrideCustomerId || selectedCustomer;
+    if (!customerId) { showToast("Pehle customer select karein", "error"); return; }
     setLoadingJournal(true); setJournalLoaded(false);
     setInvoices([]); setReceiptAmounts({}); setSelectedInvoices({});
     setExpandedRows({}); setPrevReceipts({});
     try {
+      const excludeId = overrideExcludeId || (editMode ? editVoucherId : null);
       const [jRes] = await Promise.all([
-        crvAPI.getSaleJournalByCustomer({ customerId: selectedCustomer, fromDate, toDate }),
-        buildPrevReceiptsMap(selectedCustomer),
+        crvAPI.getSaleJournalByCustomer({ customerId, fromDate, toDate }),
+        buildPrevReceiptsMap(customerId, excludeId),
       ]);
       const list = jRes?.data ?? (Array.isArray(jRes) ? jRes : []);
       setInvoices(list);
@@ -238,9 +302,104 @@ export default function CustomerReceiptVoucher() {
     } catch (err) {
       showToast("Journal load error: " + err.message, "error");
     } finally { setLoadingJournal(false); }
-  }, [selectedCustomer, fromDate, toDate, buildPrevReceiptsMap]);
+  }, [selectedCustomer, fromDate, toDate, buildPrevReceiptsMap, editMode, editVoucherId]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── EDIT: Open select modal ───────────────────────────────────────────────
+  const handleEditClick = async () => {
+    setEditSelectModal(true); setLoadingEditList(true);
+    try {
+      const res  = await crvAPI.getHistory(undefined);
+      const list = res?.data ?? (Array.isArray(res) ? res : []);
+      setEditSelectData(list.filter((v) => v.status === "SAVED" || v.status === "DRAFT"));
+    } catch (err) { showToast("Edit list error: " + err.message, "error"); }
+    finally { setLoadingEditList(false); }
+  };
+
+  // ── EDIT: Load voucher into form ──────────────────────────────────────────
+  const handleLoadForEdit = async (voucher) => {
+    setEditSelectModal(false);
+    const customerId = voucher.accCrCustomer?._id || voucher.accCrCustomer || "";
+    const bankCode   = voucher.accDrBank?.code || voucher.accDrBank?._id || voucher.accDrBank || "";
+
+    setEditMode(true);
+    setEditVoucherId(voucher._id || voucher.id);
+    setEditVoucherNumber(voucher.voucherNumber || "");
+    setVoucherDate(voucher.voucherDate ? voucher.voucherDate.split("T")[0] : todayISO());
+    setSelectedCustomer(customerId);
+    setSelectedBankAccount(bankCode);
+    setNarration(voucher.narration || "");
+    setTaxRate(typeof voucher.taxRate === "number" ? voucher.taxRate : 0);
+    if (voucher.period?.from) setFromDate(voucher.period.from.split("T")[0]);
+    if (voucher.period?.to)   setToDate(voucher.period.to.split("T")[0]);
+
+    setLoadingJournal(true); setJournalLoaded(false);
+    setInvoices([]); setReceiptAmounts({}); setSelectedInvoices({});
+    setExpandedRows({}); setPrevReceipts({});
+
+    try {
+      const excludeId = voucher._id || voucher.id;
+      const [jRes] = await Promise.all([
+        crvAPI.getSaleJournalByCustomer({
+          customerId,
+          fromDate: voucher.period?.from ? voucher.period.from.split("T")[0] : "",
+          toDate:   voucher.period?.to   ? voucher.period.to.split("T")[0]   : todayISO(),
+        }),
+        buildPrevReceiptsMap(customerId, excludeId),
+      ]);
+      const list = jRes?.data ?? (Array.isArray(jRes) ? jRes : []);
+      setInvoices(list);
+      setJournalLoaded(true);
+
+      const selObj = {}, recObj = {};
+      (voucher.lines || []).forEach((line) => {
+        const id = line.invoiceId?.toString();
+        if (id) { selObj[id] = true; recObj[id] = line.amount || 0; }
+      });
+      setSelectedInvoices(selObj);
+      setReceiptAmounts(recObj);
+      if (!list.length) showToast("Koi invoice nahi mila — period check karein", "info");
+      else showToast(`✏️ Voucher ${voucher.voucherNumber} edit mode mein open hua`, "success");
+    } catch (err) {
+      showToast("Journal load error: " + err.message, "error");
+    } finally { setLoadingJournal(false); }
+  };
+
+  // ── DELETE ────────────────────────────────────────────────────────────────
+  const handleDeleteConfirm = (voucher) => {
+    setDeleteConfirm({ id: voucher._id || voucher.id, voucherNumber: voucher.voucherNumber });
+  };
+
+  const handleDeleteExecute = async () => {
+    if (!deleteConfirm?.id) return;
+    setDeleting(true);
+    try {
+      await crvAPI.deleteVoucher(deleteConfirm.id);
+      showToast(`🗑️ Voucher ${deleteConfirm.voucherNumber} deleted!`, "success");
+      const deletedId = deleteConfirm.id;
+      setDeleteConfirm(null);
+      setEditSelectData((prev) => prev.filter((v) => (v._id || v.id) !== deletedId));
+      setHistoryData((prev) => prev.filter((v) => (v._id || v.id) !== deletedId));
+      if (editVoucherId === deletedId) handleNew();
+    } catch (err) {
+      showToast("Delete error: " + err.message, "error");
+    } finally { setDeleting(false); }
+  };
+
+  // ── PRINT ─────────────────────────────────────────────────────────────────
+  const handlePrint = () => {
+    const customerObj = customers.find((c) => c._id === selectedCustomer);
+    const bankObj     = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
+    setPrintData({
+      voucherNumber: editMode ? editVoucherNumber : "Draft",
+      voucherDate, customerObj, bankObj, narration, taxRate,
+      totalRecvBefore, totalTaxAmt, totalRecvAfter,
+      selectedInvoices, invoices, receiptAmounts, prevReceipts,
+    });
+    setPrintModal(true);
+    setTimeout(() => window.print(), 400);
+  };
+
+  // ── Invoice helpers ───────────────────────────────────────────────────────
   const getAlreadyReceived = (inv) => (prevReceipts[inv._id] || []).reduce((s, p) => s + p.amount, 0);
   const getRemaining       = (inv) => Math.max((inv.amount || 0) - getAlreadyReceived(inv), 0);
 
@@ -280,18 +439,19 @@ export default function CustomerReceiptVoucher() {
   const toggleRow = (id) => setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totalInvoice       = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
-  const totalPrevReceived  = invoices.reduce((s, inv) => s + getAlreadyReceived(inv), 0);
-  const totalRemaining     = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
+  const totalInvoice      = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
+  const totalPrevReceived = invoices.reduce((s, inv) => s + getAlreadyReceived(inv), 0);
+  const totalRemaining    = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
 
-  const totalRecvBefore    = Object.entries(selectedInvoices).filter(([, v]) => v)
+  const totalRecvBefore   = Object.entries(selectedInvoices).filter(([, v]) => v)
     .reduce((s, [id]) => s + (parseFloat(receiptAmounts[id]) || 0), 0);
 
-  const totalTaxAmt        = totalRecvBefore * taxRate;
-  const totalRecvAfter     = totalRecvBefore - totalTaxAmt;
-  const totalBalAfter      = Math.max(totalRemaining - totalRecvBefore, 0);
+  const totalTaxAmt    = totalRecvBefore * taxRate;
+  const totalRecvAfter = totalRecvBefore - totalTaxAmt;
+  const totalBalAfter  = Math.max(totalRemaining - totalRecvBefore, 0);
+  const taxPct         = (taxRate * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save / Update ─────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!selectedBankAccount) return showToast("Cash/Bank account select karein", "error");
     if (!selectedCustomer)    return showToast("Customer select karein", "error");
@@ -308,41 +468,53 @@ export default function CustomerReceiptVoucher() {
         saleDetail:     inv?.grn || inv?._id,
         invoiceId:      id,
         amount:         recvBef,
-        taxRate:        taxRate,
+        taxRate,
         taxAmount:      taxAmt,
         amountAfterTax: recvAfter,
       };
     });
 
+    const payload = {
+      voucherDate,
+      accDrBank:         selectedBankAccount,
+      accDrBankName:     bObj?.name || "",
+      accCrCustomer:     selectedCustomer,
+      accCrCustomerName: cObj?.name || "",
+      narration,
+      voucherAmount:  totalRecvBefore,
+      taxRate,
+      totalTaxAmount: totalTaxAmt,
+      netAmount:      totalRecvAfter,
+      lines,
+      status: "SAVED",
+      period: { from: fromDate, to: toDate },
+    };
+
     setSaving(true);
     try {
-      const result = await crvAPI.saveVoucher({
-        voucherDate,
-        accDrBank:         selectedBankAccount,
-        accDrBankName:     bObj?.name || "",
-        accCrCustomer:     selectedCustomer,
-        accCrCustomerName: cObj?.name || "",
-        narration,
-        voucherAmount:  totalRecvBefore,
-        taxRate,
-        totalTaxAmount: totalTaxAmt,
-        netAmount:      totalRecvAfter,
-        lines,
-        status: "SAVED",
-        period: { from: fromDate, to: toDate },
-      });
-      if (result?.success) {
-        showToast(`Voucher saved! No: ${result?.data?.voucherNumber || "—"}`, "success");
-        handleNew();
+      if (editMode && editVoucherId) {
+        // ✅ PATCH /api/customer-receipt/:id
+        const result = await crvAPI.updateVoucher(editVoucherId, payload);
+        if (result?.success || result?.data) {
+          showToast(`✅ Voucher ${editVoucherNumber} updated!`, "success");
+          handleNew();
+        } else {
+          showToast(result?.message || "Update failed", "error");
+        }
       } else {
-        showToast(result?.message || "Save failed", "error");
+        const result = await crvAPI.saveVoucher(payload);
+        if (result?.success) {
+          showToast(`Voucher saved! No: ${result?.data?.voucherNumber || "—"}`, "success");
+          handleNew();
+        } else {
+          showToast(result?.message || "Save failed", "error");
+        }
       }
     } catch (err) {
       showToast("Error: " + err.message, "error");
     } finally { setSaving(false); }
   };
 
-  // ── History ───────────────────────────────────────────────────────────────
   const handleViewHistory = async () => {
     setHistoryModal(true); setLoadingHistory(true);
     try {
@@ -352,39 +524,51 @@ export default function CustomerReceiptVoucher() {
     finally { setLoadingHistory(false); }
   };
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
   const handleNew = () => {
     setSelectedBankAccount(""); setSelectedCustomer(""); setNarration("");
     setFromDate(""); setToDate(todayISO()); setTaxRate(0);
     setInvoices([]); setReceiptAmounts({}); setSelectedInvoices({});
     setJournalLoaded(false); setExpandedRows({}); setPrevReceipts({});
+    setEditMode(false); setEditVoucherId(null); setEditVoucherNumber("");
+    setVoucherDate(todayISO());
   };
 
   const customerObj   = customers.find((c) => c._id === selectedCustomer);
   const bankObj       = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
   const bankTypeLabel = bankObj?.type === "CASH ACCOUNT" ? "💵 Cash" : bankObj?.type === "BANK ACCOUNT" ? "🏦 Bank" : "";
-  const taxPct        = (taxRate * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={S.wrap}>
       {toast && <div style={S.toast(toast.type)}>{toast.msg}</div>}
-      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+      <style>{`
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        ${printStyles}
+      `}</style>
 
       {/* Header */}
-      <div style={S.header}> Customer Cash / Bank Receipt Voucher (CRV)</div>
+      <div style={S.header} className="no-print">
+        Customer Cash / Bank Receipt Voucher (CRV)
+        {editMode && (
+          <span style={{ marginLeft:14, background:"rgba(255,255,255,0.18)", borderRadius:4, padding:"2px 10px", fontSize:12 }}>
+            ✏️ EDIT MODE
+          </span>
+        )}
+      </div>
 
       {/* Toolbar */}
-      <div style={S.toolbar}>
+      <div style={S.toolbar} className="no-print">
         <button style={S.btn("default")} onClick={handleNew}>New</button>
-        <button style={saving ? S.btn("disabled") : S.btn("default")} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
+        <button style={saving ? S.btn("disabled") : S.btn(editMode ? "warning" : "default")} onClick={handleSave} disabled={saving}>
+          {saving ? (editMode ? "Updating..." : "Saving...") : editMode ? "✏️ Update" : "Save"}
         </button>
-        <button style={S.btn("default")}>Edit</button>
+        <button style={S.btn(editMode ? "warning" : "default")} onClick={handleEditClick}>
+          {editMode ? `✏️ Change (${editVoucherNumber})` : "Edit"}
+        </button>
         <button style={S.btn("default")} onClick={handleNew}>Cancel</button>
         <button
           style={{ ...S.btn(loadingJournal ? "disabled" : "default"), display:"flex", alignItems:"center", gap:4 }}
-          onClick={handleLoadJournal} disabled={loadingJournal || !selectedCustomer}
+          onClick={() => handleLoadJournal()} disabled={loadingJournal || !selectedCustomer}
         >
           <span style={{ display:"inline-block", animation: loadingJournal ? "spin 1s linear infinite" : "none" }}>🔄</span>
           {loadingJournal ? "Refreshing..." : "Refresh"}
@@ -392,27 +576,42 @@ export default function CustomerReceiptVoucher() {
         <button style={S.btn("default")} onClick={handleViewHistory}>
           View History ({historyData.length || 0})
         </button>
-        <button style={S.btn("default")} onClick={() => window.print()}>Print</button>
+        {/* ✅ Print Button */}
+        <button style={S.btn("default")} onClick={handlePrint}>🖨️ Print</button>
       </div>
+
+      {/* Edit Banner */}
+      {editMode && (
+        <div style={S.editBanner} className="no-print">
+          <span>✏️ Edit Mode:</span>
+          <span style={{ background:"rgba(255,255,255,0.2)", borderRadius:4, padding:"2px 10px" }}>
+            Voucher # <b>{editVoucherNumber}</b>
+          </span>
+          <span>— Customer, amounts aur date edit kar sakte hain.</span>
+          <button
+            style={{ marginLeft:"auto", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.4)", borderRadius:3, color:"#fff", padding:"3px 12px", cursor:"pointer", fontSize:11 }}
+            onClick={handleNew}
+          >✕ Cancel Edit</button>
+        </div>
+      )}
 
       {/* Form */}
       <div style={S.form}>
-        {/* Voucher # + Date */}
         <div style={{ display:"grid", gridTemplateColumns:"120px 220px 1fr 120px 180px", gap:8, marginBottom:10, alignItems:"center" }}>
           <label style={{ ...S.label, paddingTop:0 }}>Voucher # :</label>
-          <input style={{ ...S.input, background:"#f3f4f6", color:"#6b7280", fontStyle:"italic" }} value="Auto on save" readOnly />
+          <input
+            style={{ ...S.input, background:"#f3f4f6", color: editMode ? "#92400e" : "#6b7280", fontStyle: editMode?"normal":"italic", fontWeight: editMode?700:400 }}
+            value={editMode ? editVoucherNumber : "Auto on save"} readOnly
+          />
           <div />
           <label style={{ ...S.label, paddingTop:0, textAlign:"right" }}>Voucher Date :</label>
           <input type="date" style={S.input} value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
         </div>
 
-        {/* Cash / Bank (DR side — money comes IN) */}
         <div style={S.row}>
           <label style={S.label}>Cash / Bank :</label>
           <div>
-            <select style={S.select} value={selectedBankAccount}
-              onChange={(e) => setSelectedBankAccount(e.target.value)}
-              disabled={loadingAccounts}>
+            <select style={S.select} value={selectedBankAccount} onChange={(e) => setSelectedBankAccount(e.target.value)} disabled={loadingAccounts}>
               <option value="">{loadingAccounts ? "Loading..." : "-- Select Account --"}</option>
               {cashBankAccounts.map((acc) => (
                 <option key={acc.code || acc._id} value={acc.code || acc._id}>
@@ -424,11 +623,12 @@ export default function CustomerReceiptVoucher() {
           </div>
         </div>
 
-        {/* Customer (CR side — receivable cleared) */}
         <div style={S.row}>
           <label style={S.label}>Customer :</label>
           <div>
-            <select style={S.select} value={selectedCustomer}
+            <select
+              style={{ ...S.select, ...(editMode ? { border:"2px solid #d97706", background:"#fffbeb" } : {}) }}
+              value={selectedCustomer}
               onChange={(e) => {
                 setSelectedCustomer(e.target.value);
                 setJournalLoaded(false); setInvoices([]);
@@ -441,41 +641,35 @@ export default function CustomerReceiptVoucher() {
                 <option key={c._id} value={c._id}>{c.code ? `[${c.code}] ` : ""}{c.name}</option>
               ))}
             </select>
+            {editMode && <div style={{ fontSize:11, color:"#92400e", marginTop:3 }}>✏️ Customer change kar sakte hain</div>}
             {customersError && <div style={S.errorBox}>⚠️ {customersError}</div>}
           </div>
         </div>
 
-        {/* Narration */}
         <div style={S.row}>
           <label style={S.label}>Narration :</label>
-          <textarea style={S.textarea} placeholder="Receipt description..."
-            value={narration} onChange={(e) => setNarration(e.target.value)} />
+          <textarea style={S.textarea} placeholder="Receipt description..." value={narration} onChange={(e) => setNarration(e.target.value)} />
         </div>
 
-        {/* Period */}
         <div style={{ display:"grid", gridTemplateColumns:"120px auto 160px auto 160px auto auto", alignItems:"center", gap:6, marginBottom:10 }}>
           <label style={{ ...S.label, paddingTop:0 }}>Period :</label>
           <label style={{ fontSize:12, color:"#374151", fontWeight:500 }}>From:</label>
           <input type="date" style={S.input} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <label style={{ fontSize:12, color:"#374151", fontWeight:500, marginLeft:4 }}>To:</label>
-          <input type="date" style={S.input} value={toDate}   onChange={(e) => setToDate(e.target.value)} />
-          <button style={{ ...S.btn("danger"),  fontSize:11, padding:"3px 10px", height:26 }}
-            onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
-          <button style={{ ...S.btn("default"), fontSize:11, padding:"3px 10px", height:26 }}
-            onClick={() => { setFromDate(""); setToDate(todayISO()); }}>All dates</button>
+          <input type="date" style={S.input} value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <button style={{ ...S.btn("danger"), fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
+          <button style={{ ...S.btn("default"), fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>All dates</button>
         </div>
 
         <hr style={S.divider} />
 
-        {/* Journal Button */}
         <div style={S.journalBtn}>
-          <button style={S.btnJournal} onClick={handleLoadJournal} disabled={loadingJournal}>
+          <button style={S.btnJournal} onClick={() => handleLoadJournal()} disabled={loadingJournal}>
             📋 {loadingJournal ? "Loading..." : "Sale Journal Voucher Information"}
           </button>
         </div>
         <p style={S.hint}>{selectedCustomer ? "Period select kar ke button click karein" : "Customer select karo phir click karo"}</p>
 
-        {/* Info Strip */}
         {(customerObj || bankObj) && (
           <div style={S.infoStrip}>
             {customerObj && (
@@ -484,9 +678,7 @@ export default function CustomerReceiptVoucher() {
                 {customerObj.code && <span style={{ color:"#6b7280" }}> ({customerObj.code})</span>}
                 {customerObj.balance != null && (
                   <> &nbsp;|&nbsp; <b>Balance:</b>{" "}
-                    <span style={{ color: customerObj.balance > 0 ? "#16a34a" : "#dc2626", fontWeight:700 }}>
-                      Rs. {fmtNum(customerObj.balance)}
-                    </span>
+                    <span style={{ color: customerObj.balance > 0 ? "#16a34a" : "#dc2626", fontWeight:700 }}>Rs. {fmtNum(customerObj.balance)}</span>
                   </>
                 )}
               </span>
@@ -501,22 +693,18 @@ export default function CustomerReceiptVoucher() {
                   </>
                 )}
                 &nbsp;|&nbsp; <b>Type:</b>{" "}
-                <span style={{ color: bankObj.type==="CASH ACCOUNT"?"#15803d":"#1d4ed8", fontWeight:700 }}>
-                  {bankObj.type}
-                </span>
+                <span style={{ color: bankObj.type==="CASH ACCOUNT"?"#15803d":"#1d4ed8", fontWeight:700 }}>{bankObj.type}</span>
               </span>
             )}
           </div>
         )}
       </div>
 
-      {/* ── TAX DROPDOWN ─────────────────────────────────────────────────── */}
+      {/* Tax Box */}
       <div style={S.taxBox}>
         <span style={S.taxLabel}>🏷️ WHT Deducted by Customer :</span>
         <select style={S.taxSelect} value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value))}>
-          {TAX_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
+          {TAX_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
         {taxRate > 0 ? (
           <>
@@ -534,7 +722,7 @@ export default function CustomerReceiptVoucher() {
         )}
       </div>
 
-      {/* ── Summary Cards ─────────────────────────────────────────────────── */}
+      {/* Summary Cards */}
       {journalLoaded && invoices.length > 0 && (
         <div style={S.summaryCards}>
           <div style={S.card("#6366f1")}>
@@ -579,35 +767,25 @@ export default function CustomerReceiptVoucher() {
         </div>
       )}
 
-      {/* ── Content Pane ─────────────────────────────────────────────────── */}
+      {/* Content Pane */}
       {!journalLoaded ? (
         <div style={S.emptyPane}>
           <div style={S.emptyIcon}>📋</div>
           <div style={S.emptyTitle}>Sale Journal Voucher Information</div>
-          <div style={S.emptyDesc}>
-            Customer select karein aur upar wala button click karein<br />
-            to invoices aur receipt details load ho jayegi
-          </div>
+          <div style={S.emptyDesc}>Customer select karein aur upar wala button click karein<br />to invoices aur receipt details load ho jayegi</div>
         </div>
       ) : invoices.length === 0 ? (
         <div style={S.emptyPane}>
           <div style={S.emptyIcon}>🔍</div>
           <div style={S.emptyTitle}>Koi Invoice Nahi Mila</div>
-          <div style={S.emptyDesc}>
-            Is customer ka koi pending invoice nahi hai.<br />
-            Period change kar ke dobara try karein.
-          </div>
+          <div style={S.emptyDesc}>Is customer ka koi pending invoice nahi hai.<br />Period change kar ke dobara try karein.</div>
         </div>
       ) : (
         <div style={{ ...S.tableWrap, marginTop: 10 }}>
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={S.thC} rowSpan={2}>
-                  <input type="checkbox"
-                    checked={Object.keys(selectedInvoices).length === invoices.length && invoices.length > 0}
-                    onChange={toggleAll} />
-                </th>
+                <th style={S.thC} rowSpan={2}><input type="checkbox" checked={Object.keys(selectedInvoices).length === invoices.length && invoices.length > 0} onChange={toggleAll} /></th>
                 <th style={S.thC} rowSpan={2}>Prev</th>
                 <th style={S.th}  rowSpan={2}>Invoice #</th>
                 <th style={S.th}  rowSpan={2}>Date</th>
@@ -616,8 +794,7 @@ export default function CustomerReceiptVoucher() {
                 <th style={S.thR} rowSpan={2}>Already Recv</th>
                 <th style={S.thR} rowSpan={2}>Remaining</th>
                 <th style={S.thC} rowSpan={2}>Status</th>
-                <th style={{ ...S.thTax, textAlign:"center", borderRight:"1px solid #78350f" }}
-                  colSpan={taxRate > 0 ? 4 : 1}>
+                <th style={{ ...S.thTax, textAlign:"center", borderRight:"1px solid #78350f" }} colSpan={taxRate > 0 ? 4 : 1}>
                   {taxRate > 0 ? `💰 Receipt (WHT @ ${taxPct})` : "💰 Receipt"}
                 </th>
                 <th style={S.thR} rowSpan={2}>Bal After</th>
@@ -630,21 +807,19 @@ export default function CustomerReceiptVoucher() {
                   <th style={S.thTaxC}>Recv Now</th>
                 </tr>
               ) : (
-                <tr>
-                  <th style={S.thC}>Recv Now</th>
-                </tr>
+                <tr><th style={S.thC}>Recv Now</th></tr>
               )}
             </thead>
             <tbody>
               {invoices.map((inv, i) => {
-                const isSel          = !!selectedInvoices[inv._id];
-                const prevList       = prevReceipts[inv._id] || [];
-                const alreadyRecvd   = prevList.reduce((s, p) => s + p.amount, 0);
-                const remaining      = Math.max((inv.amount || 0) - alreadyRecvd, 0);
-                const recvBefore     = isSel ? (parseFloat(receiptAmounts[inv._id]) || 0) : 0;
+                const isSel        = !!selectedInvoices[inv._id];
+                const prevList     = prevReceipts[inv._id] || [];
+                const alreadyRecvd = prevList.reduce((s, p) => s + p.amount, 0);
+                const remaining    = Math.max((inv.amount || 0) - alreadyRecvd, 0);
+                const recvBefore   = isSel ? (parseFloat(receiptAmounts[inv._id]) || 0) : 0;
                 const { taxAmt, recvAfter } = calcTax(recvBefore);
-                const balAfter       = Math.max(remaining - recvBefore, 0);
-                const isExpanded     = !!expandedRows[inv._id];
+                const balAfter     = Math.max(remaining - recvBefore, 0);
+                const isExpanded   = !!expandedRows[inv._id];
 
                 let recvBadge;
                 if (alreadyRecvd === 0)                              recvBadge = <span style={S.recvNone}>Pending</span>;
@@ -654,10 +829,7 @@ export default function CustomerReceiptVoucher() {
                 return (
                   <>
                     <tr key={inv._id} style={isSel ? { background:"#dcfce7" } : {}}>
-                      <td style={S.tdC(i)}>
-                        <input type="checkbox" checked={isSel}
-                          onChange={() => toggleInvoice(inv._id, remaining)} />
-                      </td>
+                      <td style={S.tdC(i)}><input type="checkbox" checked={isSel} onChange={() => toggleInvoice(inv._id, remaining)} /></td>
                       <td style={S.tdC(i)}>
                         {prevList.length > 0 ? (
                           <button onClick={() => toggleRow(inv._id)}
@@ -673,22 +845,13 @@ export default function CustomerReceiptVoucher() {
                       <td style={{ ...S.tdR(i), color: alreadyRecvd > 0 ? "#16a34a" : "#9ca3af", fontWeight: alreadyRecvd > 0 ? 700 : 400 }}>
                         {alreadyRecvd > 0 ? `Rs. ${fmtNum(alreadyRecvd)}` : "—"}
                       </td>
-                      <td style={{ ...S.tdR(i), color: remaining > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>
-                        Rs. {fmtNum(remaining)}
-                      </td>
+                      <td style={{ ...S.tdR(i), color: remaining > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>Rs. {fmtNum(remaining)}</td>
                       <td style={S.tdC(i)}>{recvBadge}</td>
-
                       {taxRate > 0 ? (
                         <>
-                          <td style={{ ...S.tdTax(i), fontWeight: isSel ? 700 : 400 }}>
-                            {isSel ? `Rs. ${fmtNum(recvBefore)}` : <span style={{ color:"#d1d5db" }}>—</span>}
-                          </td>
-                          <td style={{ ...S.tdTax(i), color:"#dc2626", fontWeight: isSel ? 700 : 400 }}>
-                            {isSel ? `Rs. ${fmtNum(taxAmt)}` : <span style={{ color:"#d1d5db" }}>—</span>}
-                          </td>
-                          <td style={{ ...S.tdTax(i), color:"#15803d", fontWeight: isSel ? 700 : 400 }}>
-                            {isSel ? `Rs. ${fmtNum(recvAfter)}` : <span style={{ color:"#d1d5db" }}>—</span>}
-                          </td>
+                          <td style={{ ...S.tdTax(i), fontWeight: isSel ? 700 : 400 }}>{isSel ? `Rs. ${fmtNum(recvBefore)}` : <span style={{ color:"#d1d5db" }}>—</span>}</td>
+                          <td style={{ ...S.tdTax(i), color:"#dc2626", fontWeight: isSel ? 700 : 400 }}>{isSel ? `Rs. ${fmtNum(taxAmt)}` : <span style={{ color:"#d1d5db" }}>—</span>}</td>
+                          <td style={{ ...S.tdTax(i), color:"#15803d", fontWeight: isSel ? 700 : 400 }}>{isSel ? `Rs. ${fmtNum(recvAfter)}` : <span style={{ color:"#d1d5db" }}>—</span>}</td>
                           <td style={S.tdC(i)}>
                             {isSel ? (
                               <input type="number" style={S.payInput}
@@ -708,13 +871,10 @@ export default function CustomerReceiptVoucher() {
                           ) : <span style={{ color:"#9ca3af", fontSize:11 }}>—</span>}
                         </td>
                       )}
-
                       <td style={{ ...S.tdR(i), color: isSel ? (balAfter > 0 ? "#f59e0b" : "#16a34a") : "#9ca3af", fontWeight: isSel ? 700 : 400 }}>
                         {isSel ? `Rs. ${fmtNum(balAfter)}` : "—"}
                       </td>
                     </tr>
-
-                    {/* Previous receipts sub-rows */}
                     {isExpanded && prevList.map((pmt, pi) => (
                       <tr key={`${inv._id}-p${pi}`} style={S.subRow}>
                         <td colSpan={2} style={S.subCell} />
@@ -723,9 +883,7 @@ export default function CustomerReceiptVoucher() {
                         <td style={S.subCell} />
                         <td style={{ ...S.subCell, textAlign:"right", color:"#16a34a", fontWeight:700 }}>Rs. {fmtNum(pmt.amount)}</td>
                         <td style={S.subCell} />
-                        <td style={{ ...S.subCell, textAlign:"center" }}>
-                          <span style={S.badge(pmt.status)}>{pmt.status}</span>
-                        </td>
+                        <td style={{ ...S.subCell, textAlign:"center" }}><span style={S.badge(pmt.status)}>{pmt.status}</span></td>
                         <td colSpan={taxRate > 0 ? 5 : 2} style={S.subCell} />
                       </tr>
                     ))}
@@ -733,15 +891,10 @@ export default function CustomerReceiptVoucher() {
                 );
               })}
             </tbody>
-
-            {/* Footer */}
             <tfoot>
               <tr style={S.summaryRow}>
                 <td colSpan={5} style={{ padding:"7px 10px", fontWeight:700, color:"#14532d" }}>
-                  TOTALS &nbsp;
-                  <span style={{ fontSize:11, fontWeight:400, color:"#374151" }}>
-                    ({Object.keys(selectedInvoices).length} of {invoices.length} selected)
-                  </span>
+                  TOTALS &nbsp;<span style={{ fontSize:11, fontWeight:400, color:"#374151" }}>({Object.keys(selectedInvoices).length} of {invoices.length} selected)</span>
                 </td>
                 <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent" }}>Rs. {fmtNum(totalInvoice)}</td>
                 <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent", color:"#16a34a" }}>Rs. {fmtNum(totalPrevReceived)}</td>
@@ -754,24 +907,18 @@ export default function CustomerReceiptVoucher() {
                     <td style={{ ...S.tdR(0), fontWeight:700, background:"#fffbf5", color:"#15803d" }}>Rs. {fmtNum(totalRecvAfter)}</td>
                     <td style={{ background:"transparent" }} />
                   </>
-                ) : (
-                  <td style={{ background:"transparent" }} />
-                )}
+                ) : <td style={{ background:"transparent" }} />}
                 <td style={{ ...S.tdR(0), fontWeight:700, background:"transparent", color:"#f59e0b" }}>Rs. {fmtNum(totalBalAfter)}</td>
               </tr>
             </tfoot>
           </table>
 
-          {/* Receipt Confirm Bar */}
           {totalRecvBefore > 0 && (
-            <div style={{ background:"linear-gradient(90deg,#14532d,#16a34a)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <div style={{ background: editMode ? "linear-gradient(90deg,#92400e,#b45309)" : "linear-gradient(90deg,#14532d,#16a34a)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
               <span style={{ fontSize:12 }}>
-                💰 <b>{customerObj?.name}</b> se receipt via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
-                {taxRate > 0 && (
-                  <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>
-                    WHT @ {taxPct}
-                  </span>
-                )}
+                {editMode ? "✏️" : "💰"} <b>{customerObj?.name}</b> se receipt via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
+                {editMode && <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>Edit: {editVoucherNumber}</span>}
+                {taxRate > 0 && <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>WHT @ {taxPct}</span>}
               </span>
               <span style={{ fontSize:13, fontWeight:700, display:"flex", gap:16, flexWrap:"wrap" }}>
                 {taxRate > 0 && (
@@ -783,12 +930,137 @@ export default function CustomerReceiptVoucher() {
                 )}
                 {taxRate === 0 && <span>Total: <b>Rs. {fmtNum(totalRecvBefore)}</b></span>}
               </span>
-              <button style={{ ...S.btn("default"), fontSize:12, background:"#fff", color:"#14532d", fontWeight:700 }}
-                onClick={handleSave} disabled={saving}>
-                {saving ? "⏳ Saving..." : "✅ Confirm & Save"}
+              <button style={{ ...S.btn(editMode ? "warning" : "success"), fontSize:12 }} onClick={handleSave} disabled={saving}>
+                {saving ? "⏳ Processing..." : editMode ? "✏️ Confirm Update" : "✅ Confirm & Save"}
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── PRINT AREA (hidden on screen, visible when printing) ─────────── */}
+      {printModal && (
+        <div id="crv-print-area" style={{ fontFamily:"'Segoe UI', Arial, sans-serif", fontSize:12, padding:20, background:"#fff", color:"#000" }}>
+          {/* Print Header */}
+          <div style={{ textAlign:"center", borderBottom:"2px solid #16a34a", paddingBottom:10, marginBottom:14 }}>
+            <h2 style={{ margin:0, fontSize:18, color:"#14532d" }}>Customer Receipt Voucher</h2>
+            <p style={{ margin:"4px 0 0", color:"#555", fontSize:11 }}>CRV — Cash / Bank Receipt</p>
+          </div>
+          {/* Voucher Info */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14, fontSize:12 }}>
+            <div><b>Voucher #:</b> {editMode ? editVoucherNumber : "Draft"}</div>
+            <div style={{ textAlign:"right" }}><b>Date:</b> {fmtDate(voucherDate)}</div>
+            <div><b>Customer:</b> {customerObj?.name || "—"}</div>
+            <div style={{ textAlign:"right" }}><b>Account:</b> {bankObj?.name || selectedBankAccount || "—"}</div>
+            {narration && <div style={{ gridColumn:"span 2" }}><b>Narration:</b> {narration}</div>}
+          </div>
+          {/* Invoice Lines */}
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, marginBottom:12 }}>
+            <thead>
+              <tr style={{ background:"#16a34a", color:"#fff" }}>
+                <th style={{ padding:"5px 8px", textAlign:"left" }}>Invoice #</th>
+                <th style={{ padding:"5px 8px", textAlign:"left" }}>Date</th>
+                <th style={{ padding:"5px 8px", textAlign:"left" }}>Description</th>
+                <th style={{ padding:"5px 8px", textAlign:"right" }}>Invoice Amt</th>
+                <th style={{ padding:"5px 8px", textAlign:"right" }}>Receipt Amt</th>
+                {taxRate > 0 && <th style={{ padding:"5px 8px", textAlign:"right" }}>WHT ({taxPct})</th>}
+                {taxRate > 0 && <th style={{ padding:"5px 8px", textAlign:"right" }}>Net Recv</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.filter((inv) => selectedInvoices[inv._id]).map((inv, i) => {
+                const recvBef = parseFloat(receiptAmounts[inv._id]) || 0;
+                const tAmt    = recvBef * taxRate;
+                const rAfter  = recvBef - tAmt;
+                return (
+                  <tr key={inv._id} style={{ background: i%2===0?"#fff":"#f7fdf9" }}>
+                    <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0" }}>{inv.grn || inv.invoiceNo || "N/A"}</td>
+                    <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0" }}>{fmtDate(inv.date)}</td>
+                    <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0" }}>{inv.description || "—"}</td>
+                    <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0", textAlign:"right" }}>Rs. {fmtNum(inv.amount)}</td>
+                    <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0", textAlign:"right", fontWeight:700 }}>Rs. {fmtNum(recvBef)}</td>
+                    {taxRate > 0 && <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0", textAlign:"right", color:"#dc2626" }}>Rs. {fmtNum(tAmt)}</td>}
+                    {taxRate > 0 && <td style={{ padding:"4px 8px", borderBottom:"1px solid #e5eaf0", textAlign:"right", color:"#15803d", fontWeight:700 }}>Rs. {fmtNum(rAfter)}</td>}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{ background:"#dcfce7", fontWeight:700, borderTop:"2px solid #16a34a" }}>
+                <td colSpan={4} style={{ padding:"5px 8px" }}>TOTAL</td>
+                <td style={{ padding:"5px 8px", textAlign:"right" }}>Rs. {fmtNum(totalRecvBefore)}</td>
+                {taxRate > 0 && <td style={{ padding:"5px 8px", textAlign:"right", color:"#dc2626" }}>Rs. {fmtNum(totalTaxAmt)}</td>}
+                {taxRate > 0 && <td style={{ padding:"5px 8px", textAlign:"right", color:"#15803d" }}>Rs. {fmtNum(totalRecvAfter)}</td>}
+              </tr>
+            </tfoot>
+          </table>
+          {/* Signature Row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:30, marginTop:40, paddingTop:10, borderTop:"1px dashed #ccc" }}>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ borderTop:"1px solid #333", marginTop:30, paddingTop:4, fontSize:11 }}>Prepared By</div>
+            </div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ borderTop:"1px solid #333", marginTop:30, paddingTop:4, fontSize:11 }}>Checked By</div>
+            </div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ borderTop:"1px solid #333", marginTop:30, paddingTop:4, fontSize:11 }}>Authorized By</div>
+            </div>
+          </div>
+          <p style={{ fontSize:10, color:"#888", textAlign:"center", marginTop:20 }}>
+            Printed on {new Date().toLocaleString("en-PK")} — Customer Receipt Voucher System
+          </p>
+          {/* Close button (no-print) */}
+          <div className="no-print" style={{ textAlign:"center", marginTop:16 }}>
+            <button onClick={() => setPrintModal(false)} style={{ ...S.btn("danger"), padding:"6px 20px" }}>✕ Close Print Preview</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Select Modal */}
+      {editSelectModal && (
+        <div style={S.modal} onClick={() => setEditSelectModal(false)}>
+          <div style={{ ...S.modalBox, minWidth:680 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <h3 style={{ margin:0, color:"#92400e", fontSize:14 }}>✏️ Voucher Edit / Delete karein</h3>
+              <button onClick={() => setEditSelectModal(false)} style={{ ...S.btn("danger"), padding:"2px 10px" }}>✕</button>
+            </div>
+            <p style={{ fontSize:11, color:"#6b7280", margin:"0 0 10px" }}>Sirf SAVED status ke vouchers edit/delete ho sakte hain</p>
+            {loadingEditList ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>⏳ Loading...</div>
+            ) : editSelectData.length === 0 ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>Koi editable voucher nahi mila</div>
+            ) : (
+              <table style={{ ...S.table, fontSize:11 }}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>Voucher #</th>
+                    <th style={S.th}>Date</th>
+                    <th style={S.th}>Customer</th>
+                    <th style={S.th}>Bank / Cash</th>
+                    <th style={S.thR}>Amount</th>
+                    <th style={S.thC}>Status</th>
+                    <th style={S.thC}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editSelectData.map((h, i) => (
+                    <tr key={h._id || i}>
+                      <td style={S.td(i)}><b>{h.voucherNumber || "—"}</b></td>
+                      <td style={S.td(i)}>{fmtDate(h.voucherDate)}</td>
+                      <td style={S.td(i)}>{h.accCrCustomerName || h.accCrCustomer?.name || "—"}</td>
+                      <td style={S.td(i)}>{h.accDrBankName || h.accDrBank?.name || "—"}</td>
+                      <td style={S.tdR(i)}>Rs. {fmtNum(h.voucherAmount)}</td>
+                      <td style={S.tdC(i)}><span style={S.badge(h.status)}>{h.status}</span></td>
+                      <td style={{ ...S.tdC(i), display:"flex", gap:4, justifyContent:"center" }}>
+                        <button style={{ ...S.btn("warning"), padding:"3px 10px", fontSize:11 }} onClick={() => handleLoadForEdit(h)}>✏️ Edit</button>
+                        <button style={{ ...S.btn("danger"),  padding:"3px 10px", fontSize:11 }} onClick={() => handleDeleteConfirm(h)}>🗑️ Del</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
@@ -816,6 +1088,7 @@ export default function CustomerReceiptVoucher() {
                     <th style={S.thR}>WHT</th>
                     <th style={S.thR}>Net Recv</th>
                     <th style={S.thC}>Status</th>
+                    <th style={S.thC}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -826,18 +1099,39 @@ export default function CustomerReceiptVoucher() {
                       <td style={S.td(i)}>{h.accCrCustomerName || h.accCrCustomer?.name || "—"}</td>
                       <td style={S.td(i)}>{h.accDrBankName || h.accDrBank?.name || "—"}</td>
                       <td style={S.tdR(i)}>Rs. {fmtNum(h.voucherAmount)}</td>
-                      <td style={{ ...S.tdR(i), color:"#f59e0b" }}>
-                        {h.totalTaxAmount ? `Rs. ${fmtNum(h.totalTaxAmount)}` : "—"}
-                      </td>
-                      <td style={{ ...S.tdR(i), color:"#15803d", fontWeight:700 }}>
-                        Rs. {fmtNum(h.netAmount || h.voucherAmount)}
-                      </td>
+                      <td style={{ ...S.tdR(i), color:"#f59e0b" }}>{h.totalTaxAmount ? `Rs. ${fmtNum(h.totalTaxAmount)}` : "—"}</td>
+                      <td style={{ ...S.tdR(i), color:"#15803d", fontWeight:700 }}>Rs. {fmtNum(h.netAmount || h.voucherAmount)}</td>
                       <td style={S.tdC(i)}><span style={S.badge(h.status)}>{h.status}</span></td>
+                      <td style={S.tdC(i)}>
+                        {(h.status === "SAVED" || h.status === "DRAFT") ? (
+                          <button style={{ ...S.btn("danger"), padding:"2px 8px", fontSize:10 }} onClick={() => handleDeleteConfirm(h)}>🗑️ Delete</button>
+                        ) : <span style={{ color:"#d1d5db", fontSize:10 }}>—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div style={{ ...S.modal, zIndex:2000 }}>
+          <div style={S.confirmBox}>
+            <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
+            <h3 style={{ margin:"0 0 8px", color:"#dc2626", fontSize:15 }}>Voucher Delete Karna Hai?</h3>
+            <p style={{ fontSize:12, color:"#374151", margin:"0 0 18px", lineHeight:1.6 }}>
+              Voucher <b style={{ color:"#dc2626" }}>{deleteConfirm.voucherNumber}</b> permanently delete ho jayega.<br />
+              <span style={{ color:"#9ca3af" }}>Yeh action undo nahi ho sakta.</span>
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button style={{ ...S.btn("default"), padding:"6px 22px" }} onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
+              <button style={{ ...S.btn("danger"), padding:"6px 22px" }} onClick={handleDeleteExecute} disabled={deleting}>
+                {deleting ? "Deleting..." : "🗑️ Haan, Delete Karo"}
+              </button>
+            </div>
           </div>
         </div>
       )}

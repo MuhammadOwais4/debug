@@ -10,6 +10,7 @@ router.get("/:id",          ctrl.getVoucherById)
 
 router.post("/",            ctrl.createVoucher)
 
+router.patch("/:id",        ctrl.updateVoucher)   // ✅ NEW — update SAVED voucher
 router.patch("/:id/post",   ctrl.postVoucher)
 router.patch("/:id/cancel", ctrl.cancelVoucher)
 
