@@ -40,6 +40,7 @@ app.use("/api/ledgers", require("./routes/ledgerRoutes"))
 app.use("/api/supplier-payment", require("./routes/supplierPaymentRoutes"))
 app.use("/api/customer-receipt", require("./routes/customerReceiptRoutes"))
 app.use("/api/profit-loss",   require("./routes/Profitlossroutes "))
+app.use("/api/barcodes", require("./routes/barcodeRoutes"))  
 
 app.use((err, req, res, next) => {
   console.error(err.stack)

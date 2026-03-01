@@ -30,6 +30,8 @@ import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Voucher
 import ProductManagementDashboard from "./pages/Product Management/Product-Management";
 import SupplierPaymentVoucher from "./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher";
 import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
+import BarcodeScannerScreen from "./pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
+import Icon from "./assets/icon.png";
 
 const initialProducts = [];
 const initialExpenses = [];
@@ -110,16 +112,26 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            testing
-            <br />
-            Accounting Software
-          </h1>
-        </div>
-      </header>
+   <header className="bg-white shadow">
+  <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex items-center justify-between">
+    
+    {/* Left Side Text */}
+    <h1 className="text-3xl font-bold text-gray-900">
+      Testing
+      <br />
+      Accounting Software
+    </h1>
+
+    {/* Right Side Image */}
+    <img
+      src={Icon}
+      alt="Icon"
+      className="w-32 h-auto"
+     
+    />
+
+  </div>
+</header>
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -215,6 +227,14 @@ export default function App() {
                     onClick={() => { handleTabChange("Product Management"); setReportsDropdownOpen(false); }}
                   >
                     Product Management
+                  </button>
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Voucher Query"); setAccountsDropdownOpen(false); }}>
+                    Voucher Query
+                  </button>
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Barcode Scanner"); setAccountsDropdownOpen(false); }}>
+                    Barcode Scanner
                   </button>
                 </div>
               )}
@@ -334,10 +354,7 @@ export default function App() {
                     onClick={() => { handleTabChange("sales discount Voucher"); setAccountsDropdownOpen(false); }}>
                     Sales Discount Voucher
                   </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Voucher Query"); setAccountsDropdownOpen(false); }}>
-                    Voucher Query
-                  </button>
+                  
                 </div>
               )}
             </div>
@@ -418,6 +435,7 @@ export default function App() {
         {activeTab === "Product Management" && <ProductManagementDashboard />}
         {activeTab === "Supplier Payment Voucher" && <SupplierPaymentVoucher />}
         {activeTab === "Customer Receipt Voucher" && <CustomerReceiptVoucher />}
+        {activeTab === "Barcode Scanner" && <BarcodeScannerScreen />}
         {activeTab === "notifications" && (
           <Notifications notifications={notifications} onDismiss={dismissNotification} />
         )}

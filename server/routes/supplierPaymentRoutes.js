@@ -9,38 +9,31 @@ const {
   postVoucher,
   cancelVoucher,
   deleteVoucher,
+  updateVoucher,        // ✅ NEW
   getVoucherSummary,
 } = require("./controllers/Supplierpaymentcontroller")
 
-// ── Vendor route (used by frontend dropdown) ──────────────────────────────────
-// GET /api/vendors
+// ── Vendor route ──────────────────────────────────────────────────────────────
 router.get("/vendors", getVendors)
 
-// ── Purchase Journal (pending invoices for a vendor) ─────────────────────────
-// GET /api/supplier-payment-vouchers/purchase-journal?vendorId=xxx&fromDate=&toDate=
+// ── Purchase Journal ──────────────────────────────────────────────────────────
 router.get("/purchase-journal", getPurchaseJournal)
 
 // ── Summary ───────────────────────────────────────────────────────────────────
-// GET /api/supplier-payment-vouchers/summary
 router.get("/summary", getVoucherSummary)
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
-// GET    /api/supplier-payment-vouchers          — all vouchers (filter by vendorId)
-// POST   /api/supplier-payment-vouchers          — create new voucher
 router.route("/")
   .get(getAllVouchers)
   .post(createVoucher)
 
-// GET    /api/supplier-payment-vouchers/:id      — single voucher
-// DELETE /api/supplier-payment-vouchers/:id      — delete SAVED voucher
 router.route("/:id")
   .get(getVoucherById)
   .delete(deleteVoucher)
+  .patch(updateVoucher)   // ✅ NEW — update SAVED voucher
 
-// PATCH  /api/supplier-payment-vouchers/:id/post    — post voucher & update balances
-router.patch("/:id/post", postVoucher)
-
-// PATCH  /api/supplier-payment-vouchers/:id/cancel  — cancel voucher
+// ── Post / Cancel ─────────────────────────────────────────────────────────────
+router.patch("/:id/post",   postVoucher)
 router.patch("/:id/cancel", cancelVoucher)
 
 module.exports = router

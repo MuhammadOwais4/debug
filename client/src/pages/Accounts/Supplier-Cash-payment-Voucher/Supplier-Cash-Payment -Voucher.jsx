@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const BASE_URL = "https://debug-nxby.vercel.app"; // Change this to your actual backend URL
+const BASE_URL = "https://debug-nxby.vercel.app";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 const http = {
@@ -32,6 +32,37 @@ const http = {
     if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
     return data;
   },
+  // ✅ PATCH — update ke liye
+  patch: async (path, body) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      const txt = await res.text();
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — URL: ${BASE_URL}${path} — Jawab: ${txt.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  // ✅ DELETE
+  delete: async (path) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      const txt = await res.text();
+      throw new Error(`Server JSON nahi bheja (HTTP ${res.status}) — URL: ${BASE_URL}${path} — Jawab: ${txt.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
 };
 
 const ledgerAPI = { getAllAccounts: () => http.get("/api/ledgers/accounts") };
@@ -42,8 +73,12 @@ const spvAPI = {
     const p = new URLSearchParams({ vendorId: vendorId || "", fromDate: fromDate || "", toDate: toDate || "" });
     return http.get(`/api/supplier-payment/purchase-journal?${p}`);
   },
-  saveVoucher: (payload) => http.post("/api/supplier-payment", payload),
-  getHistory:  (vendorId) => http.get(vendorId ? `/api/supplier-payment?vendorId=${vendorId}` : `/api/supplier-payment`),
+  saveVoucher:   (payload)     => http.post("/api/supplier-payment", payload),
+  // ✅ PATCH /api/supplier-payment/:id — backend mein ab yeh route hai
+  updateVoucher: (id, payload) => http.patch(`/api/supplier-payment/${id}`, payload),
+  // ✅ DELETE /api/supplier-payment/:id
+  deleteVoucher: (id)          => http.delete(`/api/supplier-payment/${id}`),
+  getHistory:    (vendorId)    => http.get(vendorId ? `/api/supplier-payment?vendorId=${vendorId}` : `/api/supplier-payment`),
 };
 
 // ── Tax options ───────────────────────────────────────────────────────────────
@@ -65,9 +100,9 @@ const S = {
   btn: (v = "default") => ({
     padding: "4px 16px", borderRadius: 3, border: "1px solid", height: 28, fontSize: 12, fontWeight: 500,
     cursor: v === "disabled" ? "not-allowed" : "pointer",
-    background:  v === "primary" ? "#2563a8" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "disabled" ? "#d1d5db" : "#fff",
-    color:       v === "primary" || v === "danger" || v === "success" ? "#fff" : v === "disabled" ? "#6b7280" : "#374151",
-    borderColor: v === "primary" ? "#1a4d8f" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "disabled" ? "#9ca3af" : "#9ca3af",
+    background:  v === "primary" ? "#2563a8" : v === "danger" ? "#dc2626" : v === "success" ? "#16a34a" : v === "warning" ? "#d97706" : v === "disabled" ? "#d1d5db" : "#fff",
+    color:       v === "primary" || v === "danger" || v === "success" || v === "warning" ? "#fff" : v === "disabled" ? "#6b7280" : "#374151",
+    borderColor: v === "primary" ? "#1a4d8f" : v === "danger" ? "#b91c1c" : v === "success" ? "#15803d" : v === "warning" ? "#b45309" : v === "disabled" ? "#9ca3af" : "#9ca3af",
   }),
   form:     { background: "#fff", margin: "12px 14px 0", borderRadius: 6, border: "1px solid #d1d9e0", padding: "14px 18px" },
   row:      { display: "grid", gridTemplateColumns: "110px 1fr", alignItems: "start", marginBottom: 10, gap: 8 },
@@ -89,12 +124,12 @@ const S = {
   th:  { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "left",   fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
   thC: { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
   thR: { background: "linear-gradient(180deg,#2563a8,#1a4d8f)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #1e40af", whiteSpace: "nowrap" },
-  thTax: { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "right", fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
-  thTaxC:{ background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "center",fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
-  td:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", verticalAlign: "middle" }),
-  tdC: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "center",  verticalAlign: "middle" }),
-  tdR: (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "right",   verticalAlign: "middle" }),
-  tdTax:(i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fffbf5":"#fef3c7", textAlign: "right",   verticalAlign: "middle", color:"#92400e" }),
+  thTax:  { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "right",  fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
+  thTaxC: { background: "linear-gradient(180deg,#92400e,#b45309)", color: "#fff", padding: "7px 8px", textAlign: "center", fontWeight: 600, borderRight: "1px solid #78350f", whiteSpace: "nowrap" },
+  td:   (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", verticalAlign: "middle" }),
+  tdC:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "center",  verticalAlign: "middle" }),
+  tdR:  (i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fff":"#f7fafd", textAlign: "right",   verticalAlign: "middle" }),
+  tdTax:(i) => ({ padding: "5px 8px", borderBottom: "1px solid #e5eaf0", background: i%2===0?"#fffbf5":"#fef3c7", textAlign: "right", verticalAlign: "middle", color: "#92400e" }),
   summaryRow: { background: "#e8f0fa", fontWeight: 700, borderTop: "2px solid #2563a8" },
   payInput: { border: "1px solid #2563a8", borderRadius: 3, padding: "3px 6px", width: 90, textAlign: "right", fontSize: 12, outline: "none", background: "#fff" },
   toast: (t) => ({
@@ -103,12 +138,13 @@ const S = {
     color: "#fff", borderRadius: 5, padding: "10px 20px", fontSize: 13, fontWeight: 600,
     boxShadow: "0 4px 16px rgba(0,0,0,0.18)", maxWidth: 420,
   }),
-  modal:    { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" },
-  modalBox: { background:"#fff", borderRadius:8, padding:22, minWidth:500, maxWidth:820, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.22)" },
+  modal:      { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" },
+  modalBox:   { background:"#fff", borderRadius:8, padding:22, minWidth:500, maxWidth:820, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.22)" },
+  confirmBox: { background:"#fff", borderRadius:8, padding:28, minWidth:340, maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.22)", textAlign:"center" },
   badge: (c) => ({
     display:"inline-block", padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:700,
-    background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe":"#fef9c3",
-    color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8":"#92400e",
+    background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe": c==="CANCELLED"?"#fee2e2":"#fef9c3",
+    color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8": c==="CANCELLED"?"#dc2626":"#92400e",
   }),
   infoStrip:   { display:"flex", gap:20, background:"#f0f7ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"6px 12px", marginTop:8, fontSize:11, flexWrap:"wrap", alignItems:"center" },
   summaryCards:{ display:"flex", gap:10, margin:"10px 14px 0", flexWrap:"wrap" },
@@ -120,8 +156,6 @@ const S = {
   paidNone:    { background:"#fee2e2", color:"#dc2626", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:700, display:"inline-block" },
   subRow:   { background:"#fffde7" },
   subCell:  { padding:"3px 8px 3px 26px", fontSize:11, color:"#78350f", borderBottom:"1px solid #fde68a" },
-
-  // Tax dropdown style
   taxBox: {
     display:"flex", alignItems:"center", gap:10,
     background:"linear-gradient(90deg,#fef3c7,#fffbf5)",
@@ -132,6 +166,12 @@ const S = {
   taxSelect:{ border:"1.5px solid #f59e0b", borderRadius:4, padding:"4px 10px", fontSize:13, fontWeight:700, color:"#92400e", background:"#fff", height:30, cursor:"pointer", outline:"none", minWidth:160 },
   taxBadge: { background:"#f59e0b", color:"#fff", borderRadius:10, padding:"3px 12px", fontSize:12, fontWeight:700 },
   taxInfo:  { fontSize:11, color:"#78350f", fontStyle:"italic" },
+  editBanner: {
+    background:"linear-gradient(90deg,#92400e,#b45309)",
+    color:"#fff", padding:"7px 16px", margin:"8px 14px 0",
+    borderRadius:5, display:"flex", alignItems:"center", gap:12,
+    fontSize:12, fontWeight:600, flexWrap:"wrap",
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,29 +183,39 @@ export default function SupplierPaymentVoucher() {
   const [narration,           setNarration]           = useState("");
   const [fromDate,            setFromDate]            = useState("");
   const [toDate,              setToDate]              = useState(todayISO());
+  const [taxRate,             setTaxRate]             = useState(0);
 
-  // ✅ TAX STATE
-  const [taxRate,             setTaxRate]             = useState(0); // 0, 0.0025, 0.005, 0.01
+  // ── EDIT STATE ────────────────────────────────────────────────────────────
+  const [editMode,          setEditMode]          = useState(false);
+  const [editVoucherId,     setEditVoucherId]     = useState(null);
+  const [editVoucherNumber, setEditVoucherNumber] = useState("");
+  const [editSelectModal,   setEditSelectModal]   = useState(false);
+  const [editSelectData,    setEditSelectData]    = useState([]);
+  const [loadingEditList,   setLoadingEditList]   = useState(false);
 
-  const [cashBankAccounts,    setCashBankAccounts]    = useState([]);
-  const [vendors,             setVendors]             = useState([]);
-  const [invoices,            setInvoices]            = useState([]);
-  const [paymentAmounts,      setPaymentAmounts]      = useState({});
-  const [selectedInvoices,    setSelectedInvoices]    = useState({});
-  const [prevPayments,        setPrevPayments]        = useState({});
-  const [expandedRows,        setExpandedRows]        = useState({});
+  // ── DELETE STATE ──────────────────────────────────────────────────────────
+  const [deleteConfirm,     setDeleteConfirm]     = useState(null);
+  const [deleting,          setDeleting]          = useState(false);
 
-  const [loadingAccounts,  setLoadingAccounts]  = useState(false);
-  const [loadingVendors,   setLoadingVendors]   = useState(false);
-  const [loadingJournal,   setLoadingJournal]   = useState(false);
-  const [saving,           setSaving]           = useState(false);
-  const [journalLoaded,    setJournalLoaded]    = useState(false);
-  const [toast,            setToast]            = useState(null);
-  const [historyModal,     setHistoryModal]     = useState(false);
-  const [historyData,      setHistoryData]      = useState([]);
-  const [loadingHistory,   setLoadingHistory]   = useState(false);
-  const [accountsError,    setAccountsError]    = useState("");
-  const [vendorsError,     setVendorsError]     = useState("");
+  const [cashBankAccounts,  setCashBankAccounts]  = useState([]);
+  const [vendors,           setVendors]           = useState([]);
+  const [invoices,          setInvoices]          = useState([]);
+  const [paymentAmounts,    setPaymentAmounts]    = useState({});
+  const [selectedInvoices,  setSelectedInvoices]  = useState({});
+  const [prevPayments,      setPrevPayments]      = useState({});
+  const [expandedRows,      setExpandedRows]      = useState({});
+
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingVendors,  setLoadingVendors]  = useState(false);
+  const [loadingJournal,  setLoadingJournal]  = useState(false);
+  const [saving,          setSaving]          = useState(false);
+  const [journalLoaded,   setJournalLoaded]   = useState(false);
+  const [toast,           setToast]           = useState(null);
+  const [historyModal,    setHistoryModal]    = useState(false);
+  const [historyData,     setHistoryData]     = useState([]);
+  const [loadingHistory,  setLoadingHistory]  = useState(false);
+  const [accountsError,   setAccountsError]   = useState("");
+  const [vendorsError,    setVendorsError]    = useState("");
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -196,20 +246,21 @@ export default function SupplierPaymentVoucher() {
         const res  = await spvAPI.getVendors();
         const list = res?.data ?? (Array.isArray(res) ? res : []);
         setVendors(list);
-        if (!list.length) setVendorsError("Koi vendor nahi mila. Backend mein PAYABLES type ki liability add karo.");
+        if (!list.length) setVendorsError("Koi vendor nahi mila.");
       } catch (err) { setVendorsError(err.message); }
       finally { setLoadingVendors(false); }
     })();
   }, []);
 
   // ── Previous payments map ─────────────────────────────────────────────────
-  const buildPrevPaymentsMap = useCallback(async (vendorId) => {
+  const buildPrevPaymentsMap = useCallback(async (vendorId, excludeVoucherId = null) => {
     try {
       const res      = await spvAPI.getHistory(vendorId);
       const vouchers = res?.data ?? (Array.isArray(res) ? res : []);
       const map = {};
       vouchers.forEach((v) => {
         if (v.status === "CANCELLED") return;
+        if (excludeVoucherId && (v._id === excludeVoucherId || v.id === excludeVoucherId)) return;
         (v.lines || []).forEach((line) => {
           const id = line.invoiceId?.toString() || line.purchaseDetail;
           if (!id) return;
@@ -222,15 +273,17 @@ export default function SupplierPaymentVoucher() {
   }, []);
 
   // ── Load journal ──────────────────────────────────────────────────────────
-  const handleLoadJournal = useCallback(async () => {
-    if (!selectedVendor) { showToast("Pehle vendor select karein", "error"); return; }
+  const handleLoadJournal = useCallback(async (overrideVendorId = null, overrideExcludeId = null) => {
+    const vendorId = overrideVendorId || selectedVendor;
+    if (!vendorId) { showToast("Pehle vendor select karein", "error"); return; }
     setLoadingJournal(true); setJournalLoaded(false);
     setInvoices([]); setPaymentAmounts({}); setSelectedInvoices({});
     setExpandedRows({}); setPrevPayments({});
     try {
+      const excludeId = overrideExcludeId || (editMode ? editVoucherId : null);
       const [jRes] = await Promise.all([
-        spvAPI.getPurchaseJournalByVendor({ vendorId: selectedVendor, fromDate, toDate }),
-        buildPrevPaymentsMap(selectedVendor),
+        spvAPI.getPurchaseJournalByVendor({ vendorId, fromDate, toDate }),
+        buildPrevPaymentsMap(vendorId, excludeId),
       ]);
       const list = jRes?.data ?? (Array.isArray(jRes) ? jRes : []);
       setInvoices(list);
@@ -239,18 +292,97 @@ export default function SupplierPaymentVoucher() {
     } catch (err) {
       showToast("Journal load error: " + err.message, "error");
     } finally { setLoadingJournal(false); }
-  }, [selectedVendor, fromDate, toDate, buildPrevPaymentsMap]);
+  }, [selectedVendor, fromDate, toDate, buildPrevPaymentsMap, editMode, editVoucherId]);
 
-  // ── Invoice selection helpers ─────────────────────────────────────────────
+  // ── EDIT: Open select modal ───────────────────────────────────────────────
+  const handleEditClick = async () => {
+    setEditSelectModal(true);
+    setLoadingEditList(true);
+    try {
+      const res  = await spvAPI.getHistory(undefined);
+      const list = res?.data ?? (Array.isArray(res) ? res : []);
+      setEditSelectData(list.filter((v) => v.status === "SAVED" || v.status === "DRAFT"));
+    } catch (err) {
+      showToast("Edit list load error: " + err.message, "error");
+    } finally { setLoadingEditList(false); }
+  };
+
+  // ── EDIT: Load voucher into form ──────────────────────────────────────────
+  const handleLoadForEdit = async (voucher) => {
+    setEditSelectModal(false);
+    const vendorId = voucher.accDrSupplier?._id || voucher.accDrSupplier || "";
+    const bankCode = voucher.accCrBank?.code || voucher.accCrBank?._id || voucher.accCrBank || "";
+
+    setEditMode(true);
+    setEditVoucherId(voucher._id || voucher.id);
+    setEditVoucherNumber(voucher.voucherNumber || "");
+    setVoucherDate(voucher.voucherDate ? voucher.voucherDate.split("T")[0] : todayISO());
+    setSelectedVendor(vendorId);
+    setSelectedBankAccount(bankCode);
+    setNarration(voucher.narration || "");
+    setTaxRate(typeof voucher.taxRate === "number" ? voucher.taxRate : 0);
+    if (voucher.period?.from) setFromDate(voucher.period.from.split("T")[0]);
+    if (voucher.period?.to)   setToDate(voucher.period.to.split("T")[0]);
+
+    setLoadingJournal(true); setJournalLoaded(false);
+    setInvoices([]); setPaymentAmounts({}); setSelectedInvoices({});
+    setExpandedRows({}); setPrevPayments({});
+
+    try {
+      const excludeId = voucher._id || voucher.id;
+      const [jRes] = await Promise.all([
+        spvAPI.getPurchaseJournalByVendor({
+          vendorId,
+          fromDate: voucher.period?.from ? voucher.period.from.split("T")[0] : "",
+          toDate:   voucher.period?.to   ? voucher.period.to.split("T")[0]   : todayISO(),
+        }),
+        buildPrevPaymentsMap(vendorId, excludeId),
+      ]);
+      const list = jRes?.data ?? (Array.isArray(jRes) ? jRes : []);
+      setInvoices(list);
+      setJournalLoaded(true);
+
+      const selObj = {}, payObj = {};
+      (voucher.lines || []).forEach((line) => {
+        const id = line.invoiceId?.toString();
+        if (id) { selObj[id] = true; payObj[id] = line.amount || 0; }
+      });
+      setSelectedInvoices(selObj);
+      setPaymentAmounts(payObj);
+      if (!list.length) showToast("Koi invoice nahi mila — period check karein", "info");
+      else showToast(`✏️ Voucher ${voucher.voucherNumber} edit mode mein open hua`, "success");
+    } catch (err) {
+      showToast("Journal load error: " + err.message, "error");
+    } finally { setLoadingJournal(false); }
+  };
+
+  // ── DELETE ────────────────────────────────────────────────────────────────
+  const handleDeleteConfirm = (voucher) => {
+    setDeleteConfirm({ id: voucher._id || voucher.id, voucherNumber: voucher.voucherNumber });
+  };
+
+  const handleDeleteExecute = async () => {
+    if (!deleteConfirm?.id) return;
+    setDeleting(true);
+    try {
+      await spvAPI.deleteVoucher(deleteConfirm.id);
+      showToast(`🗑️ Voucher ${deleteConfirm.voucherNumber} deleted!`, "success");
+      const deletedId = deleteConfirm.id;
+      setDeleteConfirm(null);
+      setEditSelectData((prev) => prev.filter((v) => (v._id || v.id) !== deletedId));
+      setHistoryData((prev) => prev.filter((v) => (v._id || v.id) !== deletedId));
+      if (editVoucherId === deletedId) handleNew();
+    } catch (err) {
+      showToast("Delete error: " + err.message, "error");
+    } finally { setDeleting(false); }
+  };
+
+  // ── Invoice helpers ───────────────────────────────────────────────────────
   const getAlreadyPaid = (inv) => (prevPayments[inv._id] || []).reduce((s, p) => s + p.amount, 0);
   const getRemaining   = (inv) => Math.max((inv.amount || 0) - getAlreadyPaid(inv), 0);
 
-  // ── Tax calculation helpers ───────────────────────────────────────────────
-  // payBefore = payment amount before tax deduction (jo amount select kiya)
-  // taxAmt    = payBefore * taxRate
-  // payAfter  = payBefore - taxAmt  (vendor ko milta hai after withholding tax)
   const calcTax = (payBefore) => {
-    const taxAmt  = payBefore * taxRate;
+    const taxAmt   = payBefore * taxRate;
     const payAfter = payBefore - taxAmt;
     return { taxAmt, payAfter };
   };
@@ -285,19 +417,18 @@ export default function SupplierPaymentVoucher() {
   const toggleRow = (id) => setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totalInvoice        = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
-  const totalPrevPaid       = invoices.reduce((s, inv) => s + getAlreadyPaid(inv), 0);
-  const totalRemaining      = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
+  const totalInvoice   = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
+  const totalPrevPaid  = invoices.reduce((s, inv) => s + getAlreadyPaid(inv), 0);
+  const totalRemaining = invoices.reduce((s, inv) => s + getRemaining(inv), 0);
 
-  // Sum of Pay Before Tax (selected invoices' pay amounts)
-  const totalPayBefore      = Object.entries(selectedInvoices).filter(([, v]) => v)
+  const totalPayBefore = Object.entries(selectedInvoices).filter(([, v]) => v)
     .reduce((s, [id]) => s + (parseFloat(paymentAmounts[id]) || 0), 0);
 
-  const totalTaxAmt         = totalPayBefore * taxRate;
-  const totalPayAfter       = totalPayBefore - totalTaxAmt;
-  const totalBalAfter       = Math.max(totalRemaining - totalPayBefore, 0);
+  const totalTaxAmt   = totalPayBefore * taxRate;
+  const totalPayAfter = totalPayBefore - totalTaxAmt;
+  const totalBalAfter = Math.max(totalRemaining - totalPayBefore, 0);
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save / Update ─────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!selectedBankAccount) return showToast("Cash/Bank account select karein", "error");
     if (!selectedVendor)      return showToast("Vendor select karein", "error");
@@ -306,33 +437,46 @@ export default function SupplierPaymentVoucher() {
     const bObj  = cashBankAccounts.find((a) => a.code === selectedBankAccount || a._id === selectedBankAccount);
     const vObj  = vendors.find((v) => v._id === selectedVendor);
     const lines = Object.entries(selectedInvoices).filter(([, v]) => v).map(([id]) => {
-      const inv      = invoices.find((i) => i._id === id);
-      const payBef   = parseFloat(paymentAmounts[id]) || 0;
+      const inv    = invoices.find((i) => i._id === id);
+      const payBef = parseFloat(paymentAmounts[id]) || 0;
       const { taxAmt, payAfter } = calcTax(payBef);
       return {
         purchaseDetail: inv?.grn || inv?._id,
         invoiceId:      id,
         amount:         payBef,
-        taxRate:        taxRate,
+        taxRate,
         taxAmount:      taxAmt,
         amountAfterTax: payAfter,
       };
     });
 
+    const payload = {
+      voucherDate, accCrBank: selectedBankAccount, accCrBankName: bObj?.name || "",
+      accDrSupplier: selectedVendor, accDrSupplierName: vObj?.name || "",
+      narration, voucherAmount: totalPayBefore,
+      taxRate, totalTaxAmount: totalTaxAmt, netAmount: totalPayAfter,
+      lines, status: "SAVED", period: { from: fromDate, to: toDate },
+    };
+
     setSaving(true);
     try {
-      const result = await spvAPI.saveVoucher({
-        voucherDate, accCrBank: selectedBankAccount, accCrBankName: bObj?.name || "",
-        accDrSupplier: selectedVendor, accDrSupplierName: vObj?.name || "",
-        narration, voucherAmount: totalPayBefore,
-        taxRate, totalTaxAmount: totalTaxAmt, netAmount: totalPayAfter,
-        lines, status: "SAVED", period: { from: fromDate, to: toDate },
-      });
-      if (result?.success) {
-        showToast(`Voucher saved! No: ${result?.data?.voucherNumber || "—"}`, "success");
-        handleNew();
+      if (editMode && editVoucherId) {
+        // ✅ PATCH /api/supplier-payment/:id
+        const result = await spvAPI.updateVoucher(editVoucherId, payload);
+        if (result?.success || result?.data) {
+          showToast(`✅ Voucher ${editVoucherNumber} updated!`, "success");
+          handleNew();
+        } else {
+          showToast(result?.message || "Update failed", "error");
+        }
       } else {
-        showToast(result?.message || "Save failed", "error");
+        const result = await spvAPI.saveVoucher(payload);
+        if (result?.success) {
+          showToast(`Voucher saved! No: ${result?.data?.voucherNumber || "—"}`, "success");
+          handleNew();
+        } else {
+          showToast(result?.message || "Save failed", "error");
+        }
       }
     } catch (err) {
       showToast("Error: " + err.message, "error");
@@ -355,6 +499,8 @@ export default function SupplierPaymentVoucher() {
     setFromDate(""); setToDate(todayISO()); setTaxRate(0);
     setInvoices([]); setPaymentAmounts({}); setSelectedInvoices({});
     setJournalLoaded(false); setExpandedRows({}); setPrevPayments({});
+    setEditMode(false); setEditVoucherId(null); setEditVoucherNumber("");
+    setVoucherDate(todayISO());
   };
 
   const vendorObj     = vendors.find((v) => v._id === selectedVendor);
@@ -369,39 +515,63 @@ export default function SupplierPaymentVoucher() {
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
 
       {/* Header */}
-      <div style={S.header}>Supplier Cash / Bank Payment Voucher</div>
+      <div style={S.header}>
+        Supplier Cash / Bank Payment Voucher
+        {editMode && (
+          <span style={{ marginLeft:14, background:"rgba(255,255,255,0.18)", borderRadius:4, padding:"2px 10px", fontSize:12 }}>
+            ✏️ EDIT MODE
+          </span>
+        )}
+      </div>
 
       {/* Toolbar */}
       <div style={S.toolbar}>
         <button style={S.btn("default")} onClick={handleNew}>New</button>
-        <button style={saving ? S.btn("disabled") : S.btn("default")} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
+        <button style={saving ? S.btn("disabled") : S.btn(editMode ? "warning" : "default")} onClick={handleSave} disabled={saving}>
+          {saving ? (editMode ? "Updating..." : "Saving...") : editMode ? "✏️ Update" : "Save"}
         </button>
-        <button style={S.btn("default")}>Edit</button>
+        <button style={S.btn(editMode ? "warning" : "default")} onClick={handleEditClick}>
+          {editMode ? `✏️ Change (${editVoucherNumber})` : "Edit"}
+        </button>
         <button style={S.btn("default")} onClick={handleNew}>Cancel</button>
         <button
           style={{ ...S.btn(loadingJournal ? "disabled" : "default"), display:"flex", alignItems:"center", gap:4 }}
-          onClick={handleLoadJournal} disabled={loadingJournal || !selectedVendor}
+          onClick={() => handleLoadJournal()} disabled={loadingJournal || !selectedVendor}
         >
           <span style={{ display:"inline-block", animation: loadingJournal ? "spin 1s linear infinite" : "none" }}>🔄</span>
           {loadingJournal ? "Refreshing..." : "Refresh"}
         </button>
         <button style={S.btn("default")} onClick={handleViewHistory}>View History ({historyData.length || 0})</button>
-        <button style={S.btn("default")} onClick={() => window.print()}>Print</button>
       </div>
+
+      {/* Edit Banner */}
+      {editMode && (
+        <div style={S.editBanner}>
+          <span>✏️ Edit Mode:</span>
+          <span style={{ background:"rgba(255,255,255,0.2)", borderRadius:4, padding:"2px 10px" }}>
+            Voucher # <b>{editVoucherNumber}</b>
+          </span>
+          <span>— Vendor, amounts aur date edit kar sakte hain.</span>
+          <button
+            style={{ marginLeft:"auto", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.4)", borderRadius:3, color:"#fff", padding:"3px 12px", cursor:"pointer", fontSize:11 }}
+            onClick={handleNew}
+          >✕ Cancel Edit</button>
+        </div>
+      )}
 
       {/* Form */}
       <div style={S.form}>
-        {/* Voucher # + Date */}
         <div style={{ display:"grid", gridTemplateColumns:"110px 220px 1fr 120px 180px", gap:8, marginBottom:10, alignItems:"center" }}>
           <label style={{ ...S.label, paddingTop:0 }}>Voucher # :</label>
-          <input style={{ ...S.input, background:"#f3f4f6", color:"#6b7280", fontStyle:"italic" }} value="Auto on save" readOnly />
+          <input
+            style={{ ...S.input, background:"#f3f4f6", color: editMode ? "#92400e" : "#6b7280", fontStyle: editMode ? "normal" : "italic", fontWeight: editMode ? 700 : 400 }}
+            value={editMode ? editVoucherNumber : "Auto on save"} readOnly
+          />
           <div />
           <label style={{ ...S.label, paddingTop:0, textAlign:"right" }}>Voucher Date :</label>
           <input type="date" style={S.input} value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} />
         </div>
 
-        {/* Cash / Bank */}
         <div style={S.row}>
           <label style={S.label}>Cash / Bank :</label>
           <div>
@@ -417,11 +587,12 @@ export default function SupplierPaymentVoucher() {
           </div>
         </div>
 
-        {/* Vendor */}
         <div style={S.row}>
           <label style={S.label}>Vendor :</label>
           <div>
-            <select style={S.select} value={selectedVendor}
+            <select
+              style={{ ...S.select, ...(editMode ? { border:"2px solid #d97706", background:"#fffbeb" } : {}) }}
+              value={selectedVendor}
               onChange={(e) => {
                 setSelectedVendor(e.target.value);
                 setJournalLoaded(false); setInvoices([]);
@@ -434,38 +605,35 @@ export default function SupplierPaymentVoucher() {
                 <option key={v._id} value={v._id}>{v.code ? `[${v.code}] ` : ""}{v.name}</option>
               ))}
             </select>
+            {editMode && <div style={{ fontSize:11, color:"#92400e", marginTop:3 }}>✏️ Vendor change kar sakte hain</div>}
             {vendorsError && <div style={S.errorBox}>⚠️ {vendorsError}</div>}
           </div>
         </div>
 
-        {/* Narration */}
         <div style={S.row}>
           <label style={S.label}>Narration :</label>
           <textarea style={S.textarea} placeholder="Payment description..." value={narration} onChange={(e) => setNarration(e.target.value)} />
         </div>
 
-        {/* Period */}
         <div style={{ display:"grid", gridTemplateColumns:"110px auto 160px auto 160px auto auto", alignItems:"center", gap:6, marginBottom:10 }}>
           <label style={{ ...S.label, paddingTop:0 }}>Period :</label>
           <label style={{ fontSize:12, color:"#374151", fontWeight:500 }}>From:</label>
           <input type="date" style={S.input} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           <label style={{ fontSize:12, color:"#374151", fontWeight:500, marginLeft:4 }}>To:</label>
-          <input type="date" style={S.input} value={toDate}   onChange={(e) => setToDate(e.target.value)} />
-          <button style={{ ...S.btn("danger"),  fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
+          <input type="date" style={S.input} value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <button style={{ ...S.btn("danger"), fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>✕ Clear</button>
           <button style={{ ...S.btn("default"), fontSize:11, padding:"3px 10px", height:26 }} onClick={() => { setFromDate(""); setToDate(todayISO()); }}>All dates</button>
         </div>
 
         <hr style={S.divider} />
 
-        {/* Journal Button */}
         <div style={S.journalBtn}>
-          <button style={S.btnJournal} onClick={handleLoadJournal} disabled={loadingJournal}>
+          <button style={S.btnJournal} onClick={() => handleLoadJournal()} disabled={loadingJournal}>
             📋 {loadingJournal ? "Loading..." : "Purchase Journal Voucher Information"}
           </button>
         </div>
         <p style={S.hint}>{selectedVendor ? "Period select kar ke button click karein" : "Vendor select karo phir click karo"}</p>
 
-        {/* Info Strip */}
         {(vendorObj || bankObj) && (
           <div style={S.infoStrip}>
             {vendorObj && (
@@ -496,7 +664,7 @@ export default function SupplierPaymentVoucher() {
         )}
       </div>
 
-      {/* ── TAX DROPDOWN ──────────────────────────────────────────────────── */}
+      {/* Tax Box */}
       <div style={S.taxBox}>
         <span style={S.taxLabel}>🏷️ Taxes :</span>
         <select style={S.taxSelect} value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value))}>
@@ -520,7 +688,7 @@ export default function SupplierPaymentVoucher() {
         )}
       </div>
 
-      {/* ── Summary Cards ── */}
+      {/* Summary Cards */}
       {journalLoaded && invoices.length > 0 && (
         <div style={S.summaryCards}>
           <div style={S.card("#6366f1")}>
@@ -565,7 +733,7 @@ export default function SupplierPaymentVoucher() {
         </div>
       )}
 
-      {/* ── Content Pane ── */}
+      {/* Content Pane */}
       {!journalLoaded ? (
         <div style={S.emptyPane}>
           <div style={S.emptyIcon}>📋</div>
@@ -596,9 +764,7 @@ export default function SupplierPaymentVoucher() {
                 <th style={S.thR} rowSpan={2}>Already Paid</th>
                 <th style={S.thR} rowSpan={2}>Remaining</th>
                 <th style={S.thC} rowSpan={2}>Status</th>
-                {/* Tax group header */}
-                <th style={{ ...S.thTax, textAlign:"center", borderRight:"1px solid #78350f" }}
-                  colSpan={taxRate > 0 ? 4 : 1}>
+                <th style={{ ...S.thTax, textAlign:"center", borderRight:"1px solid #78350f" }} colSpan={taxRate > 0 ? 4 : 1}>
                   {taxRate > 0 ? `💳 Payment (Tax @ ${taxPct})` : "💳 Payment"}
                 </th>
                 <th style={S.thR} rowSpan={2}>Bal After</th>
@@ -611,9 +777,7 @@ export default function SupplierPaymentVoucher() {
                   <th style={S.thTaxC}>Pay Now</th>
                 </tr>
               ) : (
-                <tr>
-                  <th style={S.thC}>Pay Now</th>
-                </tr>
+                <tr><th style={S.thC}>Pay Now</th></tr>
               )}
             </thead>
             <tbody>
@@ -635,9 +799,7 @@ export default function SupplierPaymentVoucher() {
                 return (
                   <>
                     <tr key={inv._id} style={isSel ? { background:"#dbeafe" } : {}}>
-                      <td style={S.tdC(i)}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleInvoice(inv._id, remaining)} />
-                      </td>
+                      <td style={S.tdC(i)}><input type="checkbox" checked={isSel} onChange={() => toggleInvoice(inv._id, remaining)} /></td>
                       <td style={S.tdC(i)}>
                         {prevList.length > 0 ? (
                           <button onClick={() => toggleRow(inv._id)}
@@ -653,27 +815,19 @@ export default function SupplierPaymentVoucher() {
                       <td style={{ ...S.tdR(i), color: alreadyPaid > 0 ? "#16a34a" : "#9ca3af", fontWeight: alreadyPaid > 0 ? 700 : 400 }}>
                         {alreadyPaid > 0 ? `Rs. ${fmtNum(alreadyPaid)}` : "—"}
                       </td>
-                      <td style={{ ...S.tdR(i), color: remaining > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>
-                        Rs. {fmtNum(remaining)}
-                      </td>
+                      <td style={{ ...S.tdR(i), color: remaining > 0 ? "#dc2626" : "#16a34a", fontWeight:700 }}>Rs. {fmtNum(remaining)}</td>
                       <td style={S.tdC(i)}>{paidBadge}</td>
-
-                      {/* ── Tax columns ── */}
                       {taxRate > 0 ? (
                         <>
-                          {/* Pay Before Tax */}
                           <td style={{ ...S.tdTax(i), fontWeight: isSel ? 700 : 400 }}>
                             {isSel ? `Rs. ${fmtNum(payBefore)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Tax Amount */}
                           <td style={{ ...S.tdTax(i), color:"#dc2626", fontWeight: isSel ? 700 : 400 }}>
                             {isSel ? `Rs. ${fmtNum(taxAmt)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Pay After Tax */}
                           <td style={{ ...S.tdTax(i), color:"#15803d", fontWeight: isSel ? 700 : 400 }}>
                             {isSel ? `Rs. ${fmtNum(payAfter)}` : <span style={{ color:"#d1d5db" }}>—</span>}
                           </td>
-                          {/* Pay Now input */}
                           <td style={S.tdC(i)}>
                             {isSel ? (
                               <input type="number" style={S.payInput}
@@ -684,7 +838,6 @@ export default function SupplierPaymentVoucher() {
                           </td>
                         </>
                       ) : (
-                        /* No tax — single Pay Now column */
                         <td style={S.tdC(i)}>
                           {isSel ? (
                             <input type="number" style={S.payInput}
@@ -694,14 +847,10 @@ export default function SupplierPaymentVoucher() {
                           ) : <span style={{ color:"#9ca3af", fontSize:11 }}>—</span>}
                         </td>
                       )}
-
-                      {/* Balance After */}
                       <td style={{ ...S.tdR(i), color: isSel ? (balAfter > 0 ? "#f59e0b" : "#16a34a") : "#9ca3af", fontWeight: isSel ? 700 : 400 }}>
                         {isSel ? `Rs. ${fmtNum(balAfter)}` : "—"}
                       </td>
                     </tr>
-
-                    {/* Previous payments sub-rows */}
                     {isExpanded && prevList.map((pmt, pi) => (
                       <tr key={`${inv._id}-p${pi}`} style={S.subRow}>
                         <td colSpan={2} style={S.subCell} />
@@ -710,9 +859,7 @@ export default function SupplierPaymentVoucher() {
                         <td style={S.subCell} />
                         <td style={{ ...S.subCell, textAlign:"right", color:"#16a34a", fontWeight:700 }}>Rs. {fmtNum(pmt.amount)}</td>
                         <td style={S.subCell} />
-                        <td style={{ ...S.subCell, textAlign:"center" }}>
-                          <span style={S.badge(pmt.status)}>{pmt.status}</span>
-                        </td>
+                        <td style={{ ...S.subCell, textAlign:"center" }}><span style={S.badge(pmt.status)}>{pmt.status}</span></td>
                         <td colSpan={taxRate > 0 ? 5 : 2} style={S.subCell} />
                       </tr>
                     ))}
@@ -720,8 +867,6 @@ export default function SupplierPaymentVoucher() {
                 );
               })}
             </tbody>
-
-            {/* Footer */}
             <tfoot>
               <tr style={S.summaryRow}>
                 <td colSpan={5} style={{ padding:"7px 10px", fontWeight:700, color:"#1e3a8a" }}>
@@ -749,11 +894,11 @@ export default function SupplierPaymentVoucher() {
             </tfoot>
           </table>
 
-          {/* Payment Bar */}
           {totalPayBefore > 0 && (
-            <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <div style={{ background: editMode ? "linear-gradient(90deg,#92400e,#b45309)" : "linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
               <span style={{ fontSize:12 }}>
-                💳 <b>{vendorObj?.name}</b> ko payment via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
+                {editMode ? "✏️" : "💳"} <b>{vendorObj?.name}</b> ko payment via {bankTypeLabel} <b>{bankObj?.name || selectedBankAccount}</b>
+                {editMode && <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>Edit: {editVoucherNumber}</span>}
                 {taxRate > 0 && <span style={{ marginLeft:10, background:"rgba(255,255,255,0.15)", borderRadius:8, padding:"2px 8px", fontSize:11 }}>WHT @ {taxPct}</span>}
               </span>
               <span style={{ fontSize:13, fontWeight:700, display:"flex", gap:16, flexWrap:"wrap" }}>
@@ -766,11 +911,59 @@ export default function SupplierPaymentVoucher() {
                 )}
                 {taxRate === 0 && <span>Total: <b>Rs. {fmtNum(totalPayBefore)}</b></span>}
               </span>
-              <button style={{ ...S.btn("success"), fontSize:12 }} onClick={handleSave} disabled={saving}>
-                {saving ? "⏳ Saving..." : "✅ Confirm & Save"}
+              <button style={{ ...S.btn(editMode ? "warning" : "success"), fontSize:12 }} onClick={handleSave} disabled={saving}>
+                {saving ? "⏳ Processing..." : editMode ? "✏️ Confirm Update" : "✅ Confirm & Save"}
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Edit Select Modal */}
+      {editSelectModal && (
+        <div style={S.modal} onClick={() => setEditSelectModal(false)}>
+          <div style={{ ...S.modalBox, minWidth:680 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <h3 style={{ margin:0, color:"#92400e", fontSize:14 }}>✏️ Voucher Edit / Delete karein</h3>
+              <button onClick={() => setEditSelectModal(false)} style={{ ...S.btn("danger"), padding:"2px 10px" }}>✕</button>
+            </div>
+            <p style={{ fontSize:11, color:"#6b7280", margin:"0 0 10px" }}>Sirf SAVED status ke vouchers edit/delete ho sakte hain</p>
+            {loadingEditList ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>⏳ Loading...</div>
+            ) : editSelectData.length === 0 ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>Koi editable voucher nahi mila</div>
+            ) : (
+              <table style={{ ...S.table, fontSize:11 }}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>Voucher #</th>
+                    <th style={S.th}>Date</th>
+                    <th style={S.th}>Vendor</th>
+                    <th style={S.th}>Bank / Cash</th>
+                    <th style={S.thR}>Amount</th>
+                    <th style={S.thC}>Status</th>
+                    <th style={S.thC}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editSelectData.map((h, i) => (
+                    <tr key={h._id || i}>
+                      <td style={S.td(i)}><b>{h.voucherNumber || "—"}</b></td>
+                      <td style={S.td(i)}>{fmtDate(h.voucherDate)}</td>
+                      <td style={S.td(i)}>{h.accDrSupplierName || h.accDrSupplier?.name || "—"}</td>
+                      <td style={S.td(i)}>{h.accCrBankName || h.accCrBank?.name || "—"}</td>
+                      <td style={S.tdR(i)}>Rs. {fmtNum(h.voucherAmount)}</td>
+                      <td style={S.tdC(i)}><span style={S.badge(h.status)}>{h.status}</span></td>
+                      <td style={{ ...S.tdC(i), display:"flex", gap:4, justifyContent:"center" }}>
+                        <button style={{ ...S.btn("warning"), padding:"3px 10px", fontSize:11 }} onClick={() => handleLoadForEdit(h)}>✏️ Edit</button>
+                        <button style={{ ...S.btn("danger"),  padding:"3px 10px", fontSize:11 }} onClick={() => handleDeleteConfirm(h)}>🗑️ Del</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
@@ -798,6 +991,7 @@ export default function SupplierPaymentVoucher() {
                     <th style={S.thR}>Tax</th>
                     <th style={S.thR}>Net</th>
                     <th style={S.thC}>Status</th>
+                    <th style={S.thC}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -808,18 +1002,41 @@ export default function SupplierPaymentVoucher() {
                       <td style={S.td(i)}>{h.accDrSupplierName || h.accDrSupplier?.name || "—"}</td>
                       <td style={S.td(i)}>{h.accCrBankName || h.accCrBank?.name || "—"}</td>
                       <td style={S.tdR(i)}>Rs. {fmtNum(h.voucherAmount)}</td>
-                      <td style={{ ...S.tdR(i), color:"#f59e0b" }}>
-                        {h.totalTaxAmount ? `Rs. ${fmtNum(h.totalTaxAmount)}` : "—"}
-                      </td>
-                      <td style={{ ...S.tdR(i), color:"#15803d", fontWeight:700 }}>
-                        Rs. {fmtNum(h.netAmount || h.voucherAmount)}
-                      </td>
+                      <td style={{ ...S.tdR(i), color:"#f59e0b" }}>{h.totalTaxAmount ? `Rs. ${fmtNum(h.totalTaxAmount)}` : "—"}</td>
+                      <td style={{ ...S.tdR(i), color:"#15803d", fontWeight:700 }}>Rs. {fmtNum(h.netAmount || h.voucherAmount)}</td>
                       <td style={S.tdC(i)}><span style={S.badge(h.status)}>{h.status}</span></td>
+                      <td style={S.tdC(i)}>
+                        {(h.status === "SAVED" || h.status === "DRAFT") ? (
+                          <button style={{ ...S.btn("danger"), padding:"2px 8px", fontSize:10 }} onClick={() => handleDeleteConfirm(h)}>🗑️ Delete</button>
+                        ) : (
+                          <span style={{ color:"#d1d5db", fontSize:10 }}>—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div style={{ ...S.modal, zIndex:2000 }}>
+          <div style={S.confirmBox}>
+            <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
+            <h3 style={{ margin:"0 0 8px", color:"#dc2626", fontSize:15 }}>Voucher Delete Karna Hai?</h3>
+            <p style={{ fontSize:12, color:"#374151", margin:"0 0 18px", lineHeight:1.6 }}>
+              Voucher <b style={{ color:"#dc2626" }}>{deleteConfirm.voucherNumber}</b> permanently delete ho jayega.<br />
+              <span style={{ color:"#9ca3af" }}>Yeh action undo nahi ho sakta.</span>
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button style={{ ...S.btn("default"), padding:"6px 22px" }} onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
+              <button style={{ ...S.btn("danger"), padding:"6px 22px" }} onClick={handleDeleteExecute} disabled={deleting}>
+                {deleting ? "Deleting..." : "🗑️ Haan, Delete Karo"}
+              </button>
+            </div>
           </div>
         </div>
       )}

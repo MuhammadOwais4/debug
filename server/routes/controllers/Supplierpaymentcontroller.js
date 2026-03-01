@@ -24,32 +24,20 @@ const updateBankBalance = async (accCrBank, amount, operation = "subtract") => {
   await Asset.findOneAndUpdate(filter, update)
 }
 
-// ── Get next serial number for ledger ─────────────────────────────────────────
 const getNextSerial = async () => {
   const last = await Ledger.findOne().sort({ serialNumber: -1 }).select("serialNumber").lean()
   return (last?.serialNumber || 0) + 1
 }
 
-// ── Save ledger entries for an SPV ───────────────────────────────────────────
-// Double-entry accounting:
-//   DR  Vendor/Supplier   (Liabilities ↓ — payable reduced)
-//   CR  Cash/Bank         (Assets ↓ — cash paid out)
-//   DR  Tax Expense       (if tax > 0 — expense recorded)
-//   CR  Tax Payable       (if tax > 0 — government liability)
-//
-// NOTE: voucherType "SPV" not in Ledger enum, so we use "BPV" (Bank Payment Voucher)
-//       for bank payments and "CPV" for cash payments
-
 const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
   try {
-    // Delete old entries for this voucher (idempotent)
     await Ledger.deleteMany({ voucherNo: voucher.voucherNumber })
 
     const vDate       = voucher.voucherDate
     const vNo         = voucher.voucherNumber
-    const payAmount   = voucher.voucherAmount      // Pay Before Tax
+    const payAmount   = voucher.voucherAmount
     const taxAmt      = voucher.totalTaxAmount || 0
-    const netAmt      = voucher.netAmount || payAmount  // Pay After Tax (to vendor)
+    const netAmt      = voucher.netAmount || payAmount
     const taxRate     = voucher.taxRate || 0
     const narration   = voucher.narration || `Payment to ${vendor.name}`
     const vType       = bankAccount.type === "BANK ACCOUNT" ? "BPV" : "CPV"
@@ -57,8 +45,6 @@ const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
     let serial = await getNextSerial()
     const entries = []
 
-    // ── Entry 1: DR Vendor/Supplier (Liability ↓) ──────────────────────────
-    // Debit the vendor — reduces the payable
     entries.push({
       serialNumber:    serial++,
       date:            vDate,
@@ -71,15 +57,13 @@ const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
       sourceId:        voucher._id,
       grn:             voucher.lines?.[0]?.purchaseDetail || null,
       description:     narration,
-      debit:           payAmount,   // Full amount DR to vendor (payable cleared)
+      debit:           payAmount,
       credit:          0,
-      balance:         0,           // Running balance calculated in ledger controller
+      balance:         0,
       entryType:       "PAYABLE",
       isActive:        true,
     })
 
-    // ── Entry 2: CR Cash/Bank (Asset ↓) ─────────────────────────────────────
-    // Credit the bank — reduces cash/bank by net amount (after tax withheld)
     entries.push({
       serialNumber:    serial++,
       date:            vDate,
@@ -93,23 +77,20 @@ const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
       grn:             voucher.lines?.[0]?.purchaseDetail || null,
       description:     `${narration} — via ${bankAccount.name}`,
       debit:           0,
-      credit:          taxAmt > 0 ? netAmt : payAmount, // Only net goes from bank if tax
+      credit:          taxAmt > 0 ? netAmt : payAmount,
       balance:         0,
       entryType:       bankAccount.type === "BANK ACCOUNT" ? "BANK" : "CASH",
       isActive:        true,
     })
 
-    // ── Entry 3 & 4: Tax entries (only if taxRate > 0) ──────────────────────
     if (taxAmt > 0 && voucher.taxAccountCode) {
       const taxInfo = TAX_ACCOUNTS[taxRate]
 
-      // Entry 3: DR Tax Expense (Expense ↑)
-      // Withholding tax deducted becomes our tax expense / tax deducted at source
       entries.push({
         serialNumber:    serial++,
         date:            vDate,
-        accountCode:     voucher.taxAccountCode,       // e.g. "TAX-0025"
-        accountName:     voucher.taxAccountName,        // e.g. "Withholding Tax 0.25%"
+        accountCode:     voucher.taxAccountCode,
+        accountName:     voucher.taxAccountName,
         accountCategory: "Expenses",
         voucherNo:       vNo,
         voucherType:     vType,
@@ -124,13 +105,11 @@ const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
         isActive:        true,
       })
 
-      // Entry 4: CR Tax Payable (Liability ↑ — amount owed to govt)
-      // We hold the withheld tax and will pay it to FBR/government
       entries.push({
         serialNumber:    serial++,
         date:            vDate,
-        accountCode:     `${voucher.taxAccountCode}-PAY`,  // e.g. "TAX-0025-PAY"
-        accountName:     `${voucher.taxAccountName} Payable`, // "Withholding Tax 0.25% Payable"
+        accountCode:     `${voucher.taxAccountCode}-PAY`,
+        accountName:     `${voucher.taxAccountName} Payable`,
         accountCategory: "Liabilities",
         voucherNo:       vNo,
         voucherType:     vType,
@@ -151,11 +130,9 @@ const saveSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
     return entries.length
   } catch (err) {
     console.error("[SPV] ❌ Ledger save error:", err.message)
-    // Don't throw — voucher is saved even if ledger fails
   }
 }
 
-// ── Reverse ledger entries (for cancel) ──────────────────────────────────────
 const reverseSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
   try {
     await Ledger.deleteMany({ voucherNo: voucher.voucherNumber })
@@ -172,7 +149,6 @@ const reverseSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
     let serial = await getNextSerial()
     const entries = []
 
-    // CR Vendor — restore payable
     entries.push({
       serialNumber: serial++, date: vDate,
       accountCode: vendor.code, accountName: vendor.name,
@@ -182,7 +158,6 @@ const reverseSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
       entryType: "PAYABLE", isActive: true,
     })
 
-    // DR Cash/Bank — restore bank balance
     if (bankAccount) {
       entries.push({
         serialNumber: serial++, date: vDate,
@@ -195,7 +170,6 @@ const reverseSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
       })
     }
 
-    // Reverse tax entries
     if (taxAmt > 0 && voucher.taxAccountCode) {
       const taxInfo = TAX_ACCOUNTS[taxRate]
 
@@ -230,7 +204,6 @@ const reverseSPVLedgerEntries = async (voucher, vendor, bankAccount) => {
 // CONTROLLERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// GET /api/supplier-payment/vendors
 exports.getVendors = async (req, res) => {
   try {
     const vendors = await Liability.find({ type: "PAYABLES", isActive: true })
@@ -243,7 +216,6 @@ exports.getVendors = async (req, res) => {
   }
 }
 
-// GET /api/supplier-payment/purchase-journal
 exports.getPurchaseJournal = async (req, res) => {
   try {
     const { vendorId, fromDate, toDate } = req.query
@@ -289,7 +261,6 @@ exports.getPurchaseJournal = async (req, res) => {
   }
 }
 
-// POST /api/supplier-payment
 exports.createVoucher = async (req, res) => {
   try {
     const {
@@ -298,11 +269,10 @@ exports.createVoucher = async (req, res) => {
       taxRate = 0, totalTaxAmount = 0, netAmount,
     } = req.body
 
-    // ── Validate ──────────────────────────────────────────────────────────────
-    if (!accCrBank)                     return res.status(400).json({ success: false, message: "Cash/Bank account is required" })
-    if (!accDrSupplier)                 return res.status(400).json({ success: false, message: "Supplier is required" })
+    if (!accCrBank)                          return res.status(400).json({ success: false, message: "Cash/Bank account is required" })
+    if (!accDrSupplier)                      return res.status(400).json({ success: false, message: "Supplier is required" })
     if (!voucherAmount || voucherAmount <= 0) return res.status(400).json({ success: false, message: "Voucher amount must be > 0" })
-    if (!lines || !lines.length)        return res.status(400).json({ success: false, message: "At least one invoice line required" })
+    if (!lines || !lines.length)             return res.status(400).json({ success: false, message: "At least one invoice line required" })
 
     const vendor = await Liability.findById(accDrSupplier)
     if (!vendor) return res.status(404).json({ success: false, message: "Vendor not found" })
@@ -314,12 +284,10 @@ exports.createVoucher = async (req, res) => {
     if (bankAccount.type !== "CASH ACCOUNT" && bankAccount.type !== "BANK ACCOUNT")
       return res.status(400).json({ success: false, message: "Account is not Cash or Bank type" })
 
-    // ── Determine tax account info ─────────────────────────────────────────────
     const taxInfo       = TAX_ACCOUNTS[taxRate] || null
     const calcTaxAmt    = parseFloat((voucherAmount * taxRate).toFixed(2))
     const calcNetAmount = parseFloat((voucherAmount - calcTaxAmt).toFixed(2))
 
-    // ── Create voucher ────────────────────────────────────────────────────────
     const voucher = new SupplierPaymentVoucher({
       voucherDate:       voucherDate || new Date(),
       accCrBank,
@@ -340,13 +308,9 @@ exports.createVoucher = async (req, res) => {
 
     const saved = await voucher.save()
 
-    // ── If POSTED: update balances + save ledger ───────────────────────────────
     if (saved.status === "POSTED") {
-      // Vendor payable reduced by full amount
       await updateVendorBalance(accDrSupplier, voucherAmount, "subtract")
-      // Bank reduced by net amount (after tax)
       await updateBankBalance(accCrBank, saved.netAmount || voucherAmount, "subtract")
-      // Save ledger entries
       await saveSPVLedgerEntries(saved, vendor, bankAccount)
     }
 
@@ -362,7 +326,6 @@ exports.createVoucher = async (req, res) => {
   }
 }
 
-// GET /api/supplier-payment
 exports.getAllVouchers = async (req, res) => {
   try {
     const { vendorId, status, fromDate, toDate, limit = 100, offset = 0 } = req.query
@@ -393,7 +356,6 @@ exports.getAllVouchers = async (req, res) => {
   }
 }
 
-// GET /api/supplier-payment/:id
 exports.getVoucherById = async (req, res) => {
   try {
     const voucher = await SupplierPaymentVoucher.findById(req.params.id)
@@ -406,7 +368,6 @@ exports.getVoucherById = async (req, res) => {
   }
 }
 
-// PATCH /api/supplier-payment/:id/post
 exports.postVoucher = async (req, res) => {
   try {
     const voucher = await SupplierPaymentVoucher.findById(req.params.id)
@@ -421,11 +382,8 @@ exports.postVoucher = async (req, res) => {
     voucher.status = "POSTED"
     await voucher.save()
 
-    // Vendor payable reduced by full amount
     await updateVendorBalance(voucher.accDrSupplier, voucher.voucherAmount, "subtract")
-    // Bank reduced by net (after tax) amount
     await updateBankBalance(voucher.accCrBank, voucher.netAmount || voucher.voucherAmount, "subtract")
-    // Save 4 ledger entries (DR vendor, CR bank, DR tax expense, CR tax payable)
     if (vendor && bankAccount) {
       await saveSPVLedgerEntries(voucher, vendor, bankAccount)
     }
@@ -437,7 +395,6 @@ exports.postVoucher = async (req, res) => {
   }
 }
 
-// PATCH /api/supplier-payment/:id/cancel
 exports.cancelVoucher = async (req, res) => {
   try {
     const voucher = await SupplierPaymentVoucher.findById(req.params.id)
@@ -465,7 +422,6 @@ exports.cancelVoucher = async (req, res) => {
   }
 }
 
-// DELETE /api/supplier-payment/:id
 exports.deleteVoucher = async (req, res) => {
   try {
     const voucher = await SupplierPaymentVoucher.findById(req.params.id)
@@ -479,7 +435,62 @@ exports.deleteVoucher = async (req, res) => {
   }
 }
 
-// GET /api/supplier-payment/summary
+// ✅ NEW — PATCH /api/supplier-payment/:id
+// Sirf SAVED vouchers update ho sakte hain
+exports.updateVoucher = async (req, res) => {
+  try {
+    const voucher = await SupplierPaymentVoucher.findById(req.params.id)
+    if (!voucher)                         return res.status(404).json({ success: false, message: "Voucher not found" })
+    if (voucher.status === "POSTED")      return res.status(400).json({ success: false, message: "Posted voucher update nahi ho sakta. Pehle cancel karein." })
+    if (voucher.status === "CANCELLED")   return res.status(400).json({ success: false, message: "Cancelled voucher update nahi ho sakta." })
+
+    const {
+      voucherDate, accCrBank, accCrBankName, accDrSupplier, accDrSupplierName,
+      narration, voucherAmount, lines, period,
+      taxRate = 0,
+    } = req.body
+
+    // ── Validate ──────────────────────────────────────────────────────────
+    if (!accCrBank)                          return res.status(400).json({ success: false, message: "Cash/Bank account is required" })
+    if (!accDrSupplier)                      return res.status(400).json({ success: false, message: "Supplier is required" })
+    if (!voucherAmount || voucherAmount <= 0) return res.status(400).json({ success: false, message: "Voucher amount must be > 0" })
+    if (!lines || !lines.length)             return res.status(400).json({ success: false, message: "At least one invoice line required" })
+
+    // ── Recalculate tax ───────────────────────────────────────────────────
+    const taxInfo       = TAX_ACCOUNTS[taxRate] || null
+    const calcTaxAmt    = parseFloat((voucherAmount * taxRate).toFixed(2))
+    const calcNetAmount = parseFloat((voucherAmount - calcTaxAmt).toFixed(2))
+
+    // ── Update fields ─────────────────────────────────────────────────────
+    voucher.voucherDate       = voucherDate || voucher.voucherDate
+    voucher.accCrBank         = accCrBank
+    voucher.accCrBankName     = accCrBankName || voucher.accCrBankName
+    voucher.accDrSupplier     = accDrSupplier
+    voucher.accDrSupplierName = accDrSupplierName || voucher.accDrSupplierName
+    voucher.narration         = narration || ""
+    voucher.voucherAmount     = voucherAmount
+    voucher.taxRate           = taxRate
+    voucher.totalTaxAmount    = calcTaxAmt
+    voucher.netAmount         = calcNetAmount
+    voucher.taxAccountCode    = taxInfo?.code || ""
+    voucher.taxAccountName    = taxInfo?.name || ""
+    voucher.lines             = lines
+    voucher.period            = period || voucher.period
+    // status SAVED hi rehta hai
+
+    const updated = await voucher.save()
+
+    res.json({
+      success: true,
+      message: `Voucher ${updated.voucherNumber} updated successfully`,
+      data: updated,
+    })
+  } catch (error) {
+    console.error("[SPV] updateVoucher error:", error)
+    res.status(500).json({ success: false, message: "Error updating voucher", error: error.message })
+  }
+}
+
 exports.getVoucherSummary = async (req, res) => {
   try {
     const { vendorId, fromDate, toDate } = req.query
