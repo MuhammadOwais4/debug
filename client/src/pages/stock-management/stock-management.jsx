@@ -1979,21 +1979,20 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Purchase Rate Amount</span>
                       <div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))} × {Number(formData.quantity)}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))} </div>
                     </div>
                     {getOverheadTotal() > 0 && (
                       <div className="bg-amber-50 p-3 rounded border border-amber-200">
                         <span className="text-xs font-medium text-amber-700">Factory Overhead Amount</span>
-                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * getOverheadTotal())}</div>
-                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(getOverheadTotal())} × {Number(formData.quantity)}</div>
+                        <div className="text-lg font-bold text-amber-700">{formatCurrency( getOverheadTotal())}</div>
                       </div>
                     )}
                     <div className={`p-3 rounded border-2 ${getOverheadTotal() > 0 ? "bg-green-50 border-green-300" : "bg-white border-blue-100"}`}>
                       <span className="text-xs font-medium text-gray-600">
-                        {getOverheadTotal() > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
+                        {getTotalPurchaseAmount() > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
                       </span>
                       <div className={`text-lg font-extrabold ${getOverheadTotal() > 0 ? "text-green-700" : "text-blue-700"}`}>
-                        {formatCurrency(getTotalPurchaseAmount())}
+                        {formatCurrency(getOverheadTotal()+ (Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}
                       </div>
                       {getOverheadTotal() > 0 && (
                         <div className="text-xs text-green-600 mt-0.5">{formatCurrency(getTotalCostPerUnit())} × {Number(formData.quantity)}</div>
