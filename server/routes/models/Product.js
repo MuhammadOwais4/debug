@@ -41,6 +41,13 @@ const productSchema = new mongoose.Schema(
       min: [0, "Purchase rate cannot be negative"],
     },
 
+    // ── Factory Overhead per unit ──────────────────────────────────────────
+    factoryOverhead: {
+      type: Number,
+      default: 0,
+      min: [0, "Factory overhead cannot be negative"],
+    },
+
     // Sale Rate
     saleRate: {
       type: Number,
@@ -61,7 +68,6 @@ const productSchema = new mongoose.Schema(
       min: [0, "Purchase amount cannot be negative"],
       default: 0,
     },
-    balanceAmount: { type: Number, default: 0 },
 
     // CURRENT/BALANCE DATA (Changes with each transaction)
     quantity: {
@@ -153,6 +159,11 @@ const productSchema = new mongoose.Schema(
   },
 )
 
+// Virtual for total cost per unit (purchaseRate + factoryOverhead)
+productSchema.virtual("totalCostPerUnit").get(function () {
+  return this.purchaseRate + (this.factoryOverhead || 0)
+})
+
 // Virtual for profit per unit
 productSchema.virtual("profitPerUnit").get(function () {
   return this.saleRate - this.purchaseRate
@@ -198,10 +209,10 @@ productSchema.virtual("balancePercentage").get(function () {
   return ((this.quantity / this.purchaseQuantity) * 100).toFixed(2)
 })
 
-// Pre-save middleware to calculate balance amount
+// Pre-save middleware to calculate amounts using purchaseRate + factoryOverhead
 productSchema.pre("save", function (next) {
-  // Calculate balance amount based on current quantity and purchase rate
-  this.balanceAmount = this.quantity * this.purchaseRate
+  const totalCostPerUnit = this.purchaseRate + (this.factoryOverhead || 0)
+  this.balanceAmount = this.quantity * totalCostPerUnit
   next()
 })
 
