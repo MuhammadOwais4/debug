@@ -1984,7 +1984,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     {getOverheadTotal() > 0 && (
                       <div className="bg-amber-50 p-3 rounded border border-amber-200">
                         <span className="text-xs font-medium text-amber-700">Factory Overhead Amount</span>
-                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0))}</div>
+                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * getOverheadTotal())}</div>
                         <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(getOverheadTotal())} × {Number(formData.quantity)}</div>
                       </div>
                     )}
