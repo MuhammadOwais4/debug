@@ -42,6 +42,8 @@ app.use("/api/supplier-payment", require("./routes/supplierPaymentRoutes"))
 app.use("/api/customer-receipt", require("./routes/customerReceiptRoutes"))
 app.use("/api/profit-loss",   require("./routes/Profitlossroutes "))
 app.use("/api/barcodes", require("./routes/Barcoderoutes"))  
+app.use("/api/overhead-categories", require("./routes/Overheadcategoryroutes"))
+
 
 app.use((err, req, res, next) => {
   console.error(err.stack)

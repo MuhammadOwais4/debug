@@ -769,7 +769,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           balanceAmount: balanceAmount,
           totalSoldQuantity: totalSoldQuantity,
           purchaseRate: product.purchaseRate,
-          factoryOverhead: product.factoryOverhead || 0,   // ── NEW
+          factoryOverhead: product.factoryOverhead || 0,
+          factoryOverheadBreakdown: product.factoryOverheadBreakdown || [],
           saleRate: product.saleRate,
           purchaseStockValue: purchaseAmount,
           saleStockValue: balanceQuantity * product.saleRate,
@@ -937,6 +938,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     setEditingVoucherId(null)
     setShowForm(false)
     setError(null)
+    resetOverheadItems()
   }
 
   const resetReturnForm = () => {
@@ -1025,10 +1027,94 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     }
   }
 
+  // ── Factory Overhead Categories — fetched from backend ───────────────────
+  const [OVERHEAD_CATEGORIES, setOVERHEAD_CATEGORIES] = useState([])
+  const [loadingOverheadCats, setLoadingOverheadCats] = useState(true)
+
+  useEffect(() => {
+    const fetchOverheadCategories = async () => {
+      try {
+        setLoadingOverheadCats(true)
+        const res = await ApiHandler.getOverheadCategories()   // GET /api/overhead-categories
+        const cats = (res?.data || res || []).map((cat) => ({
+          id:    cat.id,
+          label: cat.label,
+          icon:  cat.icon  || "➕",
+          color: cat.color || "gray",
+        }))
+        setOVERHEAD_CATEGORIES(cats)
+        // Init overheadItems state once categories are loaded
+        setOverheadItems(Object.fromEntries(cats.map((c) => [c.id, { checked: false, amount: "" }])))
+      } catch (err) {
+        console.error("Error loading overhead categories:", err)
+        // Fallback to hardcoded defaults if API fails
+        const fallback = [
+          { id: "labour",    label: "Labour Cost",        icon: "👷", color: "blue"   },
+          { id: "transport", label: "Transport",           icon: "🚛", color: "green"  },
+          { id: "packaging", label: "Packaging",           icon: "📦", color: "purple" },
+          { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red"    },
+          { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow" },
+          { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange" },
+          { id: "other",     label: "Other",               icon: "➕", color: "gray"   },
+        ]
+        setOVERHEAD_CATEGORIES(fallback)
+        setOverheadItems(Object.fromEntries(fallback.map((c) => [c.id, { checked: false, amount: "" }])))
+      } finally {
+        setLoadingOverheadCats(false)
+      }
+    }
+    fetchOverheadCategories()
+  }, [])
+
+  const COLOR_MAP = {
+    blue:   { border: "border-blue-200",   bg: "bg-blue-50",   check: "accent-blue-600",   text: "text-blue-700",   badge: "bg-blue-100 text-blue-700"   },
+    green:  { border: "border-green-200",  bg: "bg-green-50",  check: "accent-green-600",  text: "text-green-700",  badge: "bg-green-100 text-green-700"  },
+    purple: { border: "border-purple-200", bg: "bg-purple-50", check: "accent-purple-600", text: "text-purple-700", badge: "bg-purple-100 text-purple-700" },
+    red:    { border: "border-red-200",    bg: "bg-red-50",    check: "accent-red-600",    text: "text-red-700",    badge: "bg-red-100 text-red-700"      },
+    yellow: { border: "border-yellow-200", bg: "bg-yellow-50", check: "accent-yellow-600", text: "text-yellow-700", badge: "bg-yellow-100 text-yellow-700" },
+    orange: { border: "border-orange-200", bg: "bg-orange-50", check: "accent-orange-600", text: "text-orange-700", badge: "bg-orange-100 text-orange-700" },
+    gray:   { border: "border-gray-200",   bg: "bg-gray-50",   check: "accent-gray-600",   text: "text-gray-700",   badge: "bg-gray-100 text-gray-700"    },
+  }
+
+  // overheadItems: { [id]: { checked: bool, amount: string } }
+  // Initialized empty; gets populated after overheadCategories loads from API
+  const [overheadItems, setOverheadItems] = useState({})
+
+  // Toggle checkbox
+  const toggleOverhead = (id) => {
+    setOverheadItems((prev) => {
+      const next = { ...prev, [id]: { ...prev[id], checked: !prev[id].checked } }
+      if (!next[id].checked) next[id] = { checked: false, amount: "" }
+      // Sync formData.factoryOverhead
+      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id].checked ? Number(next[c.id].amount) || 0 : 0), 0)
+      setFormData((f) => ({ ...f, factoryOverhead: total.toString() }))
+      return next
+    })
+  }
+
+  // Update amount for a category
+  const setOverheadAmount = (id, val) => {
+    setOverheadItems((prev) => {
+      const next = { ...prev, [id]: { ...prev[id], amount: val } }
+      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id].checked ? Number(next[c.id].amount) || 0 : 0), 0)
+      setFormData((f) => ({ ...f, factoryOverhead: total.toString() }))
+      return next
+    })
+  }
+
+  // Reset overhead items
+  const resetOverheadItems = () => {
+    setOverheadItems(Object.fromEntries(OVERHEAD_CATEGORIES.map((c) => [c.id, { checked: false, amount: "" }])))
+  }
+
+  // Total overhead from checked items
+  const getOverheadTotal = () =>
+    OVERHEAD_CATEGORIES.reduce((s, c) => s + (overheadItems[c.id].checked ? Number(overheadItems[c.id].amount) || 0 : 0), 0)
+
   // ── Helper: total cost per unit = Purchase Rate + Factory Overhead ───────
   const getTotalCostPerUnit = () => {
     const pr = Number(formData.purchaseRate) || 0
-    const fo = Number(formData.factoryOverhead) || 0
+    const fo = getOverheadTotal()
     return pr + fo
   }
 
@@ -1044,7 +1130,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     try {
       const qty = Number(formData.quantity) || 0
       const purchaseRate = Number(formData.purchaseRate) || 0
-      const factoryOverhead = Number(formData.factoryOverhead) || 0   // ── NEW
+      const factoryOverhead = getOverheadTotal()   // ── from checked items
       const saleRate = Number(formData.saleRate) || 0
 
       if (!formData.name || !formData.name.trim()) { setError("Product name is required"); return }
@@ -1068,7 +1154,15 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         name: formData.name.trim(),
         category: formData.category,
         purchaseRate,
-        factoryOverhead,                                               // ── NEW
+        factoryOverhead,
+        factoryOverheadBreakdown: OVERHEAD_CATEGORIES
+          .filter((cat) => overheadItems[cat.id].checked && Number(overheadItems[cat.id].amount) > 0)
+          .map((cat) => ({
+            id:     cat.id,
+            label:  cat.label,
+            icon:   cat.icon,
+            amount: Number(overheadItems[cat.id].amount) || 0,
+          })),
         saleRate,
         quantity: qty,
         serialNumber: formData.serialNumber,
@@ -1137,13 +1231,29 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     const dateForForm = entry.date ? formatDateToYYYYMMDD(new Date(entry.date.split("-").reverse().join("-"))) : ""
     const vendorObj = vendors.find((v) => v.name === entry.vendorName)
     const vendorNameForForm = vendorObj?.name || entry.vendorName || ""
+
+    // ── Restore overhead breakdown checkboxes from saved data ─────────────
+    const savedBreakdown = entry.factoryOverheadBreakdown || []
+    const restoredItems = Object.fromEntries(
+      OVERHEAD_CATEGORIES.map(cat => {
+        const saved = savedBreakdown.find(b => b.id === cat.id)
+        return [cat.id, saved
+          ? { checked: true,  amount: saved.amount.toString() }
+          : { checked: false, amount: "" }
+        ]
+      })
+    )
+    setOverheadItems(restoredItems)
+
+    const totalOverhead = savedBreakdown.reduce((s, b) => s + (Number(b.amount) || 0), 0)
+
     setFormData({
       date: dateForForm,
       name: entry.itemName,
       category: entry.category,
       quantity: entry.balanceQuantity.toString(),
       purchaseRate: entry.purchaseRate.toString(),
-      factoryOverhead: (entry.factoryOverhead || 0).toString(),   // ── NEW
+      factoryOverhead: totalOverhead.toString(),
       saleRate: entry.saleRate.toString(),
       customerName: entry.customerName || "",
       vendorPhone: entry.vendorPhone || "",
@@ -1658,7 +1768,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 {/* ── Quantity & Pricing ── */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Quantity & Pricing</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity <span className="text-red-500">*</span></label>
                       <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} required min="0" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter quantity" />
@@ -1669,34 +1779,133 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <input type="number" name="purchaseRate" value={formData.purchaseRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter purchase rate" />
                     </div>
 
-                    {/* ── NEW: Factory Overhead field ── */}
-                    <div>
-                      <label className="block text-sm font-medium text-amber-700 mb-1">
-                        Factory Overhead
-                        <span className="ml-1 text-xs font-normal text-gray-400">(per unit)</span>
-                      </label>
-                      <input
-                        type="number"
-                        name="factoryOverhead"
-                        value={formData.factoryOverhead}
-                        onChange={handleChange}
-                        min="0"
-                        step="0.01"
-                        className="w-full p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-amber-50"
-                        placeholder="0.00"
-                      />
-                      {Number(formData.factoryOverhead) > 0 && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          Total cost/unit: {formatCurrency(getTotalCostPerUnit())}
-                        </p>
-                      )}
-                    </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Sale Rate <span className="text-red-500">*</span></label>
                       <input type="number" name="saleRate" value={formData.saleRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter sale rate" />
                     </div>
                   </div>
+                </div>
+
+                {/* ── Factory Overhead Breakdown ── */}
+                <div className="border-2 border-amber-200 rounded-xl overflow-hidden">
+                  {/* Section Header */}
+                  <div className="bg-amber-50 px-4 py-3 flex items-center justify-between border-b border-amber-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🏭</span>
+                      <h3 className="text-base font-semibold text-amber-800">Factory Overhead</h3>
+                      <span className="text-xs text-amber-600 font-normal">(per unit — select applicable costs)</span>
+                    </div>
+                    {getOverheadTotal() > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-amber-600">Total O/H:</span>
+                        <span className="bg-amber-600 text-white text-sm font-bold px-3 py-0.5 rounded-full">
+                          {formatCurrency(getOverheadTotal())}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Category Grid */}
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 bg-white">
+                    {loadingOverheadCats ? (
+                      <div className="col-span-4 flex items-center justify-center py-8 gap-3 text-amber-500">
+                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        <span className="text-sm font-medium">Loading overhead categories...</span>
+                      </div>
+                    ) : (
+                      <>
+                        {OVERHEAD_CATEGORIES.map((cat) => {
+                          const item = overheadItems[cat.id] || { checked: false, amount: "" }
+                          const c = COLOR_MAP[cat.color] || COLOR_MAP.gray
+                          return (
+                            <div
+                              key={cat.id}
+                              className={`rounded-xl border-2 transition-all ${item.checked ? `${c.border} ${c.bg}` : "border-gray-200 bg-gray-50"}`}
+                            >
+                              {/* Checkbox Row */}
+                              <label className="flex items-center gap-2 px-3 pt-3 pb-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={item.checked}
+                                  onChange={() => toggleOverhead(cat.id)}
+                                  className={`w-4 h-4 rounded ${item.checked ? c.check : "accent-gray-400"}`}
+                                />
+                                <span className="text-base">{cat.icon}</span>
+                                <span className={`text-sm font-semibold ${item.checked ? c.text : "text-gray-500"}`}>
+                                  {cat.label}
+                                </span>
+                              </label>
+
+                              {/* Amount Input — only when checked */}
+                              {item.checked && (
+                                <div className="px-3 pb-3">
+                                  <div className="relative">
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">₨</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={item.amount}
+                                      onChange={(e) => setOverheadAmount(cat.id, e.target.value)}
+                                      placeholder="0.00"
+                                      className={`w-full pl-6 pr-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${c.border} bg-white font-semibold ${c.text}`}
+                                      autoFocus
+                                    />
+                                  </div>
+                                  {Number(item.amount) > 0 && (
+                                    <p className="text-xs mt-1 text-center font-medium opacity-70">
+                                      <span className={c.text}>{formatCurrency(Number(item.amount))} / unit</span>
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Selected Items Summary Bar */}
+                  {getOverheadTotal() > 0 && (
+                    <div className="bg-amber-50 border-t border-amber-200 px-4 py-3">
+                      <p className="text-xs font-semibold text-amber-700 mb-2">Selected Overhead Items:</p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {OVERHEAD_CATEGORIES.filter((c) => overheadItems[c.id]?.checked && Number(overheadItems[c.id]?.amount) > 0).map((cat) => {
+                          const c = COLOR_MAP[cat.color]
+                          return (
+                            <span key={cat.id} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${c.badge}`}>
+                              {cat.icon} {cat.label}: {formatCurrency(Number(overheadItems[cat.id].amount))}
+                            </span>
+                          )
+                        })}
+                      </div>
+
+                      {/* Formula Row */}
+                      {Number(formData.purchaseRate) > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 bg-white rounded-lg px-3 py-2 border border-amber-200 text-sm">
+                          <span className="text-gray-500">Purchase Rate:</span>
+                          <span className="font-bold text-blue-700">{formatCurrency(Number(formData.purchaseRate))}</span>
+                          <span className="text-gray-400 font-bold">+</span>
+                          <span className="text-gray-500">Factory O/H:</span>
+                          <span className="font-bold text-amber-700">{formatCurrency(getOverheadTotal())}</span>
+                          <span className="text-gray-400 font-bold">=</span>
+                          <span className="text-gray-600">Total Cost/Unit:</span>
+                          <span className="font-extrabold text-green-700">{formatCurrency(getTotalCostPerUnit())}</span>
+                          {Number(formData.quantity) > 0 && (
+                            <>
+                              <span className="text-gray-400 mx-1">|</span>
+                              <span className="text-gray-500">× {Number(formData.quantity)} units =</span>
+                              <span className="font-extrabold text-green-700 text-base">{formatCurrency(getTotalPurchaseAmount())}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Vendor Information ── */}
@@ -1738,8 +1947,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
 
-                  {/* ── Rate breakdown row (always visible when overhead entered) ── */}
-                  {Number(formData.factoryOverhead) > 0 && (
+                  {getOverheadTotal() > 0 && (
                     <div className="mb-4 p-3 bg-white rounded-lg border border-amber-200 flex flex-wrap items-center gap-3 text-sm">
                       <div className="flex items-center gap-1">
                         <span className="text-gray-500">Purchase Rate:</span>
@@ -1748,7 +1956,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <span className="text-gray-400 font-bold">+</span>
                       <div className="flex items-center gap-1">
                         <span className="text-gray-500">Factory O/H:</span>
-                        <span className="font-bold text-amber-600">{formatCurrency(Number(formData.factoryOverhead))}</span>
+                        <span className="font-bold text-amber-600">{formatCurrency(getOverheadTotal())}</span>
                       </div>
                       <span className="text-gray-400 font-bold">=</span>
                       <div className="flex items-center gap-1">
@@ -1773,22 +1981,21 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
                       <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))} × {Number(formData.quantity)}</div>
                     </div>
-                    {Number(formData.factoryOverhead) > 0 && (
+                    {getOverheadTotal() > 0 && (
                       <div className="bg-amber-50 p-3 rounded border border-amber-200">
                         <span className="text-xs font-medium text-amber-700">Factory Overhead Amount</span>
-                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.factoryOverhead) || 0))}</div>
-                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(Number(formData.factoryOverhead))} × {Number(formData.quantity)}</div>
+                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * getOverheadTotal())}</div>
+                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(getOverheadTotal())} × {Number(formData.quantity)}</div>
                       </div>
                     )}
-                    {/* ── Total Purchase Amount (Purchase Rate + Factory OH) × Qty ── */}
-                    <div className={`p-3 rounded border-2 ${Number(formData.factoryOverhead) > 0 ? "bg-green-50 border-green-300" : "bg-white border-blue-100"}`}>
+                    <div className={`p-3 rounded border-2 ${getOverheadTotal() > 0 ? "bg-green-50 border-green-300" : "bg-white border-blue-100"}`}>
                       <span className="text-xs font-medium text-gray-600">
-                        {Number(formData.factoryOverhead) > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
+                        {getOverheadTotal() > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
                       </span>
-                      <div className={`text-lg font-extrabold ${Number(formData.factoryOverhead) > 0 ? "text-green-700" : "text-blue-700"}`}>
+                      <div className={`text-lg font-extrabold ${getOverheadTotal() > 0 ? "text-green-700" : "text-blue-700"}`}>
                         {formatCurrency(getTotalPurchaseAmount())}
                       </div>
-                      {Number(formData.factoryOverhead) > 0 && (
+                      {getOverheadTotal() > 0 && (
                         <div className="text-xs text-green-600 mt-0.5">{formatCurrency(getTotalCostPerUnit())} × {Number(formData.quantity)}</div>
                       )}
                     </div>
