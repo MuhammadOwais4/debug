@@ -64,7 +64,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     script.async = true
     script.onload = () => { zxingRef.current = window.ZXing }
     script.onerror = () => {
-      // Fallback: try alternate CDN
       const s2 = document.createElement("script")
       s2.src = "https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"
       s2.async = true
@@ -80,7 +79,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     navigator.mediaDevices?.enumerateDevices().then((devices) => {
       const videoDevices = devices.filter((d) => d.kind === "videoinput")
       setCameras(videoDevices)
-      // Prefer back camera for mobile
       const back = videoDevices.find((d) => /back|rear|environment/i.test(d.label))
       setSelectedCamera(back?.deviceId || videoDevices[0]?.deviceId || "")
     }).catch(() => setCameras([]))
@@ -140,7 +138,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
         const ctx = canvas.getContext("2d")
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-        // Try ZXing
         if (zxingRef.current && !scanCooldown.current) {
           try {
             const ZXing = zxingRef.current
@@ -171,9 +168,7 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                 setTimeout(() => { scanCooldown.current = false; setLastScannedCode("") }, 2500)
               }
             }
-          } catch (_) {
-            // No barcode in frame — normal, keep scanning
-          }
+          } catch (_) {}
         }
       }
       animFrameRef.current = requestAnimationFrame(tick)
@@ -202,7 +197,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     return () => { window.removeEventListener("keydown", handleKeyDown); clearTimeout(barcodeTimer.current) }
   }, [activeTab])
 
-  // Auto-focus input on hardware tab
   useEffect(() => {
     if (activeTab === "hardware" && inputRef.current) inputRef.current.focus()
   }, [activeTab])
@@ -258,7 +252,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     onClose()
   }
 
-  // ── Tab switch cleanup ───────────────────────────────────────────────────
   const switchTab = (tab) => {
     if (tab !== "camera") stopCamera()
     setActiveTab(tab)
@@ -313,7 +306,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
             {/* ── CAMERA TAB ── */}
             {activeTab === "camera" && (
               <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-                {/* Camera selector */}
                 {cameras.length > 1 && (
                   <div className="mb-3 flex items-center gap-2">
                     <label className="text-sm text-gray-600 font-medium flex-shrink-0">Camera:</label>
@@ -331,7 +323,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   </div>
                 )}
 
-                {/* Video preview */}
                 <div className="relative bg-black rounded-2xl overflow-hidden flex-shrink-0" style={{ aspectRatio: "16/9", maxHeight: "320px" }}>
                   <video
                     ref={videoRef}
@@ -352,16 +343,13 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                     </div>
                   )}
 
-                  {/* Scanning overlay */}
                   {cameraActive && (
                     <div className="absolute inset-0 pointer-events-none">
-                      {/* Corner markers */}
                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-36">
                         <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
                         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
                         <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
                         <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
-                        {/* Scan line animation */}
                         <div
                           className="absolute left-2 right-2 h-0.5 bg-emerald-400 opacity-80"
                           style={{ animation: "scanLine 2s linear infinite", top: "50%" }}
@@ -376,7 +364,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   )}
                 </div>
 
-                {/* Scan line CSS */}
                 <style>{`
                   @keyframes scanLine {
                     0% { top: 10%; }
@@ -385,7 +372,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   }
                 `}</style>
 
-                {/* Camera error */}
                 {cameraError && (
                   <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
                     <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -393,7 +379,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   </div>
                 )}
 
-                {/* Start/Stop button */}
                 <div className="mt-3 flex gap-2">
                   {!cameraActive ? (
                     <button
@@ -414,7 +399,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   )}
                 </div>
 
-                {/* Scan result flash */}
                 {scanResult && (
                   <div className={`mt-3 p-3 rounded-xl border-2 flex items-center gap-3 ${scanResult.status === "found" ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
                     {scanResult.status === "found" ? (
@@ -425,7 +409,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   </div>
                 )}
 
-                {/* Scan history */}
                 {scanHistory.length > 0 && (
                   <div className="mt-4">
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Recent Scans</h4>
@@ -529,7 +512,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                   </button>
                 </div>
 
-                {/* Quick product list */}
                 <div>
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Quick Add (tap to add)</h4>
                   <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -685,6 +667,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     category: "",
     quantity: "",
     purchaseRate: "",
+    factoryOverhead: "",          // ── NEW: Factory Overhead field
     saleRate: "",
     customerName: "",
     vendorPhone: "",
@@ -786,6 +769,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           balanceAmount: balanceAmount,
           totalSoldQuantity: totalSoldQuantity,
           purchaseRate: product.purchaseRate,
+          factoryOverhead: product.factoryOverhead || 0,   // ── NEW
           saleRate: product.saleRate,
           purchaseStockValue: purchaseAmount,
           saleStockValue: balanceQuantity * product.saleRate,
@@ -892,13 +876,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           saleRate: item.saleRate,
         }
 
-        // Use updateStock API to add quantity
         await ApiHandler.updateStock(item.product._id, {
           quantity: item.qty,
           operation: "add",
         })
 
-        // Update rates if changed
         if (
           item.purchaseRate !== item.product.purchaseRate ||
           item.saleRate !== item.product.saleRate
@@ -937,6 +919,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       category: "",
       quantity: "",
       purchaseRate: "",
+      factoryOverhead: "",          // ── NEW
       saleRate: "",
       customerName: "",
       vendorPhone: "",
@@ -1033,6 +1016,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           ...prev,
           category: product.category || "",
           purchaseRate: product.purchaseRate || "",
+          factoryOverhead: product.factoryOverhead || "",   // ── NEW
           saleRate: product.saleRate || "",
           serialNumber: product.serialNumber || "",
           vendorName: product.vendorName || "",
@@ -1041,12 +1025,20 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     }
   }
 
+  // ── Helper: total cost per unit including factory overhead ───────────────
+  const getTotalCostPerUnit = () => {
+    const pr = Number(formData.purchaseRate) || 0
+    const fo = Number(formData.factoryOverhead) || 0
+    return pr + fo
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
     try {
       const qty = Number(formData.quantity) || 0
       const purchaseRate = Number(formData.purchaseRate) || 0
+      const factoryOverhead = Number(formData.factoryOverhead) || 0   // ── NEW
       const saleRate = Number(formData.saleRate) || 0
 
       if (!formData.name || !formData.name.trim()) { setError("Product name is required"); return }
@@ -1063,12 +1055,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       if (!selectedVendor) { setError("Selected vendor not found"); return }
       if (!selectedPurchaseAccount) { setError("Selected purchase type not found"); return }
 
-      const totalPurchaseAmount = qty * purchaseRate
+      const totalCostPerUnit = purchaseRate + factoryOverhead          // ── NEW
+      const totalPurchaseAmount = qty * totalCostPerUnit               // ── NEW: includes overhead
 
       const productData = {
         name: formData.name.trim(),
         category: formData.category,
         purchaseRate,
+        factoryOverhead,                                               // ── NEW
         saleRate,
         quantity: qty,
         serialNumber: formData.serialNumber,
@@ -1105,15 +1099,15 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             voucherDate: formData.date,
             narration: `Goods Receipt Note - ${formData.name}`,
             entries: [
-              { pairId: "PAIR001", entryType: "DEBIT", account: `${selectedPurchaseAccount.code} - ${selectedPurchaseAccount.name}`, description: `Purchase of ${formData.name} (Qty: ${qty} @ ${purchaseRate})`, debitAmount: totalPurchaseAmount, creditAmount: 0, serialNo: 1 },
-              { pairId: "PAIR001", entryType: "CREDIT", account: `${selectedVendor.code} - ${selectedVendor.name}`, description: `Stock received - ${formData.name} (Qty: ${qty} @ ${purchaseRate})`, debitAmount: 0, creditAmount: totalPurchaseAmount, serialNo: 2 },
+              { pairId: "PAIR001", entryType: "DEBIT", account: `${selectedPurchaseAccount.code} - ${selectedPurchaseAccount.name}`, description: `Purchase of ${formData.name} (Qty: ${qty} @ ${purchaseRate} + OH: ${factoryOverhead})`, debitAmount: totalPurchaseAmount, creditAmount: 0, serialNo: 1 },
+              { pairId: "PAIR001", entryType: "CREDIT", account: `${selectedVendor.code} - ${selectedVendor.name}`, description: `Stock received - ${formData.name} (Qty: ${qty} @ ${totalCostPerUnit})`, debitAmount: 0, creditAmount: totalPurchaseAmount, serialNo: 2 },
             ],
           }
           const voucherResponse = await ApiHandler.createVoucher(voucherData)
           if (!voucherResponse || !voucherResponse.data || !voucherResponse.data._id) throw new Error("Failed to create voucher - no ID returned")
           await ApiHandler.updateProduct(response._id, { ...productData, voucherId: voucherResponse.data._id })
           emitVoucherChangedEvent()
-          await createNotification("success", "Stock Entry & Voucher Created", `Purchase of ${formData.name} for ${totalPurchaseAmount} has been recorded in ledger`, "high", response._id)
+          await createNotification("success", "Stock Entry & Voucher Created", `Purchase of ${formData.name} for ${formatCurrency(totalPurchaseAmount)} has been recorded in ledger`, "high", response._id)
         } catch (voucherErr) {
           console.error("[GRN] Error creating voucher entry:", voucherErr)
           await createNotification("warning", "Stock Entry Created (Voucher Failed)", `Stock entry added but voucher creation failed: ${voucherErr.message}`, "high", response._id)
@@ -1143,6 +1137,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       category: entry.category,
       quantity: entry.balanceQuantity.toString(),
       purchaseRate: entry.purchaseRate.toString(),
+      factoryOverhead: (entry.factoryOverhead || 0).toString(),   // ── NEW
       saleRate: entry.saleRate.toString(),
       customerName: entry.customerName || "",
       vendorPhone: entry.vendorPhone || "",
@@ -1191,11 +1186,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     printWindow.document.write("</head><body>")
     printWindow.document.write("<h1>Goods Receipt Note</h1><h2>Stock Management Report</h2>")
     printWindow.document.write(`<div class="meta">Generated on: ${formatDateToDDMMYYYY(new Date())}</div>`)
-    printWindow.document.write("<table><thead><tr><th>Date</th><th>GRN No.</th><th>Product Name</th><th>Category</th><th>Vendor</th><th class='text-right'>Purchase Qty</th><th class='text-right'>Purchase Amount</th><th class='text-right'>Balance Qty</th><th class='text-right'>Balance Amount</th><th class='text-right'>Sale Rate</th><th class='text-right'>Profit</th></tr></thead><tbody>")
+    printWindow.document.write("<table><thead><tr><th>Date</th><th>GRN No.</th><th>Product Name</th><th>Category</th><th>Vendor</th><th class='text-right'>Purchase Qty</th><th class='text-right'>Purchase Amount</th><th class='text-right'>Factory O/H</th><th class='text-right'>Balance Qty</th><th class='text-right'>Balance Amount</th><th class='text-right'>Sale Rate</th><th class='text-right'>Profit</th></tr></thead><tbody>")
     filteredEntries.forEach((entry) => {
-      printWindow.document.write(`<tr><td>${entry.date}</td><td>${entry.grn || "-"}</td><td>${entry.itemName}</td><td>${entry.category}</td><td>${entry.vendorName || "-"}</td><td class="text-right">${entry.purchaseQuantity}</td><td class="text-right">${formatCurrency(entry.purchaseAmount)}</td><td class="text-right">${entry.balanceQuantity}</td><td class="text-right">${formatCurrency(entry.balanceAmount)}</td><td class="text-right">${formatCurrency(entry.saleRate)}</td><td class="text-right ${entry.profit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(entry.profit)}</td></tr>`)
+      printWindow.document.write(`<tr><td>${entry.date}</td><td>${entry.grn || "-"}</td><td>${entry.itemName}</td><td>${entry.category}</td><td>${entry.vendorName || "-"}</td><td class="text-right">${entry.purchaseQuantity}</td><td class="text-right">${formatCurrency(entry.purchaseAmount)}</td><td class="text-right">${formatCurrency(entry.factoryOverhead || 0)}</td><td class="text-right">${entry.balanceQuantity}</td><td class="text-right">${formatCurrency(entry.balanceAmount)}</td><td class="text-right">${formatCurrency(entry.saleRate)}</td><td class="text-right ${entry.profit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(entry.profit)}</td></tr>`)
     })
-    printWindow.document.write(`<tr class="totals"><td colspan="6" class="text-right">Totals:</td><td class="text-right">${formatCurrency(subtotals.purchaseAmount)}</td><td class="text-right">${subtotals.balanceQuantity}</td><td class="text-right">${formatCurrency(subtotals.balanceAmount)}</td><td class="text-right"></td><td class="text-right ${subtotals.totalProfit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(subtotals.totalProfit)}</td></tr>`)
+    printWindow.document.write(`<tr class="totals"><td colspan="6" class="text-right">Totals:</td><td class="text-right">${formatCurrency(subtotals.purchaseAmount)}</td><td class="text-right">${formatCurrency(subtotals.totalFactoryOverhead)}</td><td class="text-right">${subtotals.balanceQuantity}</td><td class="text-right">${formatCurrency(subtotals.balanceAmount)}</td><td class="text-right"></td><td class="text-right ${subtotals.totalProfit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(subtotals.totalProfit)}</td></tr>`)
     printWindow.document.write("</tbody></table><div class='footer'>Created by Soft-Technix</div></body></html>")
     printWindow.document.close()
     printWindow.print()
@@ -1203,8 +1198,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
   const handleExport = () => {
     const csvContent = [
-      ["Date", "GRN No.", "Item Name", "Category", "Vendor", "Purchase Qty", "Purchase Rate", "Purchase Amount", "Balance Qty", "Balance Amount", "Sale Rate", "Sold Qty", "Profit"],
-      ...filteredEntries.map((entry) => [entry.date, entry.grn || "-", entry.itemName, entry.category, entry.vendorName || "-", entry.purchaseQuantity, entry.purchaseRate, entry.purchaseAmount, entry.balanceQuantity, entry.balanceAmount, entry.saleRate, entry.totalSoldQuantity, entry.profit]),
+      ["Date", "GRN No.", "Item Name", "Category", "Vendor", "Purchase Qty", "Purchase Rate", "Factory Overhead", "Purchase Amount", "Balance Qty", "Balance Amount", "Sale Rate", "Sold Qty", "Profit"],
+      ...filteredEntries.map((entry) => [entry.date, entry.grn || "-", entry.itemName, entry.category, entry.vendorName || "-", entry.purchaseQuantity, entry.purchaseRate, entry.factoryOverhead || 0, entry.purchaseAmount, entry.balanceQuantity, entry.balanceAmount, entry.saleRate, entry.totalSoldQuantity, entry.profit]),
     ].map((row) => row.join(",")).join("\n")
 
     const blob = new Blob([csvContent], { type: "text/csv" })
@@ -1239,8 +1234,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       balanceAmount: acc.balanceAmount + entry.balanceAmount,
       totalSoldQuantity: acc.totalSoldQuantity + entry.totalSoldQuantity,
       totalProfit: acc.totalProfit + (entry.profit || 0),
+      totalFactoryOverhead: acc.totalFactoryOverhead + (entry.factoryOverhead || 0),  // ── NEW
     }),
-    { purchaseQuantity: 0, purchaseAmount: 0, balanceQuantity: 0, balanceAmount: 0, totalSoldQuantity: 0, totalProfit: 0 }
+    { purchaseQuantity: 0, purchaseAmount: 0, balanceQuantity: 0, balanceAmount: 0, totalSoldQuantity: 0, totalProfit: 0, totalFactoryOverhead: 0 }
   )
 
   const formatCurrency = (value) =>
@@ -1280,7 +1276,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           <p className="text-sm text-gray-600">Manage product inventory and stock levels</p>
         </div>
         <div className="flex gap-2 flex-wrap mt-4 md:mt-0">
-          {/* ── SCANNER BUTTON ── */}
           <button
             className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
             onClick={() => setShowScanner(true)}
@@ -1438,6 +1433,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
+              {/* ── NEW: Factory Overhead column ── */}
+              <th className="px-4 py-3 text-right text-xs font-medium text-amber-600 uppercase tracking-wider bg-amber-50">Factory O/H</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Amount</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
@@ -1457,6 +1454,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorName || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{entry.purchaseQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(entry.purchaseRate)}</td>
+                  {/* ── NEW: Factory Overhead cell – only show if > 0 ── */}
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-right bg-amber-50">
+                    {entry.factoryOverhead > 0 ? (
+                      <span className="text-amber-700 font-semibold">{formatCurrency(entry.factoryOverhead)}</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-bold">{formatCurrency(entry.purchaseAmount)}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{entry.balanceQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-green-600 text-right font-bold">{formatCurrency(entry.balanceAmount)}</td>
@@ -1476,7 +1481,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               ))
             ) : (
               <tr>
-                <td colSpan="13" className="px-4 py-8 text-center text-sm text-gray-500">No products found. Add some products to get started.</td>
+                <td colSpan="14" className="px-4 py-8 text-center text-sm text-gray-500">No products found. Add some products to get started.</td>
               </tr>
             )}
           </tbody>
@@ -1486,6 +1491,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <td colSpan="5" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.purchaseQuantity}</td>
                 <td className="px-4 py-4"></td>
+                {/* ── NEW: Factory Overhead total ── */}
+                <td className="px-4 py-4 text-sm font-bold text-amber-700 text-right bg-amber-50">{formatCurrency(subtotals.totalFactoryOverhead)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-blue-600 text-right">{formatCurrency(subtotals.purchaseAmount)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.balanceQuantity}</td>
                 <td className="px-4 py-4 text-sm font-bold text-green-600 text-right">{formatCurrency(subtotals.balanceAmount)}</td>
@@ -1584,7 +1591,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       )}
 
-      {/* Product Form Modal */}
+      {/* ─── Product Form Modal (Add / Edit) ─────────────────────────────── */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
           <div className="bg-white p-6 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
@@ -1595,14 +1602,33 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"><p className="text-sm text-red-800">{error}</p></div>}
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
+
+                {/* ── Product Details ── */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    {/* ── NEW: Edit Date field (top of form) ── */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {isEditing ? "Edit Date" : "Purchase Date"} <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        name="date"
+                        value={formData.date}
+                        onChange={handleChange}
+                        required
+                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item / Model Name <span className="text-red-500">*</span></label>
                       <input type="text" name="name" value={formData.name} onChange={handleChange} required className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter product name" list="products-list" />
                       <datalist id="products-list">{products.map((product) => (<option key={product._id} value={product.name} />))}</datalist>
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
                       <select name="category" value={formData.category} onChange={handleChange} required className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
@@ -1610,33 +1636,64 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                         {productCategories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                       </select>
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
                       <input type="text" name="serialNumber" value={formData.serialNumber} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter serial number" />
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date (Optional)</label>
                       <input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                     </div>
                   </div>
                 </div>
+
+                {/* ── Quantity & Pricing ── */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Quantity & Pricing</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity <span className="text-red-500">*</span></label>
                       <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} required min="0" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter quantity" />
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Rate <span className="text-red-500">*</span></label>
                       <input type="number" name="purchaseRate" value={formData.purchaseRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter purchase rate" />
                     </div>
+
+                    {/* ── NEW: Factory Overhead field ── */}
+                    <div>
+                      <label className="block text-sm font-medium text-amber-700 mb-1">
+                        Factory Overhead
+                        <span className="ml-1 text-xs font-normal text-gray-400">(per unit)</span>
+                      </label>
+                      <input
+                        type="number"
+                        name="factoryOverhead"
+                        value={formData.factoryOverhead}
+                        onChange={handleChange}
+                        min="0"
+                        step="0.01"
+                        className="w-full p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 bg-amber-50"
+                        placeholder="0.00"
+                      />
+                      {Number(formData.factoryOverhead) > 0 && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Total cost/unit: {formatCurrency(getTotalCostPerUnit())}
+                        </p>
+                      )}
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Sale Rate <span className="text-red-500">*</span></label>
                       <input type="number" name="saleRate" value={formData.saleRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter sale rate" />
                     </div>
                   </div>
                 </div>
+
+                {/* ── Vendor Information ── */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Vendor Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1669,17 +1726,47 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   </div>
                 </div>
               </div>
+
+              {/* ── Purchase Summary ── */}
               {formData.quantity && formData.purchaseRate && formData.saleRate && (
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white p-3 rounded border border-blue-100"><span className="text-xs font-medium text-gray-600">Purchase Quantity</span><div className="text-lg font-bold text-blue-900">{Number(formData.quantity) || 0}</div></div>
-                    <div className="bg-white p-3 rounded border border-blue-100"><span className="text-xs font-medium text-gray-600">Purchase Amount</span><div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div></div>
-                    <div className="bg-white p-3 rounded border border-blue-100"><span className="text-xs font-medium text-gray-600">Balance Quantity</span><div className="text-lg font-bold text-green-900">{Number(formData.quantity) || 0}</div></div>
-                    <div className="bg-white p-3 rounded border border-blue-100"><span className="text-xs font-medium text-gray-600">Balance Amount</span><div className="text-lg font-bold text-green-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div></div>
+                    <div className="bg-white p-3 rounded border border-blue-100">
+                      <span className="text-xs font-medium text-gray-600">Purchase Quantity</span>
+                      <div className="text-lg font-bold text-blue-900">{Number(formData.quantity) || 0}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-100">
+                      <span className="text-xs font-medium text-gray-600">Purchase Amount</span>
+                      <div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
+                    </div>
+                    {/* ── NEW: Factory Overhead summary box ── */}
+                    {Number(formData.factoryOverhead) > 0 && (
+                      <div className="bg-amber-50 p-3 rounded border border-amber-200">
+                        <span className="text-xs font-medium text-amber-700">Factory Overhead</span>
+                        <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.factoryOverhead) || 0))}</div>
+                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(Number(formData.factoryOverhead))} × {Number(formData.quantity)} units</div>
+                      </div>
+                    )}
+                    {/* ── NEW: Total Cost (purchase + overhead) ── */}
+                    {Number(formData.factoryOverhead) > 0 && (
+                      <div className="bg-white p-3 rounded border border-blue-200">
+                        <span className="text-xs font-medium text-gray-600">Total Cost (incl. O/H)</span>
+                        <div className="text-lg font-bold text-blue-800">{formatCurrency((Number(formData.quantity) || 0) * getTotalCostPerUnit())}</div>
+                      </div>
+                    )}
+                    <div className="bg-white p-3 rounded border border-blue-100">
+                      <span className="text-xs font-medium text-gray-600">Balance Quantity</span>
+                      <div className="text-lg font-bold text-green-900">{Number(formData.quantity) || 0}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-blue-100">
+                      <span className="text-xs font-medium text-gray-600">Balance Amount</span>
+                      <div className="text-lg font-bold text-green-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
+                    </div>
                   </div>
                 </div>
               )}
+
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2" disabled={loading || loadingVendors || loadingPurchases}>
@@ -1781,8 +1868,13 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               </div>
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Pricing Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div><label className="block text-sm font-medium text-gray-700">Purchase Rate</label><p className="text-sm text-gray-900 font-medium">{formatCurrency(selectedEntry.purchaseRate)}</p></div>
+                  {/* ── NEW: Factory Overhead in details ── */}
+                  <div>
+                    <label className="block text-sm font-medium text-amber-700">Factory Overhead</label>
+                    <p className="text-sm text-amber-700 font-medium">{selectedEntry.factoryOverhead > 0 ? formatCurrency(selectedEntry.factoryOverhead) : "N/A"}</p>
+                  </div>
                   <div><label className="block text-sm font-medium text-gray-700">Sale Rate</label><p className="text-sm text-gray-900 font-medium">{formatCurrency(selectedEntry.saleRate)}</p></div>
                   <div><label className="block text-sm font-medium text-gray-700">Potential Profit</label><p className={`text-sm font-medium ${selectedEntry.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(selectedEntry.profit)}</p></div>
                 </div>
