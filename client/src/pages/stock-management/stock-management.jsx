@@ -1025,11 +1025,17 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     }
   }
 
-  // ── Helper: total cost per unit including factory overhead ───────────────
+  // ── Helper: total cost per unit = Purchase Rate + Factory Overhead ───────
   const getTotalCostPerUnit = () => {
     const pr = Number(formData.purchaseRate) || 0
     const fo = Number(formData.factoryOverhead) || 0
     return pr + fo
+  }
+
+  // ── Helper: total purchase amount = qty × (purchaseRate + factoryOverhead)
+  const getTotalPurchaseAmount = () => {
+    const qty = Number(formData.quantity) || 0
+    return qty * getTotalCostPerUnit()
   }
 
   const handleSubmit = async (e) => {
@@ -1731,37 +1737,68 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               {formData.quantity && formData.purchaseRate && formData.saleRate && (
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
+
+                  {/* ── Rate breakdown row (always visible when overhead entered) ── */}
+                  {Number(formData.factoryOverhead) > 0 && (
+                    <div className="mb-4 p-3 bg-white rounded-lg border border-amber-200 flex flex-wrap items-center gap-3 text-sm">
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-500">Purchase Rate:</span>
+                        <span className="font-bold text-blue-700">{formatCurrency(Number(formData.purchaseRate))}</span>
+                      </div>
+                      <span className="text-gray-400 font-bold">+</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-500">Factory O/H:</span>
+                        <span className="font-bold text-amber-600">{formatCurrency(Number(formData.factoryOverhead))}</span>
+                      </div>
+                      <span className="text-gray-400 font-bold">=</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-500">Total Cost/Unit:</span>
+                        <span className="font-bold text-green-700 text-base">{formatCurrency(getTotalCostPerUnit())}</span>
+                      </div>
+                      <span className="text-gray-300 mx-1">|</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-500">× {Number(formData.quantity)} units =</span>
+                        <span className="font-extrabold text-green-700 text-base">{formatCurrency(getTotalPurchaseAmount())}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Purchase Quantity</span>
                       <div className="text-lg font-bold text-blue-900">{Number(formData.quantity) || 0}</div>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-100">
-                      <span className="text-xs font-medium text-gray-600">Purchase Amount</span>
+                      <span className="text-xs font-medium text-gray-600">Purchase Rate Amount</span>
                       <div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))} × {Number(formData.quantity)}</div>
                     </div>
-                    {/* ── NEW: Factory Overhead summary box ── */}
                     {Number(formData.factoryOverhead) > 0 && (
                       <div className="bg-amber-50 p-3 rounded border border-amber-200">
-                        <span className="text-xs font-medium text-amber-700">Factory Overhead</span>
+                        <span className="text-xs font-medium text-amber-700">Factory Overhead Amount</span>
                         <div className="text-lg font-bold text-amber-700">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.factoryOverhead) || 0))}</div>
-                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(Number(formData.factoryOverhead))} × {Number(formData.quantity)} units</div>
+                        <div className="text-xs text-amber-500 mt-0.5">{formatCurrency(Number(formData.factoryOverhead))} × {Number(formData.quantity)}</div>
                       </div>
                     )}
-                    {/* ── NEW: Total Cost (purchase + overhead) ── */}
-                    {Number(formData.factoryOverhead) > 0 && (
-                      <div className="bg-white p-3 rounded border border-blue-200">
-                        <span className="text-xs font-medium text-gray-600">Total Cost (incl. O/H)</span>
-                        <div className="text-lg font-bold text-blue-800">{formatCurrency((Number(formData.quantity) || 0) * getTotalCostPerUnit())}</div>
+                    {/* ── Total Purchase Amount (Purchase Rate + Factory OH) × Qty ── */}
+                    <div className={`p-3 rounded border-2 ${Number(formData.factoryOverhead) > 0 ? "bg-green-50 border-green-300" : "bg-white border-blue-100"}`}>
+                      <span className="text-xs font-medium text-gray-600">
+                        {Number(formData.factoryOverhead) > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
+                      </span>
+                      <div className={`text-lg font-extrabold ${Number(formData.factoryOverhead) > 0 ? "text-green-700" : "text-blue-700"}`}>
+                        {formatCurrency(getTotalPurchaseAmount())}
                       </div>
-                    )}
+                      {Number(formData.factoryOverhead) > 0 && (
+                        <div className="text-xs text-green-600 mt-0.5">{formatCurrency(getTotalCostPerUnit())} × {Number(formData.quantity)}</div>
+                      )}
+                    </div>
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Balance Quantity</span>
                       <div className="text-lg font-bold text-green-900">{Number(formData.quantity) || 0}</div>
                     </div>
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Balance Amount</span>
-                      <div className="text-lg font-bold text-green-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
+                      <div className="text-lg font-bold text-green-600">{formatCurrency(getTotalPurchaseAmount())}</div>
                     </div>
                   </div>
                 </div>
