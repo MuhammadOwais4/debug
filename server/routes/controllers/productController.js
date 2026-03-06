@@ -78,7 +78,6 @@ const createProduct = async (req, res) => {
       name,
       category,
       purchaseRate,
-      factoryOverhead,   // ── NEW
       saleRate,
       quantity,
       serialNumber,
@@ -101,10 +100,6 @@ const createProduct = async (req, res) => {
 
     if (purchaseRate < 0 || saleRate < 0 || quantity < 0) {
       return res.status(400).json({ message: "Rates and quantity must be non-negative" })
-    }
-
-    if (factoryOverhead !== undefined && factoryOverhead < 0) {
-      return res.status(400).json({ message: "Factory overhead cannot be negative" })
     }
 
     // ✅ Only Expense model validation
@@ -148,17 +143,13 @@ const createProduct = async (req, res) => {
       }
     }
 
-    // ── Total cost per unit = purchaseRate + factoryOverhead ──────────────
-    const overhead = Number(factoryOverhead) || 0
-    const totalCostPerUnit = Number(purchaseRate) + overhead
-    const purchaseAmount = quantity * totalCostPerUnit
+    const purchaseAmount = quantity * purchaseRate
     const balanceAmount = purchaseAmount
 
     const productData = {
       name,
       category,
       purchaseRate,
-      factoryOverhead: overhead,   // ── NEW
       saleRate,
       quantity,
       purchaseQuantity: quantity,
@@ -212,7 +203,6 @@ const updateProduct = async (req, res) => {
       name,
       category,
       purchaseRate,
-      factoryOverhead,   // ── NEW
       saleRate,
       quantity,
       serialNumber,
@@ -229,8 +219,6 @@ const updateProduct = async (req, res) => {
 
     if (purchaseRate !== undefined && purchaseRate < 0)
       return res.status(400).json({ message: "Purchase rate must be non-negative" })
-    if (factoryOverhead !== undefined && factoryOverhead < 0)
-      return res.status(400).json({ message: "Factory overhead must be non-negative" })
     if (saleRate !== undefined && saleRate < 0)
       return res.status(400).json({ message: "Sale rate must be non-negative" })
     if (quantity !== undefined && quantity < 0)
@@ -298,21 +286,16 @@ const updateProduct = async (req, res) => {
     if (grn !== undefined) updateData.grn = grn && grn.trim() !== "" ? grn.trim() : null
     if (name !== undefined) updateData.name = name
     if (category !== undefined) updateData.category = category
-
-    // ── Recalculate balanceAmount whenever rate or overhead or qty changes ─
-    if (purchaseRate !== undefined) updateData.purchaseRate = purchaseRate
-    if (factoryOverhead !== undefined) updateData.factoryOverhead = Number(factoryOverhead) || 0  // ── NEW
-    if (saleRate !== undefined) updateData.saleRate = saleRate
-    if (quantity !== undefined) updateData.quantity = quantity
-
-    // Always recalculate balanceAmount with latest values
-    if (purchaseRate !== undefined || factoryOverhead !== undefined || quantity !== undefined) {
-      const resolvedRate = purchaseRate !== undefined ? Number(purchaseRate) : currentProduct.purchaseRate
-      const resolvedOverhead = factoryOverhead !== undefined ? Number(factoryOverhead) : (currentProduct.factoryOverhead || 0)
-      const resolvedQty = quantity !== undefined ? Number(quantity) : currentProduct.quantity
-      updateData.balanceAmount = resolvedQty * (resolvedRate + resolvedOverhead)
+    if (purchaseRate !== undefined) {
+      updateData.purchaseRate = purchaseRate
+      updateData.balanceAmount = currentProduct.quantity * purchaseRate
     }
-
+    if (saleRate !== undefined) updateData.saleRate = saleRate
+    if (quantity !== undefined) {
+      updateData.quantity = quantity
+      const rate = purchaseRate !== undefined ? purchaseRate : currentProduct.purchaseRate
+      updateData.balanceAmount = quantity * rate
+    }
     if (serialNumber !== undefined)
       updateData.serialNumber = serialNumber && serialNumber.trim() !== "" ? serialNumber.trim() : null
     if (expiryDate !== undefined) updateData.expiryDate = expiryDate ? new Date(expiryDate) : null
@@ -389,45 +372,39 @@ const getProductStock = async (req, res) => {
       .populate("purchaseType", "name type code description")
       .sort({ quantity: 1 })
 
-    const stockData = products.map((product) => {
-      const overhead = product.factoryOverhead || 0
-      const totalCostPerUnit = product.purchaseRate + overhead
-      return {
-        productId: product._id,
-        productName: product.name,
-        category: product.category,
-        grn: product.grn,
-        currentQuantity: product.quantity,
-        balanceAmount: product.balanceAmount,
-        purchaseQuantity: product.purchaseQuantity,
-        purchaseRate: product.purchaseRate,
-        factoryOverhead: overhead,                          // ── NEW
-        totalCostPerUnit,                                   // ── NEW
-        purchaseAmount: product.purchaseAmount,
-        totalSoldQuantity: product.totalSoldQuantity,
-        saleRate: product.saleRate,
-        returnQuantity: product.ReturnQuantity || 0,
-        returnedAmount: product.ReturnedAmount || 0,
-        stockPercentage:
-          product.purchaseQuantity > 0
-            ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
-            : 0,
-        totalValue: product.quantity * totalCostPerUnit,
-        potentialRevenue: product.quantity * product.saleRate,
-        potentialProfit: product.quantity * product.saleRate - product.quantity * totalCostPerUnit,
-        serialNumber: product.serialNumber,
-        expiryDate: product.expiryDate,
-        vendorName: product.vendorName,
-        purchaseType: product.purchaseType,
-        isLowStock: product.quantity < 5,
-        isExpired: product.expiryDate ? new Date(product.expiryDate) < new Date() : false,
-        isExpiringSoon: product.expiryDate
-          ? new Date(product.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          : false,
-        createdAt: product.createdAt,
-        updatedAt: product.updatedAt,
-      }
-    })
+    const stockData = products.map((product) => ({
+      productId: product._id,
+      productName: product.name,
+      category: product.category,
+      grn: product.grn,
+      currentQuantity: product.quantity,
+      balanceAmount: product.balanceAmount,
+      purchaseQuantity: product.purchaseQuantity,
+      purchaseRate: product.purchaseRate,
+      purchaseAmount: product.purchaseAmount,
+      totalSoldQuantity: product.totalSoldQuantity,
+      saleRate: product.saleRate,
+      returnQuantity: product.ReturnQuantity || 0,
+      returnedAmount: product.ReturnedAmount || 0,
+      stockPercentage:
+        product.purchaseQuantity > 0
+          ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
+          : 0,
+      totalValue: product.quantity * product.purchaseRate,
+      potentialRevenue: product.quantity * product.saleRate,
+      potentialProfit: product.quantity * product.saleRate - product.quantity * product.purchaseRate,
+      serialNumber: product.serialNumber,
+      expiryDate: product.expiryDate,
+      vendorName: product.vendorName,
+      purchaseType: product.purchaseType,
+      isLowStock: product.quantity < 5,
+      isExpired: product.expiryDate ? new Date(product.expiryDate) < new Date() : false,
+      isExpiringSoon: product.expiryDate
+        ? new Date(product.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : false,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    }))
 
     const summary = {
       totalProducts: stockData.length,
@@ -464,23 +441,19 @@ const updateStock = async (req, res) => {
       return res.status(404).json({ message: "Product not found" })
     }
 
-    // ── Use totalCostPerUnit (purchaseRate + factoryOverhead) ─────────────
-    const overhead = product.factoryOverhead || 0
-    const totalCostPerUnit = product.purchaseRate + overhead
-
     if (operation === "add") {
-      const additionalAmount = quantity * totalCostPerUnit
+      const additionalAmount = quantity * product.purchaseRate
       product.quantity += quantity
       product.purchaseQuantity += quantity
       product.purchaseAmount += additionalAmount
-      product.balanceAmount = product.quantity * totalCostPerUnit
+      product.balanceAmount = product.quantity * product.purchaseRate
     } else if (operation === "subtract") {
       if (product.quantity < quantity) {
         return res.status(400).json({ message: "Insufficient stock available" })
       }
       product.quantity -= quantity
       product.totalSoldQuantity += quantity
-      product.balanceAmount = product.quantity * totalCostPerUnit
+      product.balanceAmount = product.quantity * product.purchaseRate
     }
 
     const updatedProduct = await product.save()
@@ -656,9 +629,6 @@ const getProductSummary = async (req, res) => {
       return res.status(404).json({ message: "Product not found" })
     }
 
-    const overhead = product.factoryOverhead || 0
-    const totalCostPerUnit = product.purchaseRate + overhead
-
     const summary = {
       grn: product.grn,
       name: product.name,
@@ -666,8 +636,6 @@ const getProductSummary = async (req, res) => {
       purchaseDetails: {
         purchaseQuantity: product.purchaseQuantity,
         purchaseRate: product.purchaseRate,
-        factoryOverhead: overhead,                          // ── NEW
-        totalCostPerUnit,                                   // ── NEW
         purchaseAmount: product.purchaseAmount,
       },
       salesDetails: {
@@ -676,12 +644,12 @@ const getProductSummary = async (req, res) => {
         totalSaleAmount: product.totalSoldQuantity * product.saleRate,
         totalSaleProfit:
           product.totalSoldQuantity * product.saleRate -
-          product.totalSoldQuantity * totalCostPerUnit,
+          product.totalSoldQuantity * product.purchaseRate,
       },
       currentBalance: {
         balanceQuantity: product.quantity,
         balanceAmount: product.balanceAmount,
-        calculatedBalanceAmount: product.quantity * totalCostPerUnit,
+        calculatedBalanceAmount: product.quantity * product.purchaseRate,
       },
       returnDetails: {
         returnQuantity: product.ReturnQuantity || 0,
@@ -750,23 +718,19 @@ const getProductsWithSummary = async (req, res) => {
       .populate("purchaseType", "name type code description")
       .sort({ createdAt: -1 })
 
-    const productsWithSummary = products.map((product) => {
-      const overhead = product.factoryOverhead || 0
-      const totalCostPerUnit = product.purchaseRate + overhead
-      return {
-        ...product.toObject(),
-        summary: {
-          totalSaleAmount: product.totalSoldQuantity * product.saleRate,
-          totalSaleProfit:
-            product.totalSoldQuantity * product.saleRate -
-            product.totalSoldQuantity * totalCostPerUnit,
-          balancePercentage:
-            product.purchaseQuantity > 0
-              ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
-              : 0,
-        },
-      }
-    })
+    const productsWithSummary = products.map((product) => ({
+      ...product.toObject(),
+      summary: {
+        totalSaleAmount: product.totalSoldQuantity * product.saleRate,
+        totalSaleProfit:
+          product.totalSoldQuantity * product.saleRate -
+          product.totalSoldQuantity * product.purchaseRate,
+        balancePercentage:
+          product.purchaseQuantity > 0
+            ? ((product.quantity / product.purchaseQuantity) * 100).toFixed(2)
+            : 0,
+      },
+    }))
 
     res.json(productsWithSummary)
   } catch (error) {
@@ -807,13 +771,10 @@ const processPurchaseReturn = async (req, res) => {
       })
     }
 
-    // ── Return amount calculated on totalCostPerUnit ──────────────────────
-    const overhead = product.factoryOverhead || 0
-    const totalCostPerUnit = product.purchaseRate + overhead
-    const calculatedReturnAmount = qty * totalCostPerUnit
+    const calculatedReturnAmount = qty * product.purchaseRate
 
     product.quantity -= qty
-    product.balanceAmount = product.quantity * totalCostPerUnit
+    product.balanceAmount = product.quantity * product.purchaseRate
     product.ReturnQuantity = (product.ReturnQuantity || 0) + qty
     product.ReturnedAmount = (product.ReturnedAmount || 0) + calculatedReturnAmount
     product.ReturnedDate = new Date(returnDate)
@@ -883,8 +844,6 @@ const getPurchaseReturns = async (req, res) => {
       returnDate: product.ReturnedDate,
       returnQuantity: product.ReturnQuantity,
       purchaseRate: product.purchaseRate,
-      factoryOverhead: product.factoryOverhead || 0,        // ── NEW
-      totalCostPerUnit: product.purchaseRate + (product.factoryOverhead || 0), // ── NEW
       returnAmount: product.ReturnedAmount,
       reason: "N/A",
       category: product.category,
@@ -925,8 +884,6 @@ const getPurchaseReturn = async (req, res) => {
       returnDate: product.ReturnedDate,
       returnQuantity: product.ReturnQuantity,
       purchaseRate: product.purchaseRate,
-      factoryOverhead: product.factoryOverhead || 0,        // ── NEW
-      totalCostPerUnit: product.purchaseRate + (product.factoryOverhead || 0), // ── NEW
       returnAmount: product.ReturnedAmount,
       category: product.category,
       status: "approved",
