@@ -33,9 +33,8 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
   const [scanHistory, setScanHistory] = useState([])
   const [cartItems, setCartItems] = useState([])
   const [manualInput, setManualInput] = useState("")
-  const [activeTab, setActiveTab] = useState("camera") // "camera" | "hardware" | "manual"
+  const [activeTab, setActiveTab] = useState("camera")
 
-  // Camera state
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState(null)
   const [cameras, setCameras] = useState([])
@@ -56,7 +55,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
   const formatCurrency = (value) =>
     new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 0 }).format(value || 0)
 
-  // ── Load ZXing from CDN ──────────────────────────────────────────────────
   useEffect(() => {
     if (window.ZXing) { zxingRef.current = window.ZXing; return }
     const script = document.createElement("script")
@@ -73,7 +71,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     document.head.appendChild(script)
   }, [])
 
-  // ── Enumerate cameras ────────────────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "camera") return
     navigator.mediaDevices?.enumerateDevices().then((devices) => {
@@ -84,7 +81,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     }).catch(() => setCameras([]))
   }, [activeTab])
 
-  // ── Start / stop camera ──────────────────────────────────────────────────
   const startCamera = async () => {
     setCameraError(null)
     try {
@@ -124,7 +120,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
 
   useEffect(() => { return () => stopCamera() }, [])
 
-  // ── Scan loop ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!scanning || !cameraActive) return
     const canvas = canvasRef.current
@@ -177,7 +172,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
   }, [scanning, cameraActive, lastScannedCode])
 
-  // ── Hardware scanner (USB/Bluetooth) ────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "hardware") return
     const handleKeyDown = (e) => {
@@ -201,7 +195,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
     if (activeTab === "hardware" && inputRef.current) inputRef.current.focus()
   }, [activeTab])
 
-  // ── Core: process a scanned/typed code ──────────────────────────────────
   const processBarcode = useCallback((code) => {
     const trimmed = code.trim()
     if (!trimmed) return
@@ -260,8 +253,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 overflow-y-auto p-4">
       <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl">
-
-        {/* Header */}
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="bg-white bg-opacity-20 rounded-xl p-2">
@@ -277,7 +268,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
           {[
             { id: "camera", label: "Camera Scan", icon: "📷" },
@@ -300,10 +290,7 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
         </div>
 
         <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* LEFT: Active Tab Content */}
           <div className="flex-1 flex flex-col overflow-hidden">
-
-            {/* ── CAMERA TAB ── */}
             {activeTab === "camera" && (
               <div className="flex-1 flex flex-col p-4 overflow-y-auto">
                 {cameras.length > 1 && (
@@ -324,25 +311,15 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                 )}
 
                 <div className="relative bg-black rounded-2xl overflow-hidden flex-shrink-0" style={{ aspectRatio: "16/9", maxHeight: "320px" }}>
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    muted
-                    playsInline
-                    style={{ display: cameraActive ? "block" : "none" }}
-                  />
+                  <video ref={videoRef} className="w-full h-full object-cover" muted playsInline style={{ display: cameraActive ? "block" : "none" }} />
                   <canvas ref={canvasRef} className="hidden" />
-
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                       <div className="text-6xl mb-4">📷</div>
                       <p className="text-lg font-semibold mb-1">Camera Scanner</p>
-                      <p className="text-sm text-gray-400 text-center px-8">
-                        Point your camera at a product barcode or QR code
-                      </p>
+                      <p className="text-sm text-gray-400 text-center px-8">Point your camera at a product barcode or QR code</p>
                     </div>
                   )}
-
                   {cameraActive && (
                     <div className="absolute inset-0 pointer-events-none">
                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-36">
@@ -350,27 +327,16 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
                         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
                         <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
                         <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
-                        <div
-                          className="absolute left-2 right-2 h-0.5 bg-emerald-400 opacity-80"
-                          style={{ animation: "scanLine 2s linear infinite", top: "50%" }}
-                        />
+                        <div className="absolute left-2 right-2 h-0.5 bg-emerald-400 opacity-80" style={{ animation: "scanLine 2s linear infinite", top: "50%" }} />
                       </div>
                       <div className="absolute bottom-3 left-0 right-0 text-center">
-                        <span className="bg-black bg-opacity-50 text-emerald-300 text-xs px-3 py-1 rounded-full">
-                          🔍 Scanning for barcode...
-                        </span>
+                        <span className="bg-black bg-opacity-50 text-emerald-300 text-xs px-3 py-1 rounded-full">🔍 Scanning for barcode...</span>
                       </div>
                     </div>
                   )}
                 </div>
 
-                <style>{`
-                  @keyframes scanLine {
-                    0% { top: 10%; }
-                    50% { top: 90%; }
-                    100% { top: 10%; }
-                  }
-                `}</style>
+                <style>{`@keyframes scanLine { 0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; } }`}</style>
 
                 {cameraError && (
                   <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
@@ -381,20 +347,12 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
 
                 <div className="mt-3 flex gap-2">
                   {!cameraActive ? (
-                    <button
-                      onClick={startCamera}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Scan className="h-5 w-5" />
-                      Start Camera
+                    <button onClick={startCamera} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                      <Scan className="h-5 w-5" />Start Camera
                     </button>
                   ) : (
-                    <button
-                      onClick={stopCamera}
-                      className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
-                    >
-                      <X className="h-5 w-5" />
-                      Stop Camera
+                    <button onClick={stopCamera} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                      <X className="h-5 w-5" />Stop Camera
                     </button>
                   )}
                 </div>
@@ -427,7 +385,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
               </div>
             )}
 
-            {/* ── HARDWARE SCANNER TAB ── */}
             {activeTab === "hardware" && (
               <div className="flex-1 p-6 overflow-y-auto">
                 <div className="mb-5 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex gap-3">
@@ -491,7 +448,6 @@ const BarcodeScannerModal = ({ onClose, products, onProductScanned }) => {
               </div>
             )}
 
-            {/* ── MANUAL SEARCH TAB ── */}
             {activeTab === "manual" && (
               <div className="flex-1 p-6 overflow-y-auto">
                 <p className="text-sm text-gray-600 mb-4">Search by product name, serial number, GRN, or vendor bill number.</p>
@@ -647,11 +603,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const [loadingVendors, setLoadingVendors] = useState(false)
   const [loadingPurchases, setLoadingPurchases] = useState(false)
 
-  // ── Scanner State ──
   const [showScanner, setShowScanner] = useState(false)
   const [scannerProcessing, setScannerProcessing] = useState(false)
 
-  // Purchase Return State
   const [showReturnForm, setShowReturnForm] = useState(false)
   const [returnFormData, setReturnFormData] = useState({
     productId: "",
@@ -667,7 +621,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     category: "",
     quantity: "",
     purchaseRate: "",
-    factoryOverhead: "",          // ── NEW: Factory Overhead field
+    factoryOverhead: "",
     saleRate: "",
     customerName: "",
     vendorPhone: "",
@@ -695,6 +649,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const [returnHistory, setReturnHistory] = useState([])
   const [loadingReturns, setLoadingReturns] = useState(false)
 
+  // ─── Pending edit entry — stored when handleEdit fires before categories load ───
+  const [pendingEditEntry, setPendingEditEntry] = useState(null)
+
   const loadVendors = async () => {
     try {
       setLoadingVendors(true)
@@ -702,9 +659,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       const liabilities = response.data || []
       const vendorList = liabilities.filter((liability) => liability.type === "PAYABLES")
       setVendors(vendorList)
+      return vendorList
     } catch (err) {
       console.error("Error loading vendors:", err)
       setVendors([])
+      return []
     } finally {
       setLoadingVendors(false)
     }
@@ -717,15 +676,17 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       const assets = response.data || []
       const purchasesList = assets.filter((asset) => asset.type === "Purchases")
       setPurchasesAccounts(purchasesList)
+      return purchasesList
     } catch (err) {
       console.error("Error loading purchases accounts:", err)
       setPurchasesAccounts([])
+      return []
     } finally {
       setLoadingPurchases(false)
     }
   }
 
-  const fetchStockEntries = async () => {
+  const fetchStockEntries = async (vendorsList, purchasesList) => {
     try {
       setLoading(true)
       setError(null)
@@ -739,23 +700,34 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         productsData = Array.isArray(productsResponse.data) ? productsResponse.data : []
       }
 
+      // Use passed-in lists (fresh data) or fall back to state
+      const activeVendors = vendorsList || vendors
+      const activePurchases = purchasesList || purchasesAccounts
+
       const entries = productsData.map((product) => {
         const vendorObj =
           typeof product.vendorName === "object"
             ? product.vendorName
-            : vendors.find((v) => v._id === product.vendorName)
+            : activeVendors.find((v) => v._id === product.vendorName)
         const vendorNameStr = vendorObj?.name || (typeof product.vendorName === "string" ? product.vendorName : "")
 
         const purchaseTypeObj =
           typeof product.purchaseType === "object"
             ? product.purchaseType
-            : purchasesAccounts.find((p) => p._id === product.purchaseType)
+            : activePurchases.find((p) => p._id === product.purchaseType)
         const purchaseTypeStr = purchaseTypeObj?.name || ""
+        // Store raw _id as fallback for when name resolution fails (race condition)
+        const purchaseTypeRawId =
+          typeof product.purchaseType === "object"
+            ? product.purchaseType?._id || ""
+            : product.purchaseType || ""
 
         const purchaseQuantity = product.purchaseQuantity || product.quantity || 0
-        const purchaseAmount = product.purchaseAmount || (purchaseQuantity * product.purchaseRate) || 0
+        // Purchase Amount = (Qty × Purchase Rate) + Factory O/H
+        const purchaseAmount = (purchaseQuantity * (product.purchaseRate || 0)) + (product.factoryOverhead || 0)
         const balanceQuantity = product.quantity || 0
-        const balanceAmount = product.balanceAmount || (balanceQuantity * product.purchaseRate) || 0
+        // Balance Amount = (Balance Qty × Purchase Rate) + Factory O/H
+        const balanceAmount = (balanceQuantity * (product.purchaseRate || 0)) + (product.factoryOverhead || 0)
         const totalSoldQuantity = product.totalSoldQuantity || 0
 
         return {
@@ -763,20 +735,22 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           date: product.createdAt ? formatDateToDDMMYYYY(product.createdAt) : formatDateToDDMMYYYY(new Date()),
           itemName: product.name,
           category: product.category,
-          purchaseQuantity: purchaseQuantity,
-          purchaseAmount: purchaseAmount,
-          balanceQuantity: balanceQuantity,
-          balanceAmount: balanceAmount,
-          totalSoldQuantity: totalSoldQuantity,
+          purchaseQuantity,
+          purchaseAmount,
+          balanceQuantity,
+          balanceAmount,
+          totalSoldQuantity,
           purchaseRate: product.purchaseRate,
           factoryOverhead: product.factoryOverhead || 0,
           factoryOverheadBreakdown: product.factoryOverheadBreakdown || [],
           saleRate: product.saleRate,
-          purchaseStockValue: purchaseAmount,
+          purchaseStockValue: purchaseAmount,  // (Qty × Rate) + O/H
           saleStockValue: balanceQuantity * product.saleRate,
           balanceStockValue: balanceAmount,
-          profit: (product.saleRate - product.purchaseRate) * balanceQuantity,
-          potentialProfit: (product.saleRate - product.purchaseRate) * balanceQuantity,
+          // Profit = (Balance Qty × Sale Rate) - Purchase Amount
+          // Purchase Amount already = (Qty × Purchase Rate) + Factory O/H
+          profit: (product.saleRate * balanceQuantity) - balanceAmount,
+          potentialProfit: (product.saleRate * balanceQuantity) - balanceAmount,
           totalAmount: balanceQuantity * product.saleRate,
           customerName: "",
           vendorPhone: product.vendorPhone || "",
@@ -788,6 +762,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           expiryDate: product.expiryDate || "",
           voucherId: product.voucherId || "",
           purchaseType: purchaseTypeStr,
+          purchaseTypeId: purchaseTypeRawId,
         }
       })
 
@@ -833,17 +808,16 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const emitVoucherChangedEvent = () => {
     if (typeof window !== "undefined") {
       try {
-        window.dispatchEvent(
-          new CustomEvent("voucher:changed", { detail: { action: "refresh", at: Date.now() } })
-        )
+        window.dispatchEvent(new CustomEvent("voucher:changed", { detail: { action: "refresh", at: Date.now() } }))
       } catch (_) {}
     }
   }
 
   useEffect(() => {
-    loadVendors()
-    loadPurchasesAccounts()
-    fetchStockEntries()
+    // Load vendors & purchases first, then pass fresh data directly to fetchStockEntries
+    Promise.all([loadVendors(), loadPurchasesAccounts()]).then(([vList, pList]) => {
+      fetchStockEntries(vList, pList)
+    })
     fetchReturnHistory()
   }, [])
 
@@ -864,7 +838,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     }
   }
 
-  // ── Handle Scanned Cart Items ────────────────────────────────────────────
   const handleScannerConfirm = async (cartItems) => {
     setScannerProcessing(true)
     const errors = []
@@ -872,21 +845,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
     for (const item of cartItems) {
       try {
-        const updateData = {
-          purchaseRate: item.purchaseRate,
-          saleRate: item.saleRate,
-        }
+        await ApiHandler.updateStock(item.product._id, { quantity: item.qty, operation: "add" })
 
-        await ApiHandler.updateStock(item.product._id, {
-          quantity: item.qty,
-          operation: "add",
-        })
-
-        if (
-          item.purchaseRate !== item.product.purchaseRate ||
-          item.saleRate !== item.product.saleRate
-        ) {
-          await ApiHandler.updateProduct(item.product._id, updateData)
+        if (item.purchaseRate !== item.product.purchaseRate || item.saleRate !== item.product.saleRate) {
+          await ApiHandler.updateProduct(item.product._id, { purchaseRate: item.purchaseRate, saleRate: item.saleRate })
         }
 
         successes.push(item.product.name)
@@ -920,7 +882,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       category: "",
       quantity: "",
       purchaseRate: "",
-      factoryOverhead: "",          // ── NEW
+      factoryOverhead: "",
       saleRate: "",
       customerName: "",
       vendorPhone: "",
@@ -938,6 +900,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     setEditingVoucherId(null)
     setShowForm(false)
     setError(null)
+    setPendingEditEntry(null)
     resetOverheadItems()
   }
 
@@ -1018,7 +981,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           ...prev,
           category: product.category || "",
           purchaseRate: product.purchaseRate || "",
-          factoryOverhead: product.factoryOverhead || "",   // ── NEW
+          factoryOverhead: product.factoryOverhead || "",
           saleRate: product.saleRate || "",
           serialNumber: product.serialNumber || "",
           vendorName: product.vendorName || "",
@@ -1035,19 +998,17 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     const fetchOverheadCategories = async () => {
       try {
         setLoadingOverheadCats(true)
-        const res = await ApiHandler.getOverheadCategories()   // GET /api/overhead-categories
+        const res = await ApiHandler.getOverheadCategories()
         const cats = (res?.data || res || []).map((cat) => ({
-          id:    cat.id,
+          id: cat.id,
           label: cat.label,
-          icon:  cat.icon  || "➕",
+          icon: cat.icon || "➕",
           color: cat.color || "gray",
         }))
         setOVERHEAD_CATEGORIES(cats)
-        // Init overheadItems state once categories are loaded
         setOverheadItems(Object.fromEntries(cats.map((c) => [c.id, { checked: false, amount: "" }])))
       } catch (err) {
         console.error("Error loading overhead categories:", err)
-        // Fallback to hardcoded defaults if API fails
         const fallback = [
           { id: "labour",    label: "Labour Cost",        icon: "👷", color: "blue"   },
           { id: "transport", label: "Transport",           icon: "🚛", color: "green"  },
@@ -1076,52 +1037,173 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     gray:   { border: "border-gray-200",   bg: "bg-gray-50",   check: "accent-gray-600",   text: "text-gray-700",   badge: "bg-gray-100 text-gray-700"    },
   }
 
-  // overheadItems: { [id]: { checked: bool, amount: string } }
-  // Initialized empty; gets populated after overheadCategories loads from API
   const [overheadItems, setOverheadItems] = useState({})
 
-  // Toggle checkbox
   const toggleOverhead = (id) => {
     setOverheadItems((prev) => {
       const next = { ...prev, [id]: { ...prev[id], checked: !prev[id].checked } }
       if (!next[id].checked) next[id] = { checked: false, amount: "" }
-      // Sync formData.factoryOverhead
-      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id].checked ? Number(next[c.id].amount) || 0 : 0), 0)
+      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id]?.checked ? Number(next[c.id].amount) || 0 : 0), 0)
       setFormData((f) => ({ ...f, factoryOverhead: total.toString() }))
       return next
     })
   }
 
-  // Update amount for a category
   const setOverheadAmount = (id, val) => {
     setOverheadItems((prev) => {
       const next = { ...prev, [id]: { ...prev[id], amount: val } }
-      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id].checked ? Number(next[c.id].amount) || 0 : 0), 0)
+      const total = OVERHEAD_CATEGORIES.reduce((s, c) => s + (next[c.id]?.checked ? Number(next[c.id].amount) || 0 : 0), 0)
       setFormData((f) => ({ ...f, factoryOverhead: total.toString() }))
       return next
     })
   }
 
-  // Reset overhead items
   const resetOverheadItems = () => {
     setOverheadItems(Object.fromEntries(OVERHEAD_CATEGORIES.map((c) => [c.id, { checked: false, amount: "" }])))
   }
 
-  // Total overhead from checked items
   const getOverheadTotal = () =>
-    OVERHEAD_CATEGORIES.reduce((s, c) => s + (overheadItems[c.id].checked ? Number(overheadItems[c.id].amount) || 0 : 0), 0)
+    OVERHEAD_CATEGORIES.reduce((s, c) => s + (overheadItems[c.id]?.checked ? Number(overheadItems[c.id].amount) || 0 : 0), 0)
 
-  // ── Helper: total cost per unit = Purchase Rate + Factory Overhead ───────
   const getTotalCostPerUnit = () => {
     const pr = Number(formData.purchaseRate) || 0
     const fo = getOverheadTotal()
     return pr + fo
   }
 
-  // ── Helper: total purchase amount = qty × (purchaseRate + factoryOverhead)
   const getTotalPurchaseAmount = () => {
     const qty = Number(formData.quantity) || 0
     return qty * getTotalCostPerUnit()
+  }
+
+  // ── Core edit-apply logic ────────────────────────────────────────────────────
+  // Pass `cats` explicitly so it always uses the freshly loaded categories list
+  const _applyEditToForm = (entry, cats) => {
+    const activeCats = (cats && cats.length > 0) ? cats : OVERHEAD_CATEGORIES
+    const dateForForm = entry.date ? formatDateToYYYYMMDD(new Date(entry.date.split("-").reverse().join("-"))) : ""
+    const vendorObj = vendors.find((v) => v.name === entry.vendorName)
+    const vendorNameForForm = vendorObj?.name || entry.vendorName || ""
+
+    const savedBreakdown = entry.factoryOverheadBreakdown || []
+
+    let restoredItems
+    if (savedBreakdown.length > 0) {
+      // New data: breakdown array exists — restore each checked item
+      restoredItems = Object.fromEntries(
+        activeCats.map((cat) => {
+          const saved = savedBreakdown.find((b) => b.id === cat.id)
+          return [
+            cat.id,
+            saved && Number(saved.amount) > 0
+              ? { checked: true, amount: saved.amount.toString() }
+              : { checked: false, amount: "" },
+          ]
+        })
+      )
+    } else if (Number(entry.factoryOverhead) > 0) {
+      // Legacy data: only total saved, no breakdown — put full total in "other"
+      restoredItems = Object.fromEntries(
+        activeCats.map((cat) => [
+          cat.id,
+          cat.id === "other"
+            ? { checked: true, amount: entry.factoryOverhead.toString() }
+            : { checked: false, amount: "" },
+        ])
+      )
+    } else {
+      // No overhead at all
+      restoredItems = Object.fromEntries(
+        activeCats.map((cat) => [cat.id, { checked: false, amount: "" }])
+      )
+    }
+
+    const totalOverhead = Object.values(restoredItems).reduce(
+      (s, item) => s + (item.checked ? Number(item.amount) || 0 : 0), 0
+    )
+
+    // ─── Set overhead items FIRST, then formData ───────────────────────────
+    setOverheadItems(restoredItems)
+
+    setFormData({
+      date: dateForForm,
+      name: entry.itemName,
+      category: entry.category,
+      quantity: entry.balanceQuantity.toString(),
+      purchaseRate: entry.purchaseRate.toString(),
+      factoryOverhead: totalOverhead.toString(),
+      saleRate: entry.saleRate.toString(),
+      customerName: entry.customerName || "",
+      vendorPhone: entry.vendorPhone || "",
+      notes: entry.notes || "",
+      serialNumber: entry.serialNumber || "",
+      expiryDate: entry.expiryDate || "",
+      lastPurchase: entry.lastPurchase || "",
+      vendorName: vendorNameForForm,
+      vendorBillNumber: entry.vendorBillNumber || "",
+      grn: entry.grn || "",
+      purchasesType: (() => {
+        // If name already resolved, use it; otherwise look up by _id
+        if (entry.purchaseType) return entry.purchaseType
+        if (entry.purchaseTypeId) {
+          const found = purchasesAccounts.find((p) => p._id === entry.purchaseTypeId)
+          return found?.name || ""
+        }
+        return ""
+      })(),
+    })
+
+    setIsEditing(true)
+    setEditingId(entry.id)
+    setEditingVoucherId(entry.voucherId)
+    setShowForm(true)
+  }
+
+  // ── KEY FIX: Deferred apply — runs when categories finish loading ─────────
+  useEffect(() => {
+    if (loadingOverheadCats) return
+    if (!pendingEditEntry) return
+    if (OVERHEAD_CATEGORIES.length === 0) return
+
+    _applyEditToForm(pendingEditEntry, OVERHEAD_CATEGORIES)
+    setPendingEditEntry(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingOverheadCats, OVERHEAD_CATEGORIES.length, pendingEditEntry])
+
+  const handleEdit = (entry) => {
+    if (loadingOverheadCats || OVERHEAD_CATEGORIES.length === 0) {
+      // Categories not ready yet — queue the entry, show form with spinner
+      setPendingEditEntry(entry)
+      setIsEditing(true)
+      setEditingId(entry.id)
+      setEditingVoucherId(entry.voucherId)
+      setShowForm(true)
+    } else {
+      // Categories already loaded — apply all values immediately
+      _applyEditToForm(entry, OVERHEAD_CATEGORIES)
+    }
+  }
+
+  const handleViewDetails = (entry) => {
+    setSelectedEntry(entry)
+    setShowDetails(true)
+  }
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this stock entry? This will also delete the associated GRN voucher.")) {
+      try {
+        const entry = stockEntries.find((e) => e.id === id)
+        if (entry?.voucherId) {
+          try { await ApiHandler.deleteVoucher(entry.voucherId); emitVoucherChangedEvent() }
+          catch (voucherErr) { console.error("Error deleting voucher:", voucherErr) }
+        }
+        await ApiHandler.deleteProduct(id)
+        await createNotification("warning", "Stock Entry Deleted", `Stock entry for ${entry?.itemName || "item"} and its GRN voucher have been deleted`, "medium")
+        await fetchStockEntries()
+      } catch (err) {
+        setError(err.message)
+        console.error("Error deleting stock entry:", err)
+      }
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -1130,7 +1212,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     try {
       const qty = Number(formData.quantity) || 0
       const purchaseRate = Number(formData.purchaseRate) || 0
-      const factoryOverhead = getOverheadTotal()   // ── from checked items
+      const factoryOverhead = getOverheadTotal()
       const saleRate = Number(formData.saleRate) || 0
 
       if (!formData.name || !formData.name.trim()) { setError("Product name is required"); return }
@@ -1147,8 +1229,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       if (!selectedVendor) { setError("Selected vendor not found"); return }
       if (!selectedPurchaseAccount) { setError("Selected purchase type not found"); return }
 
-      const totalCostPerUnit = purchaseRate + factoryOverhead          // ── NEW
-      const totalPurchaseAmount = qty * totalCostPerUnit               // ── NEW: includes overhead
+      const totalCostPerUnit = purchaseRate + factoryOverhead
+      const totalPurchaseAmount = qty * totalCostPerUnit
 
       const productData = {
         name: formData.name.trim(),
@@ -1156,11 +1238,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         purchaseRate,
         factoryOverhead,
         factoryOverheadBreakdown: OVERHEAD_CATEGORIES
-          .filter((cat) => overheadItems[cat.id].checked && Number(overheadItems[cat.id].amount) > 0)
+          .filter((cat) => overheadItems[cat.id]?.checked && Number(overheadItems[cat.id]?.amount) > 0)
           .map((cat) => ({
-            id:     cat.id,
-            label:  cat.label,
-            icon:   cat.icon,
+            id: cat.id,
+            label: cat.label,
+            icon: cat.icon,
             amount: Number(overheadItems[cat.id].amount) || 0,
           })),
         saleRate,
@@ -1227,74 +1309,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     }
   }
 
-  const handleEdit = (entry) => {
-    const dateForForm = entry.date ? formatDateToYYYYMMDD(new Date(entry.date.split("-").reverse().join("-"))) : ""
-    const vendorObj = vendors.find((v) => v.name === entry.vendorName)
-    const vendorNameForForm = vendorObj?.name || entry.vendorName || ""
-
-    // ── Restore overhead breakdown checkboxes from saved data ─────────────
-    const savedBreakdown = entry.factoryOverheadBreakdown || []
-    const restoredItems = Object.fromEntries(
-      OVERHEAD_CATEGORIES.map(cat => {
-        const saved = savedBreakdown.find(b => b.id === cat.id)
-        return [cat.id, saved
-          ? { checked: true,  amount: saved.amount.toString() }
-          : { checked: false, amount: "" }
-        ]
-      })
-    )
-    setOverheadItems(restoredItems)
-
-    const totalOverhead = savedBreakdown.reduce((s, b) => s + (Number(b.amount) || 0), 0)
-
-    setFormData({
-      date: dateForForm,
-      name: entry.itemName,
-      category: entry.category,
-      quantity: entry.balanceQuantity.toString(),
-      purchaseRate: entry.purchaseRate.toString(),
-      factoryOverhead: totalOverhead.toString(),
-      saleRate: entry.saleRate.toString(),
-      customerName: entry.customerName || "",
-      vendorPhone: entry.vendorPhone || "",
-      notes: entry.notes || "",
-      serialNumber: entry.serialNumber || "",
-      expiryDate: entry.expiryDate || "",
-      lastPurchase: entry.lastPurchase || "",
-      vendorName: vendorNameForForm,
-      vendorBillNumber: entry.vendorBillNumber || "",
-      grn: entry.grn || "",
-      purchasesType: entry.purchaseType || "",
-    })
-    setIsEditing(true)
-    setEditingId(entry.id)
-    setEditingVoucherId(entry.voucherId)
-    setShowForm(true)
-  }
-
-  const handleViewDetails = (entry) => {
-    setSelectedEntry(entry)
-    setShowDetails(true)
-  }
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this stock entry? This will also delete the associated GRN voucher.")) {
-      try {
-        const entry = stockEntries.find((e) => e.id === id)
-        if (entry?.voucherId) {
-          try { await ApiHandler.deleteVoucher(entry.voucherId); emitVoucherChangedEvent() }
-          catch (voucherErr) { console.error("Error deleting voucher:", voucherErr) }
-        }
-        await ApiHandler.deleteProduct(id)
-        await createNotification("warning", "Stock Entry Deleted", `Stock entry for ${entry?.itemName || "item"} and its GRN voucher have been deleted`, "medium")
-        await fetchStockEntries()
-      } catch (err) {
-        setError(err.message)
-        console.error("Error deleting stock entry:", err)
-      }
-    }
-  }
-
   const handlePrint = () => {
     const printWindow = window.open("", "", "height=800,width=1200")
     printWindow.document.write("<html><head><title>Stock Report - Goods Receipt Note</title>")
@@ -1302,7 +1316,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     printWindow.document.write("</head><body>")
     printWindow.document.write("<h1>Goods Receipt Note</h1><h2>Stock Management Report</h2>")
     printWindow.document.write(`<div class="meta">Generated on: ${formatDateToDDMMYYYY(new Date())}</div>`)
-    printWindow.document.write("<table><thead><tr><th>Date</th><th>GRN No.</th><th>Product Name</th><th>Category</th><th>Vendor</th><th class='text-right'>Purchase Qty</th><th class='text-right'>Purchase Amount</th><th class='text-right'>Factory O/H</th><th class='text-right'>Balance Qty</th><th class='text-right'>Balance Amount</th><th class='text-right'>Sale Rate</th><th class='text-right'>Profit</th></tr></thead><tbody>")
+    printWindow.document.write("<table><thead><tr><th>Date</th><th>GRN No.</th><th>Product Name</th><th>Category</th><th>Vendor</th><th class='text-right'>Purchase Qty</th><th class='text-right'>Purchase Amount</th><th class='text-right'>Factory O/H</th><th class='text-right'>Balance Qty</th><th class='text-right'>Balance Amount</th><th class='text-right'>Sale Rate</th><th class='text-right'>Potential Profit<br/><small style='font-weight:normal;color:#6b7280'>(Sale Amt - Purchase Amt - O/H)</small></th></tr></thead><tbody>")
     filteredEntries.forEach((entry) => {
       printWindow.document.write(`<tr><td>${entry.date}</td><td>${entry.grn || "-"}</td><td>${entry.itemName}</td><td>${entry.category}</td><td>${entry.vendorName || "-"}</td><td class="text-right">${entry.purchaseQuantity}</td><td class="text-right">${formatCurrency(entry.purchaseAmount)}</td><td class="text-right">${formatCurrency(entry.factoryOverhead || 0)}</td><td class="text-right">${entry.balanceQuantity}</td><td class="text-right">${formatCurrency(entry.balanceAmount)}</td><td class="text-right">${formatCurrency(entry.saleRate)}</td><td class="text-right ${entry.profit >= 0 ? "profit-positive" : "profit-negative"}">${formatCurrency(entry.profit)}</td></tr>`)
     })
@@ -1350,7 +1364,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       balanceAmount: acc.balanceAmount + entry.balanceAmount,
       totalSoldQuantity: acc.totalSoldQuantity + entry.totalSoldQuantity,
       totalProfit: acc.totalProfit + (entry.profit || 0),
-      totalFactoryOverhead: acc.totalFactoryOverhead + (entry.factoryOverhead || 0),  // ── NEW
+      totalFactoryOverhead: acc.totalFactoryOverhead + (entry.factoryOverhead || 0),
     }),
     { purchaseQuantity: 0, purchaseAmount: 0, balanceQuantity: 0, balanceAmount: 0, totalSoldQuantity: 0, totalProfit: 0, totalFactoryOverhead: 0 }
   )
@@ -1373,7 +1387,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
-      {/* Barcode Scanner Modal */}
       {showScanner && (
         <BarcodeScannerModal
           onClose={() => setShowScanner(false)}
@@ -1396,49 +1409,24 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
             onClick={() => setShowScanner(true)}
             disabled={scannerProcessing}
-            title="Open barcode scanner"
           >
             <Scan className="h-4 w-4" />
             {scannerProcessing ? "Processing..." : "Scan Products"}
           </button>
-
-          <button
-            className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors flex items-center gap-2"
-            onClick={() => setShowReturnHistory(true)}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Purchases Return ({returnHistory.length})
+          <button className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors flex items-center gap-2" onClick={() => setShowReturnHistory(true)}>
+            <RotateCcw className="h-4 w-4" />Purchases Return ({returnHistory.length})
           </button>
-          <button
-            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
-            onClick={handlePrint}
-            disabled={filteredEntries.length === 0}
-          >
-            <Printer className="h-4 w-4" />
-            Print
+          <button className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2" onClick={handlePrint} disabled={filteredEntries.length === 0}>
+            <Printer className="h-4 w-4" />Print
           </button>
-          <button
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center gap-2"
-            onClick={handleExport}
-            disabled={filteredEntries.length === 0}
-          >
-            <Download className="h-4 w-4" />
-            Export
+          <button className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center gap-2" onClick={handleExport} disabled={filteredEntries.length === 0}>
+            <Download className="h-4 w-4" />Export
           </button>
-          <button
-            onClick={fetchStockEntries}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-2"
-            disabled={loading}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
+          <button onClick={fetchStockEntries} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors flex items-center gap-2" disabled={loading}>
+            <RefreshCw className="h-4 w-4" />Refresh
           </button>
-          <button
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
-            onClick={() => setShowForm(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Record New Purchase
+          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" />Record New Purchase
           </button>
         </div>
       </div>
@@ -1447,43 +1435,30 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-blue-600">Total Purchase Amount</p>
-              <p className="text-xl font-bold text-blue-900">{formatCurrency(subtotals.purchaseAmount)}</p>
-            </div>
+            <div><p className="text-sm font-medium text-blue-600">Total Purchase Amount</p><p className="text-xl font-bold text-blue-900">{formatCurrency(subtotals.purchaseAmount)}</p></div>
             <TrendingUp className="h-8 w-8 text-blue-600" />
           </div>
         </div>
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-green-600">Total Balance Amount</p>
-              <p className="text-xl font-bold text-green-900">{formatCurrency(subtotals.balanceAmount)}</p>
-            </div>
+            <div><p className="text-sm font-medium text-green-600">Total Balance Amount</p><p className="text-xl font-bold text-green-900">{formatCurrency(subtotals.balanceAmount)}</p></div>
             <TrendingUp className="h-8 w-8 text-green-600" />
           </div>
         </div>
         <div className="bg-purple-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-purple-600">Total Balance Quantity</p>
-              <p className="text-xl font-bold text-purple-900">{subtotals.balanceQuantity} units</p>
-            </div>
+            <div><p className="text-sm font-medium text-purple-600">Total Balance Quantity</p><p className="text-xl font-bold text-purple-900">{subtotals.balanceQuantity} units</p></div>
             <Package className="h-8 w-8 text-purple-600" />
           </div>
         </div>
         <div className="bg-orange-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-orange-600">Total Products</p>
-              <p className="text-xl font-bold text-orange-900">{filteredEntries.length}</p>
-            </div>
+            <div><p className="text-sm font-medium text-orange-600">Total Products</p><p className="text-xl font-bold text-orange-900">{filteredEntries.length}</p></div>
             <Filter className="h-8 w-8 text-orange-600" />
           </div>
         </div>
       </div>
 
-      {/* Error Alert */}
       {error && (
         <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
           <div className="flex justify-between items-center">
@@ -1497,35 +1472,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search products..."
-            className="w-full pl-10 p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <input type="text" placeholder="Search products..." className="w-full pl-10 p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
-        <select
-          className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-        >
+        <select className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>
-          {productCategories.map((category) => (
-            <option key={category} value={category}>{category}</option>
-          ))}
+          {productCategories.map((category) => (<option key={category} value={category}>{category}</option>))}
         </select>
-        <input
-          type="date"
-          className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-        />
-        <select
-          className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={itemsPerPage}
-          onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1) }}
-        >
+        <input type="date" className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+        <select className="p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1) }}>
           <option value={10}>10 per page</option>
           <option value={25}>25 per page</option>
           <option value={50}>50 per page</option>
@@ -1537,7 +1491,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       </div>
 
-      {/* Stock Management Table */}
+      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -1549,13 +1503,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
-              {/* ── NEW: Factory Overhead column ── */}
               <th className="px-4 py-3 text-right text-xs font-medium text-amber-600 uppercase tracking-wider bg-amber-50">Factory O/H</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Amount</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Rate</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Potential Profit</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <div>Potential Profit</div>
+              </th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -1570,7 +1525,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorName || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{entry.purchaseQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(entry.purchaseRate)}</td>
-                  {/* ── NEW: Factory Overhead cell – only show if > 0 ── */}
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-right bg-amber-50">
                     {entry.factoryOverhead > 0 ? (
                       <span className="text-amber-700 font-semibold">{formatCurrency(entry.factoryOverhead)}</span>
@@ -1607,7 +1561,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <td colSpan="5" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.purchaseQuantity}</td>
                 <td className="px-4 py-4"></td>
-                {/* ── NEW: Factory Overhead total ── */}
                 <td className="px-4 py-4 text-sm font-bold text-amber-700 text-right bg-amber-50">{formatCurrency(subtotals.totalFactoryOverhead)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-blue-600 text-right">{formatCurrency(subtotals.purchaseAmount)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.balanceQuantity}</td>
@@ -1642,7 +1595,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       )}
 
-      {/* Footer */}
       <div className="mt-8 pt-4 border-t border-gray-200 text-center text-sm text-gray-500">
         Created by <span className="font-semibold text-blue-600">Soft-Technix</span>
       </div>
@@ -1652,10 +1604,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
           <div className="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-orange-600" />
-                Purchase Return - PRN
-              </h2>
+              <h2 className="text-xl font-semibold flex items-center gap-2"><RotateCcw className="h-5 w-5 text-orange-600" />Purchase Return - PRN</h2>
               <button onClick={resetReturnForm} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"><p className="text-sm text-red-800">{error}</p></div>}
@@ -1716,35 +1665,36 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <button onClick={resetForm} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
             </div>
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"><p className="text-sm text-red-800">{error}</p></div>}
+
+            {/* Loading overlay when categories are still being fetched during edit */}
+            {isEditing && loadingOverheadCats && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+                <svg className="animate-spin h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                <p className="text-sm text-amber-800 font-medium">Loading product data, please wait...</p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
 
-                {/* ── Product Details ── */}
+                {/* Product Details */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                    {/* ── NEW: Edit Date field (top of form) ── */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {isEditing ? "Edit Date" : "Purchase Date"} <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleChange}
-                        required
-                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      <input type="date" name="date" value={formData.date} onChange={handleChange} required className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item / Model Name <span className="text-red-500">*</span></label>
                       <input type="text" name="name" value={formData.name} onChange={handleChange} required className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter product name" list="products-list" />
                       <datalist id="products-list">{products.map((product) => (<option key={product._id} value={product.name} />))}</datalist>
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
                       <select name="category" value={formData.category} onChange={handleChange} required className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
@@ -1752,12 +1702,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                         {productCategories.map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                       </select>
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
                       <input type="text" name="serialNumber" value={formData.serialNumber} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter serial number" />
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date (Optional)</label>
                       <input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
@@ -1765,7 +1713,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   </div>
                 </div>
 
-                {/* ── Quantity & Pricing ── */}
+                {/* Quantity & Pricing */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Quantity & Pricing</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1773,12 +1721,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity <span className="text-red-500">*</span></label>
                       <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} required min="0" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter quantity" />
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Rate <span className="text-red-500">*</span></label>
                       <input type="number" name="purchaseRate" value={formData.purchaseRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter purchase rate" />
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Sale Rate <span className="text-red-500">*</span></label>
                       <input type="number" name="saleRate" value={formData.saleRate} onChange={handleChange} required min="0" step="0.01" className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter sale rate" />
@@ -1786,26 +1732,21 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   </div>
                 </div>
 
-                {/* ── Factory Overhead Breakdown ── */}
+                {/* Factory Overhead Breakdown */}
                 <div className="border-2 border-amber-200 rounded-xl overflow-hidden">
-                  {/* Section Header */}
                   <div className="bg-amber-50 px-4 py-3 flex items-center justify-between border-b border-amber-200">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🏭</span>
                       <h3 className="text-base font-semibold text-amber-800">Factory Overhead</h3>
-                      <span className="text-xs text-amber-600 font-normal"></span>
                     </div>
                     {getOverheadTotal() > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-amber-600">Total O/H:</span>
-                        <span className="bg-amber-600 text-white text-sm font-bold px-3 py-0.5 rounded-full">
-                          {formatCurrency(getOverheadTotal())}
-                        </span>
+                        <span className="bg-amber-600 text-white text-sm font-bold px-3 py-0.5 rounded-full">{formatCurrency(getOverheadTotal())}</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Category Grid */}
                   <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 bg-white">
                     {loadingOverheadCats ? (
                       <div className="col-span-4 flex items-center justify-center py-8 gap-3 text-amber-500">
@@ -1816,99 +1757,47 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                         <span className="text-sm font-medium">Loading overhead categories...</span>
                       </div>
                     ) : (
-                      <>
-                        {OVERHEAD_CATEGORIES.map((cat) => {
-                          const item = overheadItems[cat.id] || { checked: false, amount: "" }
-                          const c = COLOR_MAP[cat.color] || COLOR_MAP.gray
-                          return (
-                            <div
-                              key={cat.id}
-                              className={`rounded-xl border-2 transition-all ${item.checked ? `${c.border} ${c.bg}` : "border-gray-200 bg-gray-50"}`}
-                            >
-                              {/* Checkbox Row */}
-                              <label className="flex items-center gap-2 px-3 pt-3 pb-2 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={item.checked}
-                                  onChange={() => toggleOverhead(cat.id)}
-                                  className={`w-4 h-4 rounded ${item.checked ? c.check : "accent-gray-400"}`}
-                                />
-                                <span className="text-base">{cat.icon}</span>
-                                <span className={`text-sm font-semibold ${item.checked ? c.text : "text-gray-500"}`}>
-                                  {cat.label}
-                                </span>
-                              </label>
-
-                              {/* Amount Input — only when checked */}
-                              {item.checked && (
-                                <div className="px-3 pb-3">
-                                  <div className="relative">
-                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">₨</span>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={item.amount}
-                                      onChange={(e) => setOverheadAmount(cat.id, e.target.value)}
-                                      placeholder="0.00"
-                                      className={`w-full pl-6 pr-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${c.border} bg-white font-semibold ${c.text}`}
-                                      autoFocus
-                                    />
-                                  </div>
-                                  {Number(item.amount) > 0 && (
-                                    <p className="text-xs mt-1 text-center font-medium opacity-70">
-                                      <span className={c.text}>{formatCurrency(Number(item.amount))} / unit</span>
-                                    </p>
-                                  )}
+                      OVERHEAD_CATEGORIES.map((cat) => {
+                        const item = overheadItems[cat.id] || { checked: false, amount: "" }
+                        const c = COLOR_MAP[cat.color] || COLOR_MAP.gray
+                        return (
+                          <div key={cat.id} className={`rounded-xl border-2 transition-all ${item.checked ? `${c.border} ${c.bg}` : "border-gray-200 bg-gray-50"}`}>
+                            <label className="flex items-center gap-2 px-3 pt-3 pb-2 cursor-pointer select-none">
+                              <input type="checkbox" checked={item.checked} onChange={() => toggleOverhead(cat.id)} className={`w-4 h-4 rounded ${item.checked ? c.check : "accent-gray-400"}`} />
+                              <span className="text-base">{cat.icon}</span>
+                              <span className={`text-sm font-semibold ${item.checked ? c.text : "text-gray-500"}`}>{cat.label}</span>
+                            </label>
+                            {item.checked && (
+                              <div className="px-3 pb-3">
+                                <div className="relative">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">₨</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.amount}
+                                    onChange={(e) => setOverheadAmount(cat.id, e.target.value)}
+                                    placeholder="0.00"
+                                    className={`w-full pl-6 pr-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 ${c.border} bg-white font-semibold ${c.text}`}
+                                    autoFocus
+                                  />
                                 </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </>
+                                {Number(item.amount) > 0 && (
+                                  <p className="text-xs mt-1 text-center font-medium opacity-70">
+                                    <span className={c.text}>{formatCurrency(Number(item.amount))} / unit</span>
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
                     )}
                   </div>
 
-                  {/* Selected Items Summary Bar */}
-                  {getOverheadTotal() > 0 && (
-                    <div className="bg-amber-50 border-t border-amber-200 px-4 py-3">
-                      <p className="text-xs font-semibold text-amber-700 mb-2">Selected Overhead Items:</p>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {OVERHEAD_CATEGORIES.filter((c) => overheadItems[c.id]?.checked && Number(overheadItems[c.id]?.amount) > 0).map((cat) => {
-                          const c = COLOR_MAP[cat.color]
-                          return (
-                            <span key={cat.id} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${c.badge}`}>
-                              {cat.icon} {cat.label}: {formatCurrency(Number(overheadItems[cat.id].amount))}
-                            </span>
-                          )
-                        })}
-                      </div>
-
-                      {/* Formula Row */}
-                      {Number(formData.purchaseRate) > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 bg-white rounded-lg px-3 py-2 border border-amber-200 text-sm">
-                          <span className="text-gray-500">Purchase Rate:</span>
-                          <span className="font-bold text-blue-700">{formatCurrency(Number(formData.purchaseRate))}</span>
-                          <span className="text-gray-400 font-bold">+</span>
-                          <span className="text-gray-500">Factory O/H:</span>
-                          <span className="font-bold text-amber-700">{formatCurrency(getOverheadTotal())}</span>
-                          <span className="text-gray-400 font-bold">=</span>
-                          <span className="text-gray-600">Total Cost/Unit:</span>
-                          <span className="font-extrabold text-green-700">{formatCurrency(getTotalCostPerUnit())}</span>
-                          {Number(formData.quantity) > 0 && (
-                            <>
-                              <span className="text-gray-400 mx-1">|</span>
-                              <span className="text-gray-500">× {Number(formData.quantity)} units =</span>
-                              <span className="font-extrabold text-green-700 text-base">{formatCurrency(getTotalPurchaseAmount())}</span>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* ── Vendor Information ── */}
+                {/* Vendor Information */}
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Vendor Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1942,34 +1831,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 </div>
               </div>
 
-              {/* ── Purchase Summary ── */}
+              {/* Purchase Summary */}
               {formData.quantity && formData.purchaseRate && formData.saleRate && (
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
 
-                  {getOverheadTotal() > 0 && (
-                    <div className="mb-4 p-3 bg-white rounded-lg border border-amber-200 flex flex-wrap items-center gap-3 text-sm">
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-500">Purchase Rate:</span>
-                        <span className="font-bold text-blue-700">{formatCurrency(Number(formData.purchaseRate))}</span>
-                      </div>
-                      <span className="text-gray-400 font-bold">+</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-500">Factory O/H:</span>
-                        <span className="font-bold text-amber-600">{formatCurrency(getOverheadTotal())}</span>
-                      </div>
-                      <span className="text-gray-400 font-bold">=</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-500">Total Cost/Unit:</span>
-                        <span className="font-bold text-green-700 text-base">{formatCurrency(getTotalCostPerUnit())}</span>
-                      </div>
-                      <span className="text-gray-300 mx-1">|</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-500">× {Number(formData.quantity)} units =</span>
-                        <span className="font-extrabold text-green-700 text-base">{formatCurrency(getTotalPurchaseAmount())}</span>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-3 rounded border border-blue-100">
@@ -1979,12 +1845,12 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                     <div className="bg-white p-3 rounded border border-blue-100">
                       <span className="text-xs font-medium text-gray-600">Purchase Rate Amount</span>
                       <div className="text-lg font-bold text-blue-600">{formatCurrency((Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))} </div>
+                      <div className="text-xs text-gray-400 mt-0.5">{formatCurrency(Number(formData.purchaseRate))}</div>
                     </div>
                     {getOverheadTotal() > 0 && (
                       <div className="bg-amber-50 p-3 rounded border border-amber-200">
                         <span className="text-xs font-medium text-amber-700">Factory Overhead Amount</span>
-                        <div className="text-lg font-bold text-amber-700">{formatCurrency( getOverheadTotal())}</div>
+                        <div className="text-lg font-bold text-amber-700">{formatCurrency(getOverheadTotal())}</div>
                       </div>
                     )}
                     <div className={`p-3 rounded border-2 ${getOverheadTotal() > 0 ? "bg-green-50 border-green-300" : "bg-white border-blue-100"}`}>
@@ -1992,27 +1858,21 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                         {getTotalPurchaseAmount() > 0 ? "Total Purchase Amount (incl. O/H)" : "Total Purchase Amount"}
                       </span>
                       <div className={`text-lg font-extrabold ${getOverheadTotal() > 0 ? "text-green-700" : "text-blue-700"}`}>
-                        {formatCurrency(getOverheadTotal()+ (Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}
+                        {formatCurrency(getOverheadTotal() + (Number(formData.quantity) || 0) * (Number(formData.purchaseRate) || 0))}
                       </div>
                       {getOverheadTotal() > 0 && (
                         <div className="text-xs text-green-600 mt-0.5">{formatCurrency(getTotalCostPerUnit())} × {Number(formData.quantity)}</div>
                       )}
                     </div>
-                    <div className="bg-white p-3 rounded border border-blue-100">
-                      <span className="text-xs font-medium text-gray-600">Balance Quantity</span>
-                      <div className="text-lg font-bold text-green-900">{Number(formData.quantity) || 0}</div>
-                    </div>
-                    <div className="bg-white p-3 rounded border border-blue-100">
-                      <span className="text-xs font-medium text-gray-600">Balance Amount</span>
-                      <div className="text-lg font-bold text-green-600">{formatCurrency(getTotalPurchaseAmount())}</div>
-                    </div>
+                   
+                    
                   </div>
                 </div>
               )}
 
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2" disabled={loading || loadingVendors || loadingPurchases}>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2" disabled={loading || loadingVendors || loadingPurchases || loadingOverheadCats}>
                   <Save className="h-4 w-4" />{isEditing ? "Update" : "Add"} Product
                 </button>
               </div>
@@ -2113,13 +1973,15 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Pricing Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div><label className="block text-sm font-medium text-gray-700">Purchase Rate</label><p className="text-sm text-gray-900 font-medium">{formatCurrency(selectedEntry.purchaseRate)}</p></div>
-                  {/* ── NEW: Factory Overhead in details ── */}
-                  <div>
-                    <label className="block text-sm font-medium text-amber-700">Factory Overhead</label>
-                    <p className="text-sm text-amber-700 font-medium">{selectedEntry.factoryOverhead > 0 ? formatCurrency(selectedEntry.factoryOverhead) : "N/A"}</p>
-                  </div>
+                  <div><label className="block text-sm font-medium text-amber-700">Factory Overhead</label><p className="text-sm text-amber-700 font-medium">{selectedEntry.factoryOverhead > 0 ? formatCurrency(selectedEntry.factoryOverhead) : "N/A"}</p></div>
                   <div><label className="block text-sm font-medium text-gray-700">Sale Rate</label><p className="text-sm text-gray-900 font-medium">{formatCurrency(selectedEntry.saleRate)}</p></div>
-                  <div><label className="block text-sm font-medium text-gray-700">Potential Profit</label><p className={`text-sm font-medium ${selectedEntry.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(selectedEntry.profit)}</p></div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Potential Profit</label>
+                    <p className={`text-sm font-medium ${selectedEntry.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(selectedEntry.profit)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      ({selectedEntry.balanceQuantity} × {formatCurrency(selectedEntry.saleRate)}) − {formatCurrency(selectedEntry.purchaseAmount)}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div>
