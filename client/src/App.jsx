@@ -31,6 +31,7 @@ import ProductManagementDashboard from "./pages/Product Management/Product-Manag
 import SupplierPaymentVoucher from "./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher";
 import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 import BarcodeScannerScreen from "./pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
+import OverheadPayment from "./pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import Icon from "./assets/icon.png";
 
 const initialProducts = [];
@@ -354,7 +355,10 @@ export default function App() {
                     onClick={() => { handleTabChange("sales discount Voucher"); setAccountsDropdownOpen(false); }}>
                     Sales Discount Voucher
                   </button>
-                  
+                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => { handleTabChange("Overhead Payment"); setAccountsDropdownOpen(false); }}>
+                    Overhead Payment
+                  </button>
                 </div>
               )}
             </div>
@@ -436,6 +440,7 @@ export default function App() {
         {activeTab === "Supplier Payment Voucher" && <SupplierPaymentVoucher />}
         {activeTab === "Customer Receipt Voucher" && <CustomerReceiptVoucher />}
         {activeTab === "Barcode Scanner" && <BarcodeScannerScreen />}
+        {activeTab === "Overhead Payment" && <OverheadPayment />}
         {activeTab === "notifications" && (
           <Notifications notifications={notifications} onDismiss={dismissNotification} />
         )}

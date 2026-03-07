@@ -11,25 +11,15 @@ const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
+const OverheadVoucher = require("../models/Overheadcategory")
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ HARDCODED TAX ACCOUNTS
-//
-//  WHT (Withholding Tax) — SPV میں کٹتا ہے
-//    → category: "Liabilities" | normalBalance: "credit"
-//    → Balance Sheet میں Liability کے تحت آئے گا
-//
-//  Advance Tax — CRV میں کٹتا ہے
-//    → category: "Assets" | normalBalance: "debit"
-//    → Balance Sheet میں Asset کے تحت آئے گا، Ledger میں DR side
 // ═══════════════════════════════════════════════════════════════════════════════
 const HARDCODED_TAX_ACCOUNTS = [
-  // ── WHT Payable (Liability) — SPV میں vendor سے کاٹ کر govt کو دینا ہے ──
   { code: "TAX-0025-PAY", name: "Withholding Tax 0.25% Payable", type: "TAX-WHT-PAYABLE", fullName: "TAX-0025-PAY - WHT 0.25% Payable", category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.0025 },
   { code: "TAX-0050-PAY", name: "Withholding Tax 0.50% Payable", type: "TAX-WHT-PAYABLE", fullName: "TAX-0050-PAY - WHT 0.50% Payable", category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.005  },
   { code: "TAX-0100-PAY", name: "Withholding Tax 1% Payable",    type: "TAX-WHT-PAYABLE", fullName: "TAX-0100-PAY - WHT 1% Payable",    category: "Liabilities", normalBalance: "credit", balance: 0, rate: 0.01   },
-
-  // ── Advance Tax (Asset) — CRV میں customer سے کٹتا ہے، ہمارا asset ہے ──
   { code: "TAX-ADV-0025", name: "Advance Tax 0.25%", type: "TAX-ADVANCE", fullName: "TAX-ADV-0025 - Advance Tax 0.25%", category: "Assets", normalBalance: "debit", balance: 0, rate: 0.0025 },
   { code: "TAX-ADV-0050", name: "Advance Tax 0.50%", type: "TAX-ADVANCE", fullName: "TAX-ADV-0050 - Advance Tax 0.50%", category: "Assets", normalBalance: "debit", balance: 0, rate: 0.005  },
   { code: "TAX-ADV-0100", name: "Advance Tax 1%",    type: "TAX-ADVANCE", fullName: "TAX-ADV-0100 - Advance Tax 1%",    category: "Assets", normalBalance: "debit", balance: 0, rate: 0.01   },
@@ -43,16 +33,12 @@ function isTaxAccount(code, name) {
   const n = (name || "").toLowerCase()
   return HARDCODED_TAX_ACCOUNTS.some(t => t.code === c || t.name.toLowerCase() === n)
 }
-
-// ✅ WHT Payable accounts (Liabilities) — SPV
 function isWHTPayableAccount(code, name) {
   const c = (code || "").toUpperCase()
   const n = (name || "").toLowerCase()
   return HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-WHT-PAYABLE")
     .some(t => t.code === c || t.name.toLowerCase() === n)
 }
-
-// ✅ Advance Tax accounts (Assets) — CRV
 function isAdvanceTaxAccount(code, name) {
   const c = (code || "").toUpperCase()
   const n = (name || "").toLowerCase()
@@ -65,20 +51,16 @@ function isAdvanceTaxAccount(code, name) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function matchAccount(value, code, name) {
   if (!value || (!code && !name)) return false
-
   const v = value.toLowerCase().trim()
   const c = (code || "").toLowerCase().trim()
   const n = (name || "").toLowerCase().trim()
-
   if (v === "sales discount" || v === "sales-disc") return c === "sales-disc" || n === "sales discount"
   if (v === "purchases discount" || v === "purch-disc") return c === "purch-disc" || n === "purchases discount"
   if (v.startsWith("tax-") || v.startsWith("withholding") || v.startsWith("advance tax")) return v === c || v === n
-
   if (c.length > 0 && v === c) return true
   if (n.length > 0 && v === n) return true
   if (c.length >= 5 && v.length >= 5 && (v.includes(c) || c.includes(v))) return true
   if (n.length >= 5 && v.length >= 5 && (v.includes(n) || n.includes(v))) return true
-
   return false
 }
 
@@ -99,31 +81,40 @@ const getAllAccounts = async (req, res) => {
     const purchaseDiscountCount = await PurchasesDiscount.countDocuments()
 
     const allAccounts = [
-      ...assets.map(acc => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Assets", normalBalance: "debit" })),
-      ...equity.map(acc => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Equity", normalBalance: "credit" })),
-      ...expenses.map(acc => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Expenses", normalBalance: "debit" })),
+      ...assets.map(acc      => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Assets",      normalBalance: "debit"  })),
+      ...equity.map(acc      => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Equity",      normalBalance: "credit" })),
+      ...expenses.map(acc    => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Expenses",    normalBalance: "debit"  })),
       ...liabilities.map(acc => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Liabilities", normalBalance: "credit" })),
-      ...revenue.map(acc => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Revenue", normalBalance: "credit" })),
+      ...revenue.map(acc     => ({ code: acc.code, name: acc.name, type: acc.type, balance: acc.balance || 0, fullName: `${acc.code} - ${acc.name}`, category: "Revenue",     normalBalance: "credit" })),
     ]
 
-    if (saleDiscountCount > 0) {
+    if (saleDiscountCount > 0)
       allAccounts.push({ code: "SALES-DISC", name: "SALES DISCOUNT", type: "SALES DISCOUNT", balance: 0, fullName: "SALES-DISC - SALES DISCOUNT", category: "Expenses", normalBalance: "debit" })
-    }
-    if (purchaseDiscountCount > 0) {
+    if (purchaseDiscountCount > 0)
       allAccounts.push({ code: "PURCH-DISC", name: "PURCHASES DISCOUNT", type: "PURCHASES DISCOUNT", balance: 0, fullName: "PURCH-DISC - PURCHASES DISCOUNT", category: "Revenue", normalBalance: "credit" })
+
+    // ✅ Add hardcoded "Overhead Expenses" account if any OHV vouchers exist
+    const ohvCount = await OverheadVoucher.countDocuments({ status: { $in: ["SAVED", "POSTED"] } })
+    if (ohvCount > 0) {
+      allAccounts.push({
+        code:          "OHV-EXP",
+        name:          "Overhead Expenses",
+        type:          "OVERHEAD",
+        balance:       0,
+        fullName:      "OHV-EXP - Overhead Expenses",
+        category:      "Expenses",
+        normalBalance: "debit",
+      })
     }
 
-    // Check if SPV or CRV have tax entries — add respective tax accounts
     const spvWithTax = await SupplierPaymentVoucher.find({ taxRate: { $gt: 0 } }, { taxRate: 1, _id: 0 }).lean()
     const crvWithTax = await CustomerReceiptVoucher.find({ taxRate: { $gt: 0 } }, { taxRate: 1, _id: 0 }).lean()
 
     if (spvWithTax.length > 0) {
-      // WHT Payable — Liabilities
       HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-WHT-PAYABLE").forEach(t => allAccounts.push({ ...t }))
       console.log("✅ Added WHT Payable (Liability) accounts")
     }
     if (crvWithTax.length > 0) {
-      // Advance Tax — Assets
       HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-ADVANCE").forEach(t => allAccounts.push({ ...t }))
       console.log("✅ Added Advance Tax (Asset) accounts")
     }
@@ -133,15 +124,10 @@ const getAllAccounts = async (req, res) => {
         const searchCriteria = account.code === "SALES-DISC" || account.code === "PURCH-DISC"
           ? { $or: [{ accountName: account.name }, { accountCode: account.code }] }
           : { accountCode: account.code }
-
         const ledgerEntries = await Ledger.find(searchCriteria)
-          .sort({ date: 1, createdAt: 1 })
-          .select("debit credit balance")
-          .lean()
-
-        if (ledgerEntries.length > 0) {
+          .sort({ date: 1, createdAt: 1 }).select("debit credit balance").lean()
+        if (ledgerEntries.length > 0)
           account.balance = ledgerEntries[ledgerEntries.length - 1].balance || 0
-        }
       } catch (err) {
         console.error(`❌ Balance error for ${account.code}:`, err.message)
       }
@@ -175,7 +161,7 @@ const getAccountLedger = async (req, res) => {
       accountCode === "SALES-DISC" || accountCode === "PURCH-DISC" ||
       accountName === "SALES DISCOUNT" || accountName === "PURCHASES DISCOUNT"
 
-    const isTaxAcc = isTaxAccount(accountCode, accountName)
+    const isTaxAcc   = isTaxAccount(accountCode, accountName)
     const taxAccInfo = isTaxAcc
       ? HARDCODED_TAX_ACCOUNTS.find(
           t => t.code === (accountCode || "").toUpperCase() ||
@@ -194,7 +180,8 @@ const getAccountLedger = async (req, res) => {
       finalAccountName = taxAccInfo.name
       accountCategory  = taxAccInfo.category
     } else {
-      const accountInfo = await findAccountInfo(accountCode || accountName)
+      // ✅ Try code first, if empty or not found → try name
+      const accountInfo = await findAccountInfo(accountCode && accountCode.trim() ? accountCode : accountName)
       if (accountInfo) {
         normalBalance    = accountInfo.normalBalance
         finalAccountCode = accountInfo.code     || accountCode
@@ -206,7 +193,7 @@ const getAccountLedger = async (req, res) => {
     console.log(`📋 Category: ${accountCategory} | normalBalance: ${normalBalance}`)
 
     const ledgerEntries = []
-    let runningBalance = 0
+    let runningBalance  = 0
 
     // ══════════════════════════════════════════════════════════════════════════
     // 1. VOUCHERS
@@ -220,7 +207,7 @@ const getAccountLedger = async (req, res) => {
       vouchers.forEach((voucher) => {
         voucher.entries?.forEach((entry) => {
           if (
-            matchAccount(entry.account || "", accountCode, accountName) ||
+            matchAccount(entry.account     || "", accountCode, accountName) ||
             matchAccount(entry.accountCode || "", accountCode, accountName)
           ) {
             const dr = parseFloat(entry.debitAmount  || 0)
@@ -240,19 +227,15 @@ const getAccountLedger = async (req, res) => {
 
     // ══════════════════════════════════════════════════════════════════════════
     // 2. SUPPLIER PAYMENT VOUCHERS (SPV)
-    //
-    //  DR  Vendor/Supplier    (voucherAmount)
-    //  CR  Cash/Bank          (netAmount)
-    //  CR  WHT Payable        (taxAmount) ← Liability account
+    //   DR  Vendor/Supplier   (voucherAmount)
+    //   CR  Cash/Bank         (netAmount)
+    //   CR  WHT Payable       (taxAmount)
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount) {
       const spvVouchers = await SupplierPaymentVoucher.find({
         voucherDate: { $gte: from, $lte: to },
         status: { $in: ["SAVED", "POSTED"] },
-      })
-        .populate("accDrSupplier", "name code")
-        .sort({ voucherDate: 1 })
-        .lean()
+      }).populate("accDrSupplier", "name code").sort({ voucherDate: 1 }).lean()
 
       console.log(`✅ Found ${spvVouchers.length} SPV vouchers`)
 
@@ -298,8 +281,7 @@ const getAccountLedger = async (req, res) => {
           })
         }
 
-        // C. WHT Payable CR (Liability) — SPV tax
-        // ✅ taxCode = "TAX-0025-PAY" etc. — Liability category
+        // C. WHT Payable CR
         if (taxAmt > 0 && (
           matchAccount(taxCode, accountCode, accountName) ||
           matchAccount(`${taxCode}`, accountCode, accountName) ||
@@ -340,7 +322,6 @@ const getAccountLedger = async (req, res) => {
           accountCode: "SALES-DISC", accountName: "SALES DISCOUNT",
         })
       }
-
       if (!isDiscountAccount && accountCategory === "Assets" && (
         matchAccount(customerName, accountCode, accountName) ||
         matchAccount(customerCode, accountCode, accountName)
@@ -379,7 +360,6 @@ const getAccountLedger = async (req, res) => {
           accountCode: "PURCH-DISC", accountName: "PURCHASES DISCOUNT",
         })
       }
-
       if (!isDiscountAccount && accountCategory === "Liabilities" && (
         matchAccount(vendorName, accountCode, accountName) ||
         matchAccount(vendorCode, accountCode, accountName)
@@ -396,7 +376,7 @@ const getAccountLedger = async (req, res) => {
     })
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 5. SALES — Assets (customer) یا Revenue صرف
+    // 5. SALES
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc && accountCategory !== "Liabilities" && accountCategory !== "Expenses") {
       const sales = await Sale.find({ createdAt: { $gte: from, $lte: to } }).lean()
@@ -420,7 +400,6 @@ const getAccountLedger = async (req, res) => {
             grn: null, sourceId: sale._id,
           })
         }
-
         if (accountCategory === "Revenue" && matchAccount(sale.saleType || "", accountCode, accountName)) {
           runningBalance += normalBalance === "debit" ? -amount : amount
           ledgerEntries.push({
@@ -462,7 +441,6 @@ const getAccountLedger = async (req, res) => {
               grn: null, sourceId: sale._id,
             })
           }
-
           if (accountCategory === "Assets" && matchAccount(customerName, accountCode, accountName)) {
             runningBalance += normalBalance === "debit" ? -retAmt : retAmt
             ledgerEntries.push({
@@ -478,7 +456,7 @@ const getAccountLedger = async (req, res) => {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // 7. PRODUCTS (PURCHASES) — Expenses یا Liabilities صرف
+    // 7. PRODUCTS (PURCHASES)
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc && accountCategory !== "Revenue") {
       const products = await Product.find({ createdAt: { $gte: from, $lte: to } })
@@ -489,7 +467,6 @@ const getAccountLedger = async (req, res) => {
       products.forEach((product) => {
         const amount = parseFloat(product.purchaseQuantity || 0) * parseFloat(product.purchaseRate || 0)
         if (amount <= 0) return
-
         const purchaseTypeName = product.purchaseType?.name || ""
         const purchaseTypeCode = product.purchaseType?.code || ""
         const vendorName       = product.vendorName?.name   || ""
@@ -508,7 +485,6 @@ const getAccountLedger = async (req, res) => {
             grn: product.grn, sourceId: product._id,
           })
         }
-
         if (accountCategory === "Liabilities" && (
           matchAccount(vendorName, accountCode, accountName) ||
           matchAccount(vendorCode, accountCode, accountName)
@@ -540,7 +516,6 @@ const getAccountLedger = async (req, res) => {
       productsWithReturns.forEach((product) => {
         const retAmt = parseFloat(product.ReturnedAmount || 0)
         if (retAmt <= 0) return
-
         const purchaseTypeName = product.purchaseType?.name || ""
         const purchaseTypeCode = product.purchaseType?.code || ""
         const vendorName       = product.vendorName?.name   || ""
@@ -560,7 +535,6 @@ const getAccountLedger = async (req, res) => {
             grn: product.grn, sourceId: product._id,
           })
         }
-
         if (accountCategory === "Expenses" && (
           matchAccount(purchaseTypeName, accountCode, accountName) ||
           matchAccount(purchaseTypeCode, accountCode, accountName)
@@ -579,19 +553,15 @@ const getAccountLedger = async (req, res) => {
 
     // ══════════════════════════════════════════════════════════════════════════
     // 9. CUSTOMER RECEIPT VOUCHERS (CRV)
-    //
-    //  DR  Cash/Bank           (netAmount)
-    //  CR  Customer            (voucherAmount)
-    //  DR  Advance Tax         (taxAmount) ← Asset account — DR side
+    //   DR  Cash/Bank          (netAmount)
+    //   CR  Customer           (voucherAmount)
+    //   DR  Advance Tax        (taxAmount)
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount) {
       const crvVouchers = await CustomerReceiptVoucher.find({
         voucherDate: { $gte: from, $lte: to },
         status: { $in: ["SAVED", "POSTED"] },
-      })
-        .populate("accCrCustomer", "name code")
-        .sort({ voucherDate: 1 })
-        .lean()
+      }).populate("accCrCustomer", "name code").sort({ voucherDate: 1 }).lean()
 
       console.log(`✅ Found ${crvVouchers.length} CRV vouchers`)
 
@@ -610,7 +580,7 @@ const getAccountLedger = async (req, res) => {
         const narr         = crv.narration || `Receipt from ${customerName}`
         const taxPct       = taxRate > 0 ? `${(taxRate * 100).toFixed(2)}%` : ""
 
-        // A. Bank DR (net received)
+        // A. Bank DR
         if (matchAccount(bankName, accountCode, accountName) || matchAccount(bankCode, accountCode, accountName)) {
           const dr = taxAmt > 0 ? netAmt : fullAmt
           runningBalance += normalBalance === "debit" ? dr : -dr
@@ -624,7 +594,7 @@ const getAccountLedger = async (req, res) => {
           })
         }
 
-        // B. Customer CR (full amount — receivable cleared)
+        // B. Customer CR
         if (accountCategory === "Assets" && (
           matchAccount(customerName, accountCode, accountName) ||
           matchAccount(customerCode, accountCode, accountName)
@@ -640,8 +610,7 @@ const getAccountLedger = async (req, res) => {
           })
         }
 
-        // C. Advance Tax DR (Asset) — CRV tax
-        // ✅ taxCode = "TAX-ADV-0025" etc. — Asset category, DR side
+        // C. Advance Tax DR
         if (taxAmt > 0 && (
           matchAccount(taxCode, accountCode, accountName) ||
           matchAccount(taxName, accountCode, accountName) ||
@@ -654,6 +623,82 @@ const getAccountLedger = async (req, res) => {
             debit: taxAmt, credit: 0, balance: runningBalance,
             grn: null, sourceId: crv._id,
             accountCode: taxCode, accountName: taxName,
+          })
+        }
+      })
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 10. OVERHEAD VOUCHERS (OHV)
+    //   DR  Overhead/Expense Account   (totalAmount)  ← Expenses category
+    //   CR  Cash / Bank Account        (totalAmount)  ← Assets category
+    // ══════════════════════════════════════════════════════════════════════════
+    if (!isDiscountAccount && !isTaxAcc) {
+      const overheadVouchers = await OverheadVoucher.find({
+        voucherDate: { $gte: from, $lte: to },
+        status:      { $in: ["SAVED", "POSTED"] },
+      }).sort({ voucherDate: 1 }).lean()
+
+      console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers`)
+
+      overheadVouchers.forEach((ohv) => {
+        const cashBankName = ohv.accountName || ""
+        const cashBankCode = ohv.accountCode || ohv.account || ""
+        const expName      = ohv.overheadAccountName || ""
+        const expCode      = ohv.overheadAccount     || ""
+        const vNo          = ohv.voucherNumber        || "OHV"
+        const amt          = parseFloat(ohv.totalAmount || 0)
+        if (amt <= 0) return
+        const narr = ohv.description || `Overhead expense via ${cashBankName}`
+
+        // A. DR — Overhead/Expense Account
+        // ✅ OHV-EXP hardcoded account: SARE overhead vouchers dikhao
+        const isOhvExpAccount = accountCode === "OHV-EXP" || accountName === "Overhead Expenses"
+
+        const expDirectMatch =
+          isOhvExpAccount ||  // ← hardcoded catch-all
+          (expCode && expCode.length < 24 && (expCode === accountCode || expCode === accountName)) ||
+          (expName && (expName === accountCode || expName === accountName)) ||
+          matchAccount(expName, accountCode, accountName) ||
+          (expCode && expCode.length < 24 && matchAccount(expCode, accountCode, accountName))
+
+        if (expDirectMatch) {
+          runningBalance += normalBalance === "debit" ? amt : -amt
+          ledgerEntries.push({
+            id:          `ohv-${ohv._id}-expense`,
+            date:        ohv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: "OHV",
+            description: `${narr} [${ohv.paymentMode}: ${cashBankName}]`,
+            debit:       amt,
+            credit:      0,
+            balance:     runningBalance,
+            grn:         null,
+            sourceId:    ohv._id,
+          })
+        }
+
+        // B. CR — Cash / Bank Account
+        // ✅ Direct code match OR name match for cash/bank
+        const bankMatch =
+          (cashBankCode && (cashBankCode === accountCode || cashBankCode === accountName)) ||
+          (cashBankName && (cashBankName === accountCode || cashBankName === accountName)) ||
+          matchAccount(cashBankName, accountCode, accountName) ||
+          matchAccount(cashBankCode, accountCode, accountName)
+
+        if (bankMatch) {
+          runningBalance += normalBalance === "debit" ? -amt : amt
+          ledgerEntries.push({
+            id:          `ohv-${ohv._id}-cashbank`,
+            date:        ohv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: "OHV",
+            description: `${narr} — paid from ${cashBankName}`,
+            debit:       0,
+            credit:      amt,
+            balance:     runningBalance,
+            grn:         null,
+            sourceId:    ohv._id,
           })
         }
       })
@@ -675,7 +720,8 @@ const getAccountLedger = async (req, res) => {
       entry.balance = runningBalance
 
       let srcType = "Voucher"
-      if      (entry.id.includes("crv"))               srcType = "Voucher"
+      if      (entry.id.includes("ohv"))               srcType = "OverheadVoucher"
+      else if (entry.id.includes("crv"))               srcType = "Voucher"
       else if (entry.id.includes("spv"))               srcType = "SupplierPaymentVoucher"
       else if (entry.id.includes("sale-return"))       srcType = "SaleReturn"
       else if (entry.id.includes("sale-discount"))     srcType = "SaleDiscount"
@@ -686,7 +732,7 @@ const getAccountLedger = async (req, res) => {
 
       let dbVoucherType = entry.voucherType
       const allowedVoucherTypes = [
-        "Sale", "Purchase", "CPV", "BPV", "CRV", "BRV", "JV", "SPV",
+        "Sale", "Purchase", "CPV", "BPV", "CRV", "BRV", "JV", "SPV", "OHV",
         "Sale Return", "Purchase Return", "Sale Discount", "Purchase Discount", "WHT",
       ]
       if (!allowedVoucherTypes.includes(dbVoucherType)) dbVoucherType = "JV"
@@ -741,7 +787,6 @@ const getAccountLedger = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
-
 async function findAccountInfo(accountIdentifier) {
   try {
     if (accountIdentifier === "SALES-DISC" || accountIdentifier === "SALES DISCOUNT")
@@ -754,12 +799,17 @@ async function findAccountInfo(accountIdentifier) {
     )
     if (taxMatch) return taxMatch
 
+    // Search by code OR name (handles empty code case)
+    const searchQ = accountIdentifier
+      ? { $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }
+      : { name: "__no_match__" }  // prevent empty string matching all
+
     const [asset, equity, expense, liability, revenue] = await Promise.all([
-      Asset.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
-      Equity.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
-      Expense.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
-      Liability.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
-      Revenue.findOne({ $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }).lean(),
+      Asset.findOne(searchQ).lean(),
+      Equity.findOne(searchQ).lean(),
+      Expense.findOne(searchQ).lean(),
+      Liability.findOne(searchQ).lean(),
+      Revenue.findOne(searchQ).lean(),
     ])
 
     if (asset)     return { ...asset,     category: "Assets",      normalBalance: "debit"  }
@@ -775,6 +825,7 @@ async function findAccountInfo(accountIdentifier) {
 }
 
 function determineEntryType(voucherType, debit, credit) {
+  if (voucherType === "OHV")               return debit > 0 ? "EXPENSE"          : "CASH"
   if (voucherType === "WHT")               return debit > 0 ? "WHT_EXPENSE"      : "WHT_PAYABLE"
   if (voucherType === "Sale")              return debit > 0 ? "RECEIVABLE"       : "REVENUE"
   if (voucherType === "Sale Return")       return debit > 0 ? "SALE_RETURN"      : "RECEIVABLE_REVERSAL"
@@ -782,7 +833,7 @@ function determineEntryType(voucherType, debit, credit) {
   if (voucherType === "Purchase")          return debit > 0 ? "PURCHASE"         : "PAYABLE"
   if (voucherType === "Purchase Return")   return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_RETURN"
   if (voucherType === "Purchase Discount") return debit > 0 ? "PAYABLE_REVERSAL" : "PURCHASE_DISCOUNT"
-  if (voucherType === "CRV")               return debit > 0 ? "CASH"            : "RECEIVABLE_REVERSAL"
+  if (voucherType === "CRV")               return debit > 0 ? "CASH"             : "RECEIVABLE_REVERSAL"
   if (voucherType === "BRV")               return "BANK"
   if (voucherType === "CPV" || voucherType === "BPV" || voucherType === "SPV") return "EXPENSE"
   if (voucherType === "JV")                return "JOURNAL"

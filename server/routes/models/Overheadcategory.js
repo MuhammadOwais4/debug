@@ -1,65 +1,81 @@
 const mongoose = require("mongoose")
 
-const overheadCategorySchema = new mongoose.Schema(
+// ── Line sub-schema ───────────────────────────────────────────────────────────
+const overheadLineSchema = new mongoose.Schema(
   {
-    id: {
-      type: String,
-      required: [true, "Category ID is required"],
-      unique: true,
-      trim: true,
-      maxlength: [30, "Category ID cannot exceed 30 characters"],
-    },
-    label: {
-      type: String,
-      required: [true, "Category label is required"],
-      trim: true,
-      maxlength: [60, "Label cannot exceed 60 characters"],
-    },
-    icon: {
-      type: String,
-      default: "➕",
-      trim: true,
-      maxlength: [10, "Icon cannot exceed 10 characters"],
-    },
-    color: {
-      type: String,
-      default: "gray",
-      enum: {
-        values: ["blue", "green", "purple", "red", "yellow", "orange", "gray", "pink", "teal", "indigo"],
-        message: "{VALUE} is not a valid color",
-      },
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    sortOrder: {
-      type: Number,
-      default: 0,
-    },
+    category:      { type: String, required: true, trim: true },
+    categoryLabel: { type: String, trim: true },
+    amount:        { type: Number, required: true, min: 0 },
+    note:          { type: String, trim: true, default: "" },
+    // Per-line overhead account (optional — if different per line)
+    overheadAccount:     { type: String, trim: true, default: "" },
+    overheadAccountName: { type: String, trim: true, default: "" },
   },
-  {
-    timestamps: true,
-  }
+  { _id: false }
 )
 
-// ── Default seed categories (run once on startup if collection is empty) ───────
-overheadCategorySchema.statics.seedDefaults = async function () {
-  const count = await this.countDocuments()
-  if (count > 0) return // already seeded
+// ── Main voucher schema ───────────────────────────────────────────────────────
+const overheadVoucherSchema = new mongoose.Schema(
+  {
+    voucherNumber: { type: String, unique: true, trim: true },
 
-  const defaults = [
-    { id: "labour",    label: "Labour Cost",        icon: "👷", color: "blue",   sortOrder: 1 },
-    { id: "transport", label: "Transport",           icon: "🚛", color: "green",  sortOrder: 2 },
-    { id: "packaging", label: "Packaging",           icon: "📦", color: "purple", sortOrder: 3 },
-    { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red",    sortOrder: 4 },
-    { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow", sortOrder: 5 },
-    { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange", sortOrder: 6 },
-    { id: "other",     label: "Other",               icon: "➕", color: "gray",   sortOrder: 7 },
-  ]
+    voucherDate: { type: Date, required: [true, "Voucher date is required"] },
 
-  await this.insertMany(defaults)
-  console.log("✅ Overhead categories seeded with defaults")
-}
+    paymentMode: {
+      type:     String,
+      required: [true, "Payment mode is required"],
+      enum:     ["Cash", "Bank"],
+    },
 
-module.exports = mongoose.model("OverheadCategory", overheadCategorySchema)
+    // ── Cash/Bank account (CR side) ──────────────────────────────────────────
+    account:     { type: String, required: [true, "Account is required"], trim: true },
+    accountName: { type: String, trim: true, default: "" },
+    accountType: { type: String, trim: true, default: "" },
+    accountCode: { type: String, trim: true, default: "" },
+
+    // ── Overhead Expense account (DR side) ───────────────────────────────────
+    overheadAccount:     { type: String, trim: true, default: "" }, // code
+    overheadAccountName: { type: String, trim: true, default: "" }, // name
+    overheadAccountType: { type: String, trim: true, default: "" }, // type/category
+
+    description: { type: String, trim: true, default: "" },
+    totalAmount: { type: Number, required: true, min: 0 },
+    lines:       { type: [overheadLineSchema], default: [] },
+
+    status: {
+      type:    String,
+      enum:    ["DRAFT", "SAVED", "POSTED", "CANCELLED"],
+      default: "SAVED",
+    },
+    createdBy: { type: String, trim: true, default: "" },
+  },
+  { timestamps: true }
+)
+
+// ── Auto-generate voucherNumber before save ───────────────────────────────────
+overheadVoucherSchema.pre("save", async function (next) {
+  if (this.voucherNumber) return next()
+
+  const now    = new Date()
+  const yy     = String(now.getFullYear()).slice(2)
+  const mm     = String(now.getMonth() + 1).padStart(2, "0")
+  const prefix = `OHV-${yy}${mm}-`
+
+  const last = await mongoose
+    .model("OverheadVoucher")
+    .findOne({ voucherNumber: { $regex: `^${prefix}` } })
+    .sort({ voucherNumber: -1 })
+    .lean()
+
+  let seq = 1001
+  if (last?.voucherNumber) {
+    const parts  = last.voucherNumber.split("-")
+    const lastSeq = parseInt(parts[parts.length - 1], 10)
+    if (!isNaN(lastSeq)) seq = lastSeq + 1
+  }
+
+  this.voucherNumber = `${prefix}${seq}`
+  next()
+})
+
+module.exports = mongoose.model("OverheadVoucher", overheadVoucherSchema)

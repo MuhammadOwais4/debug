@@ -1,169 +1,171 @@
-const OverheadCategory = require("../models/Overheadcategory")
+const OverheadVoucher = require("../models/Overheadcategory")
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET ALL ACTIVE CATEGORIES  (frontend fetches this on load)
-// GET /api/overhead-categories
+// GET ALL VOUCHERS
+// GET /api/overhead-voucher
+// ?status=SAVED  — filter by status
+// ?includeDeleted=true  — include CANCELLED ones too
 // ─────────────────────────────────────────────────────────────────────────────
-const getOverheadCategories = async (req, res) => {
+const getOverheadVouchers = async (req, res) => {
   try {
-    const categories = await OverheadCategory.find({ isActive: true })
-      .sort({ sortOrder: 1, createdAt: 1 })
+    const { status, fromDate, toDate, includeDeleted } = req.query
+    const filter = {}
+
+    if (status) {
+      filter.status = status
+    } else if (includeDeleted !== "true") {
+      // default: hide CANCELLED (soft-deleted) vouchers
+      filter.status = { $ne: "CANCELLED" }
+    }
+
+    if (fromDate || toDate) {
+      filter.voucherDate = {}
+      if (fromDate) filter.voucherDate.$gte = new Date(fromDate)
+      if (toDate)   filter.voucherDate.$lte = new Date(toDate + "T23:59:59.999Z")
+    }
+
+    const vouchers = await OverheadVoucher.find(filter)
+      .sort({ createdAt: -1 })
       .select("-__v")
 
-    res.json({ success: true, data: categories })
+    res.json({ success: true, data: vouchers })
   } catch (error) {
-    console.error("Error fetching overhead categories:", error)
-    res.status(500).json({ message: "Error fetching overhead categories", error: error.message })
+    console.error("Error fetching overhead vouchers:", error)
+    res.status(500).json({ message: "Error fetching overhead vouchers", error: error.message })
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET ALL (including inactive) — for admin panel
-// GET /api/overhead-categories/all
+// GET SINGLE VOUCHER
+// GET /api/overhead-voucher/:id
 // ─────────────────────────────────────────────────────────────────────────────
-const getAllOverheadCategories = async (req, res) => {
+const getOverheadVoucherById = async (req, res) => {
   try {
-    const categories = await OverheadCategory.find()
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .select("-__v")
-
-    res.json({ success: true, data: categories })
+    const voucher = await OverheadVoucher.findById(req.params.id).select("-__v")
+    if (!voucher) return res.status(404).json({ message: "Voucher not found" })
+    res.json({ success: true, data: voucher })
   } catch (error) {
-    console.error("Error fetching all overhead categories:", error)
-    res.status(500).json({ message: "Error fetching overhead categories", error: error.message })
+    console.error("Error fetching overhead voucher:", error)
+    res.status(500).json({ message: "Error fetching overhead voucher", error: error.message })
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CREATE CATEGORY
-// POST /api/overhead-categories
+// CREATE VOUCHER
+// POST /api/overhead-voucher
 // ─────────────────────────────────────────────────────────────────────────────
-const createOverheadCategory = async (req, res) => {
+const createOverheadVoucher = async (req, res) => {
   try {
-    const { id, label, icon, color, sortOrder } = req.body
+    const {
+      voucherDate, paymentMode,
+      account, accountName, accountType, accountCode,
+      overheadAccount, overheadAccountName, overheadAccountType,
+      description, totalAmount, lines, status, createdBy,
+    } = req.body
 
-    if (!id || !label) {
-      return res.status(400).json({ message: "ID and label are required" })
-    }
+    if (!voucherDate)        return res.status(400).json({ message: "voucherDate is required" })
+    if (!paymentMode)        return res.status(400).json({ message: "paymentMode is required" })
+    if (!account)            return res.status(400).json({ message: "account is required" })
+    // overheadAccount optional — frontend may not have this field yet
+    if (!Array.isArray(lines) || lines.length === 0)
+      return res.status(400).json({ message: "At least one expense line is required" })
 
-    // Check duplicate id
-    const existing = await OverheadCategory.findOne({ id: id.trim() })
-    if (existing) {
-      return res.status(400).json({ message: `Category with id "${id}" already exists` })
-    }
-
-    const category = new OverheadCategory({
-      id:        id.trim(),
-      label:     label.trim(),
-      icon:      icon || "➕",
-      color:     color || "gray",
-      sortOrder: sortOrder || 0,
-      isActive:  true,
+    const voucher = new OverheadVoucher({
+      voucherDate:         new Date(voucherDate),
+      paymentMode,
+      account,
+      accountName:         accountName         || "",
+      accountType:         accountType         || "",
+      accountCode:         accountCode         || account,
+      overheadAccount:     overheadAccount     || "",
+      overheadAccountName: overheadAccountName || "",
+      overheadAccountType: overheadAccountType || "",
+      description:         description         || "",
+      totalAmount:         totalAmount         || 0,
+      lines,
+      status:              status              || "SAVED",
+      createdBy:           createdBy           || "",
     })
 
-    const saved = await category.save()
+    const saved = await voucher.save()
     res.status(201).json({ success: true, data: saved })
   } catch (error) {
-    console.error("Error creating overhead category:", error)
-    if (error.code === 11000) {
-      return res.status(400).json({ message: "Category ID already exists" })
-    }
-    if (error.name === "ValidationError") {
-      return res.status(400).json({ message: "Validation error", errors: Object.values(error.errors).map((e) => e.message) })
-    }
-    res.status(500).json({ message: "Error creating overhead category", error: error.message })
+    console.error("Error creating overhead voucher:", error)
+    if (error.code === 11000)
+      return res.status(400).json({ message: "Voucher number already exists" })
+    if (error.name === "ValidationError")
+      return res.status(400).json({
+        message: "Validation error",
+        errors: Object.values(error.errors).map((e) => e.message),
+      })
+    res.status(500).json({ message: "Error creating overhead voucher", error: error.message })
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UPDATE CATEGORY
-// PUT /api/overhead-categories/:id
+// UPDATE VOUCHER
+// PATCH /api/overhead-voucher/:id
 // ─────────────────────────────────────────────────────────────────────────────
-const updateOverheadCategory = async (req, res) => {
+const updateOverheadVoucher = async (req, res) => {
   try {
-    const { label, icon, color, sortOrder, isActive } = req.body
+    const voucher = await OverheadVoucher.findById(req.params.id)
+    if (!voucher) return res.status(404).json({ message: "Voucher not found" })
 
-    const updateData = {}
-    if (label     !== undefined) updateData.label     = label.trim()
-    if (icon      !== undefined) updateData.icon      = icon
-    if (color     !== undefined) updateData.color     = color
-    if (sortOrder !== undefined) updateData.sortOrder = sortOrder
-    if (isActive  !== undefined) updateData.isActive  = isActive
+    if (voucher.status === "POSTED" || voucher.status === "CANCELLED")
+      return res.status(400).json({ message: `Cannot edit a ${voucher.status} voucher` })
 
-    const category = await OverheadCategory.findOneAndUpdate(
-      { id: req.params.id },
-      updateData,
-      { new: true, runValidators: true }
-    )
+    const allowed = [
+      "voucherDate", "paymentMode", "account", "accountName",
+      "accountType", "accountCode",
+      "overheadAccount", "overheadAccountName", "overheadAccountType",
+      "description", "totalAmount", "lines", "status",
+    ]
+    allowed.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === "voucherDate") voucher.voucherDate = new Date(req.body[field])
+        else voucher[field] = req.body[field]
+      }
+    })
 
-    if (!category) {
-      return res.status(404).json({ message: "Overhead category not found" })
-    }
-
-    res.json({ success: true, data: category })
-  } catch (error) {
-    console.error("Error updating overhead category:", error)
-    if (error.name === "ValidationError") {
-      return res.status(400).json({ message: "Validation error", errors: Object.values(error.errors).map((e) => e.message) })
-    }
-    res.status(500).json({ message: "Error updating overhead category", error: error.message })
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SOFT DELETE (set isActive = false)
-// DELETE /api/overhead-categories/:id
-// ─────────────────────────────────────────────────────────────────────────────
-const deleteOverheadCategory = async (req, res) => {
-  try {
-    const category = await OverheadCategory.findOneAndUpdate(
-      { id: req.params.id },
-      { isActive: false },
-      { new: true }
-    )
-
-    if (!category) {
-      return res.status(404).json({ message: "Overhead category not found" })
-    }
-
-    res.json({ success: true, message: `Category "${category.label}" deactivated successfully` })
-  } catch (error) {
-    console.error("Error deleting overhead category:", error)
-    res.status(500).json({ message: "Error deleting overhead category", error: error.message })
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// REORDER CATEGORIES
-// PUT /api/overhead-categories/reorder
-// body: [{ id: "labour", sortOrder: 1 }, ...]
-// ─────────────────────────────────────────────────────────────────────────────
-const reorderOverheadCategories = async (req, res) => {
-  try {
-    const { order } = req.body
-    if (!Array.isArray(order)) {
-      return res.status(400).json({ message: "order must be an array of { id, sortOrder }" })
-    }
-
-    await Promise.all(
-      order.map(({ id, sortOrder }) =>
-        OverheadCategory.findOneAndUpdate({ id }, { sortOrder })
-      )
-    )
-
-    const updated = await OverheadCategory.find({ isActive: true }).sort({ sortOrder: 1 })
+    const updated = await voucher.save()
     res.json({ success: true, data: updated })
   } catch (error) {
-    console.error("Error reordering overhead categories:", error)
-    res.status(500).json({ message: "Error reordering categories", error: error.message })
+    console.error("Error updating overhead voucher:", error)
+    if (error.name === "ValidationError")
+      return res.status(400).json({
+        message: "Validation error",
+        errors: Object.values(error.errors).map((e) => e.message),
+      })
+    res.status(500).json({ message: "Error updating overhead voucher", error: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE VOUCHER  (hard delete — permanently removes from DB)
+// DELETE /api/overhead-voucher/:id
+// ─────────────────────────────────────────────────────────────────────────────
+const deleteOverheadVoucher = async (req, res) => {
+  try {
+    const voucher = await OverheadVoucher.findById(req.params.id)
+    if (!voucher) return res.status(404).json({ message: "Voucher not found" })
+
+    if (voucher.status === "POSTED")
+      return res.status(400).json({ message: "Posted voucher delete nahi ho sakta" })
+
+    const voucherNumber = voucher.voucherNumber
+    await OverheadVoucher.findByIdAndDelete(req.params.id)
+
+    res.json({ success: true, message: `Voucher "${voucherNumber}" deleted successfully` })
+  } catch (error) {
+    console.error("Error deleting overhead voucher:", error)
+    res.status(500).json({ message: "Error deleting overhead voucher", error: error.message })
   }
 }
 
 module.exports = {
-  getOverheadCategories,
-  getAllOverheadCategories,
-  createOverheadCategory,
-  updateOverheadCategory,
-  deleteOverheadCategory,
-  reorderOverheadCategories,
+  getOverheadVouchers,
+  getOverheadVoucherById,
+  createOverheadVoucher,
+  updateOverheadVoucher,
+  deleteOverheadVoucher,
 }

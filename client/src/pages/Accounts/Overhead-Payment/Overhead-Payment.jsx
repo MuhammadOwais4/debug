@@ -1,0 +1,787 @@
+import { useState, useEffect } from "react";
+
+// ── API ───────────────────────────────────────────────────────────────────────
+const BASE_URL = "http://localhost:5000";
+const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+const http = {
+  get: async (path) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  post: async (path, body) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  patch: async (path, body) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+  delete: async (path) => {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  },
+};
+
+const ledgerAPI   = { getAllAccounts: () => http.get("/api/ledgers/accounts") };
+const overheadAPI = {
+  getCategories:  ()           => http.get("/api/overhead-categories"),
+  getVouchers:    ()           => http.get("/api/overhead-voucher"),
+  saveVoucher:    (payload)    => http.post("/api/overhead-voucher", payload),
+  updateVoucher:  (id, payload)=> http.patch(`/api/overhead-voucher/${id}`, payload),
+  deleteVoucher:  (id)         => http.delete(`/api/overhead-voucher/${id}`),
+};
+
+// ── Fallback categories ───────────────────────────────────────────────────────
+const FALLBACK_CATEGORIES = [
+  { id: "labour",    label: "Labour Cost",        icon: "👷", color: "blue"   },
+  { id: "transport", label: "Transport",           icon: "🚛", color: "green"  },
+  { id: "packaging", label: "Packaging",           icon: "📦", color: "purple" },
+  { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red"    },
+  { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow" },
+  { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange" },
+  { id: "other",     label: "Other",               icon: "➕", color: "gray"   },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function generateVoucherNo() {
+  const now = new Date();
+  const yy  = String(now.getFullYear()).slice(2);
+  const mm  = String(now.getMonth() + 1).padStart(2, "0");
+  const seq = String(Math.floor(Math.random() * 9000) + 1000);
+  return `OHV-${yy}${mm}-${seq}`;
+}
+function today()   { return new Date().toISOString().slice(0, 10); }
+function fmtDate(d){ return d ? new Date(d).toLocaleDateString("en-PK", { day:"2-digit", month:"2-digit", year:"numeric" }) : ""; }
+function fmtNum(n) {
+  const num = Number(n || 0);
+  return num % 1 === 0
+    ? num.toLocaleString("en-US")
+    : num.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+
+const COLOR_MAP = {
+  blue:   { bg:"#dbeafe", text:"#1d4ed8" }, green:  { bg:"#dcfce7", text:"#15803d" },
+  purple: { bg:"#ede9fe", text:"#7c3aed" }, red:    { bg:"#fee2e2", text:"#b91c1c" },
+  yellow: { bg:"#fef9c3", text:"#854d0e" }, orange: { bg:"#ffedd5", text:"#c2410c" },
+  gray:   { bg:"#f3f4f6", text:"#374151" }, pink:   { bg:"#fce7f3", text:"#be185d" },
+  teal:   { bg:"#ccfbf1", text:"#0f766e" }, indigo: { bg:"#e0e7ff", text:"#4338ca" },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+export default function OverheadVoucher() {
+
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [voucherNo]                         = useState(generateVoucherNo);
+  const [date,          setDate]            = useState(today());
+  const [paymentMode,   setPaymentMode]     = useState("");
+  const [selectedAsset, setSelectedAsset]   = useState("");
+  const [overheadAcct,  setOverheadAcct]    = useState("");   // DR side
+  const [description,   setDescription]     = useState("");
+  const [lines,         setLines]           = useState([{ id: Date.now(), category:"", amount:"", note:"" }]);
+  const [errors,        setErrors]          = useState({});
+  const [saving,        setSaving]          = useState(false);
+
+  // ── Edit state ────────────────────────────────────────────────────────────
+  const [editMode,          setEditMode]          = useState(false);
+  const [editVoucherId,     setEditVoucherId]      = useState(null);
+  const [editVoucherNumber, setEditVoucherNumber]  = useState("");
+  const [editSelectModal,   setEditSelectModal]    = useState(false);
+  const [editSelectData,    setEditSelectData]     = useState([]);
+  const [loadingEditList,   setLoadingEditList]    = useState(false);
+
+  // ── Delete state ──────────────────────────────────────────────────────────
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting,      setDeleting]      = useState(false);
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // ── API data ──────────────────────────────────────────────────────────────
+  const [allAccounts,     setAllAccounts]     = useState([]);
+  const [categories,      setCategories]      = useState(FALLBACK_CATEGORIES);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [accountsError,   setAccountsError]   = useState("");
+
+  useEffect(() => {
+    (async () => {
+      setLoadingAccounts(true); setAccountsError("");
+      try {
+        const res  = await ledgerAPI.getAllAccounts();
+        const list = res?.data ?? (Array.isArray(res) ? res : []);
+        const filtered = list.filter((a) => a.type === "CASH ACCOUNT" || a.type === "BANK ACCOUNT");
+        setAllAccounts(filtered);
+        if (!filtered.length && list.length)
+          setAccountsError(`${list.length} accounts mein koi CASH/BANK nahi. Type: "${list[0]?.type}"`);
+      } catch (err) { setAccountsError(err.message); }
+      finally { setLoadingAccounts(false); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res  = await overheadAPI.getCategories();
+        const list = res?.data ?? (Array.isArray(res) ? res : []);
+        if (list.length) setCategories(list);
+      } catch (_) {}
+    })();
+  }, []);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const cashAccounts       = allAccounts.filter((a) => a.type === "CASH ACCOUNT");
+  const overheadAccounts   = allAccounts.filter((a) => a.category === "Expenses" || a.type === "General Account");
+  const bankAccounts       = allAccounts.filter((a) => a.type === "BANK ACCOUNT");
+  const selectedAccountObj = allAccounts.find((a) => (a.code || a._id) === selectedAsset);
+  const total              = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+
+  // ── Line helpers ──────────────────────────────────────────────────────────
+  function addLine()            { setLines((p) => [...p, { id:Date.now(), category:"", amount:"", note:"" }]); }
+  function removeLine(id)       { setLines((p) => p.filter((l) => l.id !== id)); }
+  function updateLine(id, f, v) { setLines((p) => p.map((l) => l.id === id ? { ...l, [f]:v } : l)); }
+
+  // ── Reset / New ───────────────────────────────────────────────────────────
+  function handleNew() {
+    setDate(today()); setPaymentMode(""); setSelectedAsset(""); setOverheadAcct("");
+    setDescription(""); setLines([{ id:Date.now(), category:"", amount:"", note:"" }]);
+    setErrors({});
+    setEditMode(false); setEditVoucherId(null); setEditVoucherNumber("");
+  }
+
+  // ── Validate ──────────────────────────────────────────────────────────────
+  function validate() {
+    const e = {};
+    if (!date)          e.date = true;
+    if (!paymentMode)   e.paymentMode = true;
+    if (!selectedAsset)  e.selectedAsset  = true;
+    if (!overheadAcct)   e.overheadAcct   = true;
+    lines.forEach((l, i) => {
+      if (!l.category) e[`cat_${i}`] = true;
+      if (!l.amount || isNaN(l.amount) || parseFloat(l.amount) <= 0) e[`amt_${i}`] = true;
+    });
+    return e;
+  }
+
+  // ── Save / Update ─────────────────────────────────────────────────────────
+  async function handleSave() {
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setErrors({});
+
+    const accountObj = selectedAccountObj;
+    const payload = {
+      voucherDate:  date,
+      description,
+      paymentMode,
+      account:     selectedAsset,
+      accountName: accountObj?.name || "",
+      accountType: accountObj?.type || "",
+      accountCode: accountObj?.code || "",
+      // ✅ Always store overheadAccount — fallback to OHV-EXP (catch-all)
+      overheadAccount:     allAccounts.find(a => (a.code||a.name||a._id)===overheadAcct)?.code || overheadAcct || "OHV-EXP",
+      overheadAccountName: allAccounts.find(a => (a.code||a.name||a._id)===overheadAcct)?.name || overheadAcct || "Overhead Expenses",
+      overheadAccountType: allAccounts.find(a => (a.code||a.name||a._id)===overheadAcct)?.type || "OVERHEAD",
+      totalAmount: total,
+      lines: lines.map((l) => ({
+        category:    l.category,
+        categoryLabel: categories.find((c) => c.id === l.category)?.label || l.category,
+        amount:      parseFloat(l.amount) || 0,
+        note:        l.note,
+      })),
+      status: "SAVED",
+    };
+
+    setSaving(true);
+    try {
+      if (editMode && editVoucherId) {
+        const result = await overheadAPI.updateVoucher(editVoucherId, payload);
+        if (result?.success || result?.data) {
+          showToast(`✅ Voucher ${editVoucherNumber} updated!`, "success");
+          handleNew();
+        } else { showToast(result?.message || "Update failed", "error"); }
+      } else {
+        const result = await overheadAPI.saveVoucher(payload);
+        if (result?.success || result?.data) {
+          showToast(`✅ Voucher saved! No: ${result?.data?.voucherNumber || voucherNo}`, "success");
+          handleNew();
+        } else { showToast(result?.message || "Save failed", "error"); }
+      }
+    } catch (err) { showToast("Error: " + err.message, "error"); }
+    finally { setSaving(false); }
+  }
+
+  // ── Edit: open modal ──────────────────────────────────────────────────────
+  async function handleEditClick() {
+    setEditSelectModal(true); setLoadingEditList(true);
+    try {
+      const res  = await overheadAPI.getVouchers();
+      const list = res?.data ?? (Array.isArray(res) ? res : []);
+      setEditSelectData(list.filter((v) => v.status === "SAVED" || v.status === "DRAFT"));
+    } catch (err) { showToast("Edit list error: " + err.message, "error"); }
+    finally { setLoadingEditList(false); }
+  }
+
+  // ── Edit: load voucher into form ──────────────────────────────────────────
+  function handleLoadForEdit(voucher) {
+    setEditSelectModal(false);
+    setEditMode(true);
+    setEditVoucherId(voucher._id || voucher.id);
+    setEditVoucherNumber(voucher.voucherNumber || "");
+    setDate(voucher.voucherDate ? voucher.voucherDate.split("T")[0] : today());
+    setDescription(voucher.description || "");
+    setPaymentMode(voucher.paymentMode || "");
+    setSelectedAsset(voucher.account || "");
+    setOverheadAcct(voucher.overheadAccount || "");
+
+    if (Array.isArray(voucher.lines) && voucher.lines.length) {
+      setLines(voucher.lines.map((l, i) => ({
+        id:       Date.now() + i,
+        category: l.category || "",
+        amount:   l.amount?.toString() || "",
+        note:     l.note || "",
+      })));
+    } else {
+      setLines([{ id:Date.now(), category:"", amount:"", note:"" }]);
+    }
+    setErrors({});
+    showToast(`✏️ Voucher ${voucher.voucherNumber} edit mode mein open hua`, "success");
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  async function handleDeleteExecute() {
+    if (!deleteConfirm?.id) return;
+    setDeleting(true);
+    try {
+      await overheadAPI.deleteVoucher(deleteConfirm.id);
+      showToast(`🗑️ Voucher ${deleteConfirm.voucherNumber} deleted!`, "success");
+      const deletedId = deleteConfirm.id;
+      setDeleteConfirm(null);
+      // Remove from local list immediately
+      setEditSelectData((prev) => prev.filter((v) => (v._id || v.id) !== deletedId));
+      // Close edit modal after delete
+      setEditSelectModal(false);
+      // If currently editing this voucher, reset form
+      if (editVoucherId === deletedId) handleNew();
+    } catch (err) { showToast("Delete error: " + err.message, "error"); }
+    finally { setDeleting(false); }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div style={S.page}>
+      {/* Toast */}
+      {toast && <div style={S.toast(toast.type)}>{toast.msg}</div>}
+      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+
+      {/* ── Header ── */}
+      <div style={S.header}>
+        <div>
+          <p style={S.headerLabel}>OVERHEAD EXPENSE VOUCHER</p>
+          <h1 style={S.headerTitle}>
+            {editMode ? `Edit: ${editVoucherNumber}` : "New Voucher"}
+          </h1>
+        </div>
+        <div style={S.vnoBox}>
+          <p style={S.vnoLabel}>Voucher No.</p>
+          <p style={{ ...S.vnoValue, color: editMode ? "#92400e" : "#2563a8" }}>
+            {editMode ? editVoucherNumber : voucherNo}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div style={S.toolbar}>
+        <button style={S.btn("default")} onClick={handleNew}>New</button>
+        <button
+          style={saving ? S.btn("disabled") : S.btn(editMode ? "warning" : "primary")}
+          onClick={handleSave} disabled={saving}
+        >
+          {saving ? (editMode ? "Updating..." : "Saving...") : editMode ? "✏️ Update" : "Save"}
+        </button>
+        <button style={S.btn(editMode ? "warning" : "default")} onClick={handleEditClick}>
+          {editMode ? `✏️ Change (${editVoucherNumber})` : "Edit"}
+        </button>
+        <button style={S.btn("default")} onClick={handleNew}>Cancel</button>
+      </div>
+
+      {/* ── Edit banner ── */}
+      {editMode && (
+        <div style={S.editBanner}>
+          <span>✏️ Edit Mode:</span>
+          <span style={{ background:"rgba(255,255,255,0.2)", borderRadius:4, padding:"2px 10px" }}>
+            Voucher # <b>{editVoucherNumber}</b>
+          </span>
+          <span>— Fields edit kar ke Update karein.</span>
+          <button
+            style={{ marginLeft:"auto", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.4)", borderRadius:3, color:"#fff", padding:"3px 12px", cursor:"pointer", fontSize:11 }}
+            onClick={handleNew}
+          >✕ Cancel Edit</button>
+        </div>
+      )}
+
+      {/* ── Main Card ── */}
+      <div style={S.card}>
+
+        {/* Row 1: Voucher# (readonly) + Date */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 20px 1fr", gap:12, alignItems:"end" }}>
+          <Field label="Voucher No.">
+            <input readOnly value={editMode ? editVoucherNumber : "(Auto on save)"}
+              style={{ ...S.input, background:"#f3f4f6", color: editMode ? "#92400e" : "#6b7280",
+                fontWeight: editMode ? 700 : 400, fontStyle: editMode ? "normal" : "italic" }} />
+          </Field>
+          <div />
+          <Field label="Date *" error={errors.date}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              style={{ ...S.input, ...(errors.date ? S.inputErr : {}) }} />
+          </Field>
+        </div>
+
+        {/* Row 3: Payment Mode + Account */}
+        <div style={S.row}>
+          <Field label="Payment Mode *" error={errors.paymentMode}>
+            <div style={S.modeGroup}>
+              {["Cash", "Bank"].map((m) => (
+                <button key={m}
+                  onClick={() => { setPaymentMode(m); setSelectedAsset(""); }}
+                  style={{ ...S.modeBtn, ...(paymentMode === m ? S.modeBtnActive : {}), ...(errors.paymentMode ? S.modeBtnErr : {}) }}>
+                  {m === "Cash" ? "💵" : "🏦"} {m}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="Account *" error={errors.selectedAsset}>
+            <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)}
+              disabled={loadingAccounts || !paymentMode}
+              style={{ ...S.input, cursor:(loadingAccounts || !paymentMode) ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
+              <option value="">{loadingAccounts ? "Loading..." : "-- Select Account --"}</option>
+              {paymentMode === "Cash" && cashAccounts.map((a) => (
+                <option key={a.code || a._id} value={a.code || a._id}>[CASH] {a.code} - {a.name}</option>
+              ))}
+              {paymentMode === "Bank" && bankAccounts.map((a) => (
+                <option key={a.code || a._id} value={a.code || a._id}>[BANK] {a.code} - {a.name}</option>
+              ))}
+            </select>
+            {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
+            {selectedAccountObj && (
+              <div style={S.infoStrip}>
+                <span style={{ color: selectedAccountObj.type === "CASH ACCOUNT" ? "#15803d" : "#1d4ed8", fontWeight:700 }}>
+                  {selectedAccountObj.type === "CASH ACCOUNT" ? "💵" : "🏦"} {selectedAccountObj.type}
+                </span>
+                <span style={{ color:"#c8d3de" }}>|</span>
+                <span><b>Code:</b> {selectedAccountObj.code}</span>
+                {selectedAccountObj.balance != null && (
+                  <>
+                    <span style={{ color:"#c8d3de" }}>|</span>
+                    <span><b>Balance:</b>&nbsp;
+                      <span style={{ color:"#1d4ed8", fontWeight:700 }}>
+                        Rs. {fmtNum(selectedAccountObj.balance)}
+                      </span>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </Field>
+        </div>
+
+        {/* Row: Overhead Expense Account (DR) */}
+        <div style={S.row}>
+          <Field label="Overhead Expense Account (DR) *" error={errors.overheadAcct}>
+            <select value={overheadAcct} onChange={(e) => setOverheadAcct(e.target.value)}
+              style={{ ...S.input, ...(errors.overheadAcct ? S.inputErr : {}) }}>
+              <option value="">-- Select Overhead/Expense Account --</option>
+              {overheadAccounts.map((a) => (
+                <option key={a.code || a._id} value={a.code || a.name || a._id}>
+                  {a.code} - {a.name}
+                </option>
+              ))}
+            </select>
+            {overheadAcct && (() => {
+              const acc = allAccounts.find(a => (a.code||a._id) === overheadAcct);
+              return acc ? (
+                <div style={S.infoStrip}>
+                  <span style={{ color:"#92400e", fontWeight:700 }}>📊 {acc.type || acc.category}</span>
+                  <span style={{ color:"#c8d3de" }}>|</span>
+                  <span><b>Code:</b> {acc.code}</span>
+                  {acc.balance != null && (
+                    <><span style={{ color:"#c8d3de" }}>|</span>
+                    <span><b>Balance:</b> <span style={{ color:"#92400e", fontWeight:700 }}>Rs. {fmtNum(acc.balance)}</span></span></>
+                  )}
+                </div>
+              ) : null;
+            })()}
+          </Field>
+        </div>
+
+        {/* Accounting Preview */}
+        {selectedAsset && overheadAcct && (
+          <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:4, padding:"8px 14px", fontSize:11 }}>
+            <div style={{ fontWeight:700, color:"#15803d", marginBottom:5, letterSpacing:"0.05em" }}>📒 JOURNAL ENTRY PREVIEW</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+              <thead>
+                <tr style={{ background:"#dcfce7" }}>
+                  <th style={{ padding:"3px 8px", textAlign:"left", color:"#15803d" }}>Account</th>
+                  <th style={{ padding:"3px 8px", textAlign:"right", color:"#15803d" }}>Debit</th>
+                  <th style={{ padding:"3px 8px", textAlign:"right", color:"#15803d" }}>Credit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ padding:"3px 8px" }}>
+                    <b style={{ color:"#1d4ed8" }}>DR</b> {allAccounts.find(a=>(a.code||a._id)===overheadAcct)?.name || overheadAcct}
+                  </td>
+                  <td style={{ padding:"3px 8px", textAlign:"right", fontWeight:700 }}>PKR {fmtNum(total||0)}</td>
+                  <td style={{ padding:"3px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
+                </tr>
+                <tr style={{ background:"#f9fafb" }}>
+                  <td style={{ padding:"3px 8px", paddingLeft:24 }}>
+                    <b style={{ color:"#dc2626" }}>CR</b> {allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset}
+                  </td>
+                  <td style={{ padding:"3px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
+                  <td style={{ padding:"3px 8px", textAlign:"right", fontWeight:700 }}>PKR {fmtNum(total||0)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Description */}
+        <Field label="Description">
+          <textarea placeholder="Brief description of this overhead expense..." value={description}
+            onChange={(e) => setDescription(e.target.value)} rows={2}
+            style={{ ...S.input, height:"auto", resize:"vertical", lineHeight:"1.5", paddingTop:5 }} />
+        </Field>
+
+        {/* Expense Lines */}
+        <div style={S.sectionHeader}>
+          <span style={S.sectionTitle}>Expense Lines</span>
+          <button style={S.addLineBtn} onClick={addLine}>+ Add Line</button>
+        </div>
+
+        <div style={S.tableHead}>
+          <span style={{ flex:"0 0 30px" }}>#</span>
+          <span style={{ flex:2 }}>Category</span>
+          <span style={{ flex:1, textAlign:"right", paddingRight:4 }}>Amount (PKR)</span>
+          <span style={{ flex:1.5 }}>Note</span>
+          <span style={{ flex:"0 0 30px" }}></span>
+        </div>
+
+        <div style={S.linesTable}>
+          {lines.map((line, idx) => {
+            const cat = categories.find((c) => c.id === line.category);
+            const clr = cat ? COLOR_MAP[cat.color] : null;
+            return (
+              <div key={line.id} style={S.tableRow}>
+                <span style={S.lineNo}>{idx + 1}</span>
+                <div style={{ flex:2 }}>
+                  <select value={line.category}
+                    onChange={(e) => updateLine(line.id, "category", e.target.value)}
+                    style={{ ...S.input, ...(errors[`cat_${idx}`] ? S.inputErr : {}), background: clr ? clr.bg : undefined, color: clr ? clr.text : undefined }}>
+                    <option value="">-- Category --</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex:1 }}>
+                  <input type="number" placeholder="0.00" value={line.amount}
+                    onChange={(e) => updateLine(line.id, "amount", e.target.value)}
+                    style={{ ...S.input, ...(errors[`amt_${idx}`] ? S.inputErr : {}), textAlign:"right" }} />
+                </div>
+                <div style={{ flex:1.5 }}>
+                  <input placeholder="Optional note" value={line.note}
+                    onChange={(e) => updateLine(line.id, "note", e.target.value)} style={S.input} />
+                </div>
+                <button disabled={lines.length === 1} onClick={() => removeLine(line.id)}
+                  style={{ ...S.removeBtn, opacity: lines.length === 1 ? 0.3 : 1 }}>×</button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Total + confirm bar */}
+        <div style={S.totalRow}>
+          <span style={S.totalLabel}>Total Amount</span>
+          <span style={S.totalValue}>PKR {fmtNum(total)}</span>
+          {total > 0 && (
+            <button style={{ ...S.btn(editMode ? "warning" : "success"), fontSize:12, marginLeft:16 }}
+              onClick={handleSave} disabled={saving}>
+              {saving ? "⏳..." : editMode ? "✏️ Confirm Update" : "✅ Confirm & Save"}
+            </button>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={S.actions}>
+          <button style={S.resetBtn} onClick={handleNew}>Reset</button>
+          <button style={{ ...S.submitBtn, background: editMode ? "linear-gradient(90deg,#92400e,#b45309)" : "linear-gradient(90deg,#1a3c5e,#2563a8)" }}
+            onClick={handleSave} disabled={saving}>
+            {saving ? "⏳ Processing..." : editMode ? "✏️ Update Voucher" : "✅ Save Voucher"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Edit Select Modal ── */}
+      {editSelectModal && (
+        <div style={S.modal} onClick={() => setEditSelectModal(false)}>
+          <div style={{ ...S.modalBox, minWidth:680 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <h3 style={{ margin:0, color:"#92400e", fontSize:14 }}>✏️ Overhead Voucher Edit / Delete</h3>
+              <button onClick={() => setEditSelectModal(false)} style={{ ...S.btn("danger"), padding:"2px 10px" }}>✕</button>
+            </div>
+            <p style={{ fontSize:11, color:"#6b7280", margin:"0 0 10px" }}>Sirf SAVED status ke vouchers edit/delete ho sakte hain</p>
+
+            {loadingEditList ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>⏳ Loading...</div>
+            ) : editSelectData.length === 0 ? (
+              <div style={{ textAlign:"center", padding:24, color:"#6b7280" }}>Koi editable voucher nahi mila</div>
+            ) : (
+              <table style={{ ...S.table, fontSize:11 }}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>Voucher #</th>
+                    <th style={S.th}>Date</th>
+                    <th style={S.th}>Account</th>
+                    <th style={S.thC}>Mode</th>
+                    <th style={S.thR}>Total</th>
+                    <th style={S.thC}>Status</th>
+                    <th style={S.thC}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editSelectData.map((v, i) => (
+                    <tr key={v._id || i}>
+                      <td style={S.td(i)}><b>{v.voucherNumber || "—"}</b></td>
+                      <td style={S.td(i)}>{fmtDate(v.voucherDate)}</td>
+                      <td style={S.td(i)}>{v.accountName || v.account || "—"}</td>
+                      <td style={S.tdC(i)}>
+                        <span style={{ fontWeight:600, color: v.paymentMode === "Cash" ? "#15803d" : "#1d4ed8" }}>
+                          {v.paymentMode === "Cash" ? "💵" : "🏦"} {v.paymentMode}
+                        </span>
+                      </td>
+                      <td style={S.tdR(i)}>Rs. {fmtNum(v.totalAmount)}</td>
+                      <td style={S.tdC(i)}><span style={S.badge(v.status)}>{v.status}</span></td>
+                      <td style={{ ...S.tdC(i), gap:4, display:"flex", justifyContent:"center" }}>
+                        <button style={{ ...S.btn("warning"), padding:"2px 10px", fontSize:11 }}
+                          onClick={() => handleLoadForEdit(v)}>✏️ Edit</button>
+                        <button style={{ ...S.btn("danger"), padding:"2px 10px", fontSize:11 }}
+                          onClick={() => { setDeleteConfirm({ id: v._id || v.id, voucherNumber: v.voucherNumber }); }}>🗑️ Del</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {deleteConfirm && (
+        <div style={{ ...S.modal, zIndex:2000 }}>
+          <div style={S.confirmBox}>
+            <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
+            <h3 style={{ margin:"0 0 8px", color:"#dc2626", fontSize:15 }}>Voucher Delete Karna Hai?</h3>
+            <p style={{ fontSize:12, color:"#374151", margin:"0 0 18px", lineHeight:1.6 }}>
+              Voucher <b style={{ color:"#dc2626" }}>{deleteConfirm.voucherNumber}</b> permanently delete ho jayega.<br />
+              <span style={{ color:"#9ca3af" }}>Yeh action undo nahi ho sakta.</span>
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button style={{ ...S.btn("default"), padding:"6px 22px" }}
+                onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
+              <button style={{ ...S.btn("danger"), padding:"6px 22px" }}
+                onClick={handleDeleteExecute} disabled={deleting}>
+                {deleting ? "Deleting..." : "🗑️ Haan, Delete Karo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Field wrapper ─────────────────────────────────────────────────────────────
+function Field({ label, error, children }) {
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:4, minWidth:0 }}>
+      <label style={{ ...S.label, color: error ? "#dc2626" : "#374151" }}>{label}</label>
+      {children}
+      {error && <span style={S.errorMsg}>⚠ Required</span>}
+    </div>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const S = {
+  page: {
+    minHeight:"100vh", background:"#f0f4f8", padding:"0",
+    fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif", fontSize:13, color:"#222",
+  },
+  header: {
+    display:"flex", justifyContent:"space-between", alignItems:"flex-end",
+    padding:"10px 18px 0", marginBottom:6,
+  },
+  headerLabel: {
+    fontSize:10, letterSpacing:"0.15em", color:"#64748b", margin:"0 0 2px",
+    fontFamily:"'Courier New', monospace", textTransform:"uppercase",
+  },
+  headerTitle: { fontSize:16, fontWeight:700, color:"#1e293b", margin:0 },
+  vnoBox: {
+    textAlign:"right", background:"#fff", border:"1px solid #c8d3de",
+    borderRadius:4, padding:"5px 12px",
+  },
+  vnoLabel: {
+    fontSize:10, color:"#94a3b8", letterSpacing:"0.1em", margin:"0 0 2px",
+    fontFamily:"'Courier New', monospace", textTransform:"uppercase",
+  },
+  vnoValue: { fontSize:13, fontWeight:700, color:"#2563a8", margin:0, fontFamily:"'Courier New', monospace" },
+
+  // ── Toolbar ──
+  toolbar: {
+    background:"#e8edf2", borderBottom:"1px solid #c8d3de",
+    padding:"6px 14px", display:"flex", gap:6, alignItems:"center", flexWrap:"wrap",
+  },
+  btn: (v="default") => ({
+    padding:"4px 16px", borderRadius:3, border:"1px solid", height:28, fontSize:12, fontWeight:500,
+    cursor: v==="disabled" ? "not-allowed" : "pointer",
+    background:  v==="primary"?"#2563a8": v==="danger"?"#dc2626": v==="success"?"#16a34a": v==="warning"?"#d97706": v==="disabled"?"#d1d5db":"#fff",
+    color:       ["primary","danger","success","warning"].includes(v) ? "#fff" : v==="disabled"?"#6b7280":"#374151",
+    borderColor: v==="primary"?"#1a4d8f": v==="danger"?"#b91c1c": v==="success"?"#15803d": v==="warning"?"#b45309": v==="disabled"?"#9ca3af":"#9ca3af",
+  }),
+
+  // ── Edit banner ──
+  editBanner: {
+    background:"linear-gradient(90deg,#92400e,#b45309)", color:"#fff",
+    padding:"7px 16px", margin:"0 0 0", display:"flex", alignItems:"center",
+    gap:12, fontSize:12, fontWeight:600, flexWrap:"wrap",
+  },
+
+  // ── Card ──
+  card: {
+    background:"#fff", margin:"8px 14px 14px", borderRadius:6, border:"1px solid #d1d9e0",
+    padding:"14px 18px", display:"flex", flexDirection:"column", gap:12,
+    boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
+  },
+  row: { display:"flex", gap:12, flexWrap:"wrap" },
+  label: { fontSize:11, fontWeight:600, color:"#374151", textTransform:"uppercase", letterSpacing:"0.03em", whiteSpace:"nowrap" },
+  input: {
+    width:"100%", boxSizing:"border-box", padding:"4px 8px", fontSize:12,
+    border:"1px solid #c8d3de", borderRadius:3, outline:"none", background:"#fff",
+    color:"#1e293b", fontFamily:"'Segoe UI', Arial, sans-serif", height:28,
+  },
+  inputErr: { borderColor:"#fca5a5", background:"#fff7f7" },
+  errorMsg:  { fontSize:10, color:"#dc2626" },
+  errorBox: {
+    background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:3,
+    padding:"3px 8px", marginTop:3, fontSize:11, color:"#dc2626", lineHeight:1.5,
+  },
+  infoStrip: {
+    display:"flex", gap:10, background:"#f0f7ff", border:"1px solid #bfdbfe",
+    borderRadius:3, padding:"4px 10px", marginTop:3, fontSize:11,
+    flexWrap:"wrap", alignItems:"center", color:"#374151",
+  },
+  modeGroup: { display:"flex", gap:6 },
+  modeBtn: {
+    flex:1, padding:"3px 10px", fontSize:12, border:"1px solid #c8d3de", borderRadius:3,
+    background:"#fff", cursor:"pointer", fontFamily:"'Segoe UI', Arial, sans-serif",
+    color:"#374151", fontWeight:500, height:28,
+  },
+  modeBtnActive: { background:"linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", borderColor:"#1a4d8f", fontWeight:600 },
+  modeBtnErr: { borderColor:"#fca5a5" },
+  sectionHeader: {
+    display:"flex", justifyContent:"space-between", alignItems:"center",
+    borderTop:"1px dashed #c8d3de", paddingTop:10,
+  },
+  sectionTitle: { fontSize:11, fontWeight:700, color:"#374151", textTransform:"uppercase", letterSpacing:"0.06em" },
+  addLineBtn: {
+    padding:"3px 12px", fontSize:11, height:26, border:"1px solid #2563a8",
+    borderRadius:3, background:"#eff6ff", color:"#1d4ed8", cursor:"pointer", fontWeight:600,
+  },
+  tableHead: {
+    display:"flex", gap:10, alignItems:"center", padding:"0 4px 4px",
+    borderBottom:"1px solid #e5eaf0", fontSize:10, fontWeight:700, color:"#94a3b8",
+    letterSpacing:"0.06em", textTransform:"uppercase",
+  },
+  linesTable: { display:"flex", flexDirection:"column", gap:5 },
+  tableRow:   { display:"flex", gap:10, alignItems:"center" },
+  lineNo: { flex:"0 0 30px", fontSize:11, color:"#94a3b8", fontFamily:"'Courier New', monospace", textAlign:"center", fontWeight:700 },
+  removeBtn: { flex:"0 0 30px", height:28, fontSize:16, border:"none", background:"#fee2e2", color:"#dc2626", borderRadius:3, cursor:"pointer", fontWeight:700, lineHeight:1 },
+
+  // ── Total row ──
+  totalRow: {
+    display:"flex", alignItems:"center", gap:14,
+    background:"linear-gradient(90deg,#1a3c5e,#2563a8)",
+    borderRadius:4, padding:"9px 14px", marginTop:2,
+  },
+  totalLabel: { fontSize:11, color:"rgba(255,255,255,0.7)", letterSpacing:"0.08em", textTransform:"uppercase", marginRight:"auto" },
+  totalValue: { fontSize:17, fontWeight:700, color:"#fff", fontFamily:"'Courier New', monospace" },
+
+  actions: {
+    display:"flex", justifyContent:"flex-end", gap:8,
+    borderTop:"1px solid #e5eaf0", paddingTop:12,
+  },
+  resetBtn: {
+    padding:"4px 16px", fontSize:12, height:28, border:"1px solid #9ca3af",
+    borderRadius:3, background:"#fff", color:"#374151", cursor:"pointer", fontWeight:500,
+  },
+  submitBtn: {
+    padding:"4px 20px", fontSize:12, height:28, border:"none", borderRadius:3,
+    background:"linear-gradient(90deg,#1a3c5e,#2563a8)",
+    color:"#fff", cursor:"pointer", fontWeight:600,
+    boxShadow:"0 2px 6px rgba(37,99,235,0.3)",
+  },
+
+  // ── Toast ──
+  toast: (t) => ({
+    position:"fixed", top:18, right:18, zIndex:9999,
+    background: t==="success"?"#16a34a": t==="error"?"#dc2626":"#2563a8",
+    color:"#fff", borderRadius:5, padding:"10px 20px", fontSize:13, fontWeight:600,
+    boxShadow:"0 4px 16px rgba(0,0,0,0.18)", maxWidth:420,
+  }),
+
+  // ── Modals ──
+  modal:      { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" },
+  modalBox:   { background:"#fff", borderRadius:8, padding:22, minWidth:500, maxWidth:820, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 8px 32px rgba(0,0,0,0.22)" },
+  confirmBox: { background:"#fff", borderRadius:8, padding:28, minWidth:340, maxWidth:420, boxShadow:"0 8px 32px rgba(0,0,0,0.22)", textAlign:"center" },
+
+  // ── Table (modal) ──
+  table:  { width:"100%", borderCollapse:"collapse", fontSize:12, background:"#fff" },
+  th:     { background:"linear-gradient(180deg,#2563a8,#1a4d8f)", color:"#fff", padding:"7px 8px", textAlign:"left",   fontWeight:600, borderRight:"1px solid #1e40af", whiteSpace:"nowrap" },
+  thC:    { background:"linear-gradient(180deg,#2563a8,#1a4d8f)", color:"#fff", padding:"7px 8px", textAlign:"center", fontWeight:600, borderRight:"1px solid #1e40af", whiteSpace:"nowrap" },
+  thR:    { background:"linear-gradient(180deg,#2563a8,#1a4d8f)", color:"#fff", padding:"7px 8px", textAlign:"right",  fontWeight:600, borderRight:"1px solid #1e40af", whiteSpace:"nowrap" },
+  td:  (i)=> ({ padding:"5px 8px", borderBottom:"1px solid #e5eaf0", background:i%2===0?"#fff":"#f7fafd", verticalAlign:"middle" }),
+  tdC: (i)=> ({ padding:"5px 8px", borderBottom:"1px solid #e5eaf0", background:i%2===0?"#fff":"#f7fafd", textAlign:"center", verticalAlign:"middle" }),
+  tdR: (i)=> ({ padding:"5px 8px", borderBottom:"1px solid #e5eaf0", background:i%2===0?"#fff":"#f7fafd", textAlign:"right", verticalAlign:"middle" }),
+
+  badge: (c) => ({
+    display:"inline-block", padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:700,
+    background: c==="SAVED"?"#dcfce7": c==="POSTED"?"#dbeafe": c==="CANCELLED"?"#fee2e2":"#fef9c3",
+    color:      c==="SAVED"?"#15803d": c==="POSTED"?"#1d4ed8": c==="CANCELLED"?"#dc2626":"#92400e",
+  }),
+};
