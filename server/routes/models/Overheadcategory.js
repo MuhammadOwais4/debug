@@ -1,58 +1,76 @@
 const mongoose = require("mongoose")
 
-// ── Line sub-schema ───────────────────────────────────────────────────────────
-const overheadLineSchema = new mongoose.Schema(
+// ── Expense Line sub-schema ───────────────────────────────────────────────────
+const expenseLineSchema = new mongoose.Schema(
   {
     category:      { type: String, required: true, trim: true },
-    categoryLabel: { type: String, trim: true },
+    categoryLabel: { type: String, default: "", trim: true },
     amount:        { type: Number, required: true, min: 0 },
-    note:          { type: String, trim: true, default: "" },
-    // Per-line overhead account (optional — if different per line)
-    overheadAccount:     { type: String, trim: true, default: "" },
-    overheadAccountName: { type: String, trim: true, default: "" },
+    note:          { type: String, default: "", trim: true },
   },
   { _id: false }
 )
 
-// ── Main voucher schema ───────────────────────────────────────────────────────
+// ── Main Voucher schema ───────────────────────────────────────────────────────
 const overheadVoucherSchema = new mongoose.Schema(
   {
-    voucherNumber: { type: String, unique: true, trim: true },
+    // Auto-generated: OHV-YYMM-XXXX
+    voucherNumber: {
+      type:   String,
+      unique: true,
+      trim:   true,
+    },
 
-    voucherDate: { type: Date, required: [true, "Voucher date is required"] },
+    voucherDate: {
+      type:     Date,
+      required: [true, "Voucher date is required"],
+    },
 
+    // Cash | Bank
     paymentMode: {
       type:     String,
       required: [true, "Payment mode is required"],
-      enum:     ["Cash", "Bank"],
+      enum:     { values: ["Cash", "Bank"], message: "{VALUE} is not valid. Use Cash or Bank" },
     },
 
-    // ── Cash/Bank account (CR side) ──────────────────────────────────────────
-    account:     { type: String, required: [true, "Account is required"], trim: true },
-    accountName: { type: String, trim: true, default: "" },
-    accountType: { type: String, trim: true, default: "" },
-    accountCode: { type: String, trim: true, default: "" },
+    // ── CR side: Cash/Bank account credited ──────────────────────────────────
+    account:     { type: String, required: [true, "Account (CR) is required"], trim: true },
+    accountName: { type: String, default: "", trim: true },
+    accountType: { type: String, default: "", trim: true },
+    accountCode: { type: String, default: "", trim: true },
 
-    // ── Overhead Expense account (DR side) ───────────────────────────────────
-    overheadAccount:     { type: String, trim: true, default: "" }, // code
-    overheadAccountName: { type: String, trim: true, default: "" }, // name
-    overheadAccountType: { type: String, trim: true, default: "" }, // type/category
+    // ── DR side: Overhead/Expense account debited ─────────────────────────────
+    // Optional — defaults to OHV-EXP catch-all if not selected
+    overheadAccount:     { type: String, default: "OHV-EXP",            trim: true },
+    overheadAccountName: { type: String, default: "Overhead Expenses",  trim: true },
+    overheadAccountType: { type: String, default: "OVERHEAD",           trim: true },
 
-    description: { type: String, trim: true, default: "" },
-    totalAmount: { type: Number, required: true, min: 0 },
-    lines:       { type: [overheadLineSchema], default: [] },
+    description: { type: String, default: "", trim: true },
+    totalAmount:  { type: Number, default: 0,  min: 0    },
+
+    lines: {
+      type:     [expenseLineSchema],
+      validate: {
+        validator: (v) => Array.isArray(v) && v.length > 0,
+        message:  "At least one expense line is required",
+      },
+    },
 
     status: {
       type:    String,
-      enum:    ["DRAFT", "SAVED", "POSTED", "CANCELLED"],
       default: "SAVED",
+      enum:    {
+        values:  ["DRAFT", "SAVED", "POSTED", "CANCELLED"],
+        message: "{VALUE} is not a valid status",
+      },
     },
-    createdBy: { type: String, trim: true, default: "" },
+
+    createdBy: { type: String, default: "", trim: true },
   },
   { timestamps: true }
 )
 
-// ── Auto-generate voucherNumber before save ───────────────────────────────────
+// ── Auto-generate voucherNumber before first save ─────────────────────────────
 overheadVoucherSchema.pre("save", async function (next) {
   if (this.voucherNumber) return next()
 
@@ -61,21 +79,24 @@ overheadVoucherSchema.pre("save", async function (next) {
   const mm     = String(now.getMonth() + 1).padStart(2, "0")
   const prefix = `OHV-${yy}${mm}-`
 
-  const last = await mongoose
-    .model("OverheadVoucher")
+  const last = await this.constructor
     .findOne({ voucherNumber: { $regex: `^${prefix}` } })
     .sort({ voucherNumber: -1 })
-    .lean()
+    .select("voucherNumber")
 
-  let seq = 1001
+  let seq = 1
   if (last?.voucherNumber) {
-    const parts  = last.voucherNumber.split("-")
-    const lastSeq = parseInt(parts[parts.length - 1], 10)
-    if (!isNaN(lastSeq)) seq = lastSeq + 1
+    const parts = last.voucherNumber.split("-")
+    seq = (parseInt(parts[parts.length - 1], 10) || 0) + 1
   }
 
-  this.voucherNumber = `${prefix}${seq}`
+  this.voucherNumber = `${prefix}${String(seq).padStart(4, "0")}`
   next()
 })
+
+// ── Indexes ───────────────────────────────────────────────────────────────────
+overheadVoucherSchema.index({ voucherDate: -1 })
+overheadVoucherSchema.index({ status: 1 })
+overheadVoucherSchema.index({ overheadAccount: 1 })
 
 module.exports = mongoose.model("OverheadVoucher", overheadVoucherSchema)

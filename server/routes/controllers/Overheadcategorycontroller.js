@@ -1,4 +1,4 @@
-const OverheadVoucher = require("../models/Overheadcategory")
+const OverheadVoucher = require("../models//Overheadcategory")
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET ALL VOUCHERS

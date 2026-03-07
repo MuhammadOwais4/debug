@@ -8,19 +8,20 @@ const {
   deleteOverheadVoucher,
 } = require("./controllers/Overheadcategorycontroller")
 
-// GET  /api/overhead-voucher          → all vouchers (optional ?status=SAVED&fromDate=&toDate=)
+// GET  /api/overhead-vouchers          → all vouchers (active)
 router.get("/",     getOverheadVouchers)
 
-// GET  /api/overhead-voucher/:id      → single voucher
+// GET  /api/overhead-vouchers/:id     → get single voucher
 router.get("/:id",  getOverheadVoucherById)
 
-// POST /api/overhead-voucher          → create new
+// POST /api/overhead-vouchers          → create new
 router.post("/",    createOverheadVoucher)
 
-// PATCH /api/overhead-voucher/:id     → update (edit mode)
+// PATCH /api/overhead-vouchers/:id     → update (edit mode)
 router.patch("/:id", updateOverheadVoucher)
 
-// DELETE /api/overhead-voucher/:id    → soft delete (CANCELLED)
+// DELETE /api/overhead-vouchers/:id    → soft delete (CANCELLED)
 router.delete("/:id", deleteOverheadVoucher)
+
 
 module.exports = router

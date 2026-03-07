@@ -133,9 +133,10 @@ export default function OverheadVoucher() {
       try {
         const res  = await ledgerAPI.getAllAccounts();
         const list = res?.data ?? (Array.isArray(res) ? res : []);
-        const filtered = list.filter((a) => a.type === "CASH ACCOUNT" || a.type === "BANK ACCOUNT");
-        setAllAccounts(filtered);
-        if (!filtered.length && list.length)
+        // ✅ Store ALL accounts — filter by type where needed
+        setAllAccounts(list);
+        const cashBank = list.filter((a) => a.type === "CASH ACCOUNT" || a.type === "BANK ACCOUNT");
+        if (!cashBank.length && list.length)
           setAccountsError(`${list.length} accounts mein koi CASH/BANK nahi. Type: "${list[0]?.type}"`);
       } catch (err) { setAccountsError(err.message); }
       finally { setLoadingAccounts(false); }
@@ -153,9 +154,16 @@ export default function OverheadVoucher() {
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const cashAccounts       = allAccounts.filter((a) => a.type === "CASH ACCOUNT");
-  const overheadAccounts   = allAccounts.filter((a) => a.category === "Expenses" || a.type === "General Account");
-  const bankAccounts       = allAccounts.filter((a) => a.type === "BANK ACCOUNT");
+  const cashAccounts     = allAccounts.filter((a) => a.type === "CASH ACCOUNT");
+  const bankAccounts     = allAccounts.filter((a) => a.type === "BANK ACCOUNT");
+  // ✅ Overhead DR: show Expenses category + General + any non-cash/bank account
+  const overheadAccounts = allAccounts.filter((a) =>
+    a.category === "Expenses" ||
+    a.type === "General Account" ||
+    a.type === "OVERHEAD" ||
+    a.type === "EXPENSE" ||
+    (!["CASH ACCOUNT","BANK ACCOUNT"].includes(a.type))
+  );
   const selectedAccountObj = allAccounts.find((a) => (a.code || a._id) === selectedAsset);
   const total              = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
@@ -178,7 +186,7 @@ export default function OverheadVoucher() {
     if (!date)          e.date = true;
     if (!paymentMode)   e.paymentMode = true;
     if (!selectedAsset)  e.selectedAsset  = true;
-    if (!overheadAcct)   e.overheadAcct   = true;
+    // overheadAcct optional — fallback to OHV-EXP if not selected
     lines.forEach((l, i) => {
       if (!l.category) e[`cat_${i}`] = true;
       if (!l.amount || isNaN(l.amount) || parseFloat(l.amount) <= 0) e[`amt_${i}`] = true;
@@ -409,63 +417,78 @@ export default function OverheadVoucher() {
           </Field>
         </div>
 
-        {/* Row: Overhead Expense Account (DR) */}
-        <div style={S.row}>
-          <Field label="Overhead Expense Account (DR) *" error={errors.overheadAcct}>
-            <select value={overheadAcct} onChange={(e) => setOverheadAcct(e.target.value)}
-              style={{ ...S.input, ...(errors.overheadAcct ? S.inputErr : {}) }}>
-              <option value="">-- Select Overhead/Expense Account --</option>
-              {overheadAccounts.map((a) => (
-                <option key={a.code || a._id} value={a.code || a.name || a._id}>
-                  {a.code} - {a.name}
-                </option>
-              ))}
-            </select>
-            {overheadAcct && (() => {
-              const acc = allAccounts.find(a => (a.code||a._id) === overheadAcct);
-              return acc ? (
-                <div style={S.infoStrip}>
-                  <span style={{ color:"#92400e", fontWeight:700 }}>📊 {acc.type || acc.category}</span>
-                  <span style={{ color:"#c8d3de" }}>|</span>
-                  <span><b>Code:</b> {acc.code}</span>
-                  {acc.balance != null && (
-                    <><span style={{ color:"#c8d3de" }}>|</span>
-                    <span><b>Balance:</b> <span style={{ color:"#92400e", fontWeight:700 }}>Rs. {fmtNum(acc.balance)}</span></span></>
-                  )}
-                </div>
-              ) : null;
-            })()}
-          </Field>
-        </div>
+        {/* Overhead DR = auto OHV-EXP (no field shown — assigned in backend) */}
 
-        {/* Accounting Preview */}
-        {selectedAsset && overheadAcct && (
+        {/* ✅ Accounting Preview — show when Cash/Bank selected */}
+        {selectedAsset && (
           <div style={{ background:"#f0fdf4", border:"1px solid #86efac", borderRadius:4, padding:"8px 14px", fontSize:11 }}>
-            <div style={{ fontWeight:700, color:"#15803d", marginBottom:5, letterSpacing:"0.05em" }}>📒 JOURNAL ENTRY PREVIEW</div>
+            <div style={{ fontWeight:700, color:"#15803d", marginBottom:6, letterSpacing:"0.05em", display:"flex", alignItems:"center", gap:8 }}>
+              📒 JOURNAL ENTRY PREVIEW
+              <span style={{ fontSize:10, fontWeight:400, color:"#6b7280", background:"#dcfce7", borderRadius:3, padding:"1px 8px" }}>
+                Auto: {paymentMode || "Cash/Bank"} → CR &nbsp;|&nbsp; Overhead → DR
+              </span>
+            </div>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
               <thead>
                 <tr style={{ background:"#dcfce7" }}>
-                  <th style={{ padding:"3px 8px", textAlign:"left", color:"#15803d" }}>Account</th>
-                  <th style={{ padding:"3px 8px", textAlign:"right", color:"#15803d" }}>Debit</th>
-                  <th style={{ padding:"3px 8px", textAlign:"right", color:"#15803d" }}>Credit</th>
+                  <th style={{ padding:"4px 8px", textAlign:"left",  color:"#15803d", borderBottom:"1px solid #86efac" }}>Account</th>
+                  <th style={{ padding:"4px 8px", textAlign:"center",color:"#15803d", borderBottom:"1px solid #86efac", width:60 }}>Type</th>
+                  <th style={{ padding:"4px 8px", textAlign:"right", color:"#15803d", borderBottom:"1px solid #86efac", width:110 }}>Debit (DR)</th>
+                  <th style={{ padding:"4px 8px", textAlign:"right", color:"#15803d", borderBottom:"1px solid #86efac", width:110 }}>Credit (CR)</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td style={{ padding:"3px 8px" }}>
-                    <b style={{ color:"#1d4ed8" }}>DR</b> {allAccounts.find(a=>(a.code||a._id)===overheadAcct)?.name || overheadAcct}
+                {/* Row 1: Overhead/Expense Account — DEBIT */}
+                <tr style={{ background:"#eff6ff" }}>
+                  <td style={{ padding:"5px 8px" }}>
+                    <span style={{ background:"#dbeafe", color:"#1d4ed8", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>DR</span>
+                    <b>
+                      <span>Overhead Expenses</span>
+                      <span style={{ color:"#6b7280", fontSize:10, marginLeft:4 }}>(OHV-EXP)</span>
+                    </b>
+                    <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>← Expense increase hogi</span>
                   </td>
-                  <td style={{ padding:"3px 8px", textAlign:"right", fontWeight:700 }}>PKR {fmtNum(total||0)}</td>
-                  <td style={{ padding:"3px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
+                  <td style={{ padding:"5px 8px", textAlign:"center" }}>
+                    <span style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:10, borderRadius:10, padding:"1px 8px" }}>EXPENSE</span>
+                  </td>
+                  <td style={{ padding:"5px 8px", textAlign:"right", fontWeight:700, color:"#1d4ed8", fontFamily:"monospace" }}>
+                    PKR {fmtNum(total||0)}
+                  </td>
+                  <td style={{ padding:"5px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
                 </tr>
-                <tr style={{ background:"#f9fafb" }}>
-                  <td style={{ padding:"3px 8px", paddingLeft:24 }}>
-                    <b style={{ color:"#dc2626" }}>CR</b> {allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset}
+                {/* Row 2: Cash/Bank Account — CREDIT */}
+                <tr style={{ background:"#fff" }}>
+                  <td style={{ padding:"5px 8px", paddingLeft:20 }}>
+                    <span style={{ background:"#fee2e2", color:"#dc2626", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>CR</span>
+                    <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
+                    <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>
+                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : "🏦 Bank balance kam hoga"}
+                    </span>
                   </td>
-                  <td style={{ padding:"3px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
-                  <td style={{ padding:"3px 8px", textAlign:"right", fontWeight:700 }}>PKR {fmtNum(total||0)}</td>
+                  <td style={{ padding:"5px 8px", textAlign:"center" }}>
+                    <span style={{ background: paymentMode==="Cash"?"#dcfce7":"#dbeafe", color: paymentMode==="Cash"?"#15803d":"#1d4ed8", fontSize:10, borderRadius:10, padding:"1px 8px" }}>
+                      {paymentMode || "—"}
+                    </span>
+                  </td>
+                  <td style={{ padding:"5px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
+                  <td style={{ padding:"5px 8px", textAlign:"right", fontWeight:700, color:"#dc2626", fontFamily:"monospace" }}>
+                    PKR {fmtNum(total||0)}
+                  </td>
                 </tr>
               </tbody>
+              <tfoot>
+                <tr style={{ background:"#f9fafb", borderTop:"1px solid #86efac" }}>
+                  <td colSpan={2} style={{ padding:"4px 8px", fontSize:10, color:"#6b7280", fontStyle:"italic" }}>
+                    ✅ Double entry balanced
+                  </td>
+                  <td style={{ padding:"4px 8px", textAlign:"right", fontWeight:700, fontSize:11, color:"#1d4ed8", fontFamily:"monospace" }}>
+                    PKR {fmtNum(total||0)}
+                  </td>
+                  <td style={{ padding:"4px 8px", textAlign:"right", fontWeight:700, fontSize:11, color:"#dc2626", fontFamily:"monospace" }}>
+                    PKR {fmtNum(total||0)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
