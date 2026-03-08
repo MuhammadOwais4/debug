@@ -694,7 +694,7 @@ export default function OverheadVoucher() {
           <span style={{ flex:"0 0 30px" }}>#</span>
           <span style={{ flex:2 }}>Category</span>
           <span style={{ flex:1, textAlign:"right", paddingRight:4 }}>Amount (PKR)</span>
-          <span style={{ flex:1.5 }}>Note</span>
+          <span style={{ flex:1.5 }}>Lod No.</span>
           <span style={{ flex:"0 0 30px" }}></span>
         </div>
 
