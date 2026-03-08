@@ -19,7 +19,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 
-const productCategories = ["Garments"]
+const productCategories = ["Garments","Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Accessories", "Food", "Garments", "Other"]
 
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
@@ -875,7 +875,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorName || "-"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{entry.purchaseQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(entry.purchaseRate)}</td>
-                  {/* ✅ Purchase Amount = purchaseQuantity × purchaseRate */}
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 text-right font-bold bg-blue-50">
                     {formatCurrency(entry.purchaseQuantity * entry.purchaseRate)}
                   </td>
