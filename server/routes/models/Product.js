@@ -8,19 +8,14 @@ const generateGRN = () => {
   return `GRN${timestamp}${random}`
 }
 
-// ── Each overhead line item ────────────────────────────────────────────────────
-const overheadItemSchema = new mongoose.Schema(
-  {
-    id:     { type: String, required: true },   // "labour" | "transport" | ...
-    label:  { type: String, required: true },   // "Labour Cost" | "Transport" | ...
-    icon:   { type: String, default: "" },
-    amount: { type: Number, default: 0, min: [0, "Amount cannot be negative"] },
-  },
-  { _id: false }
-)
-
 const productSchema = new mongoose.Schema(
   {
+    // date 
+    date: {
+      type: Date,
+      required: [true, "Date is required"],
+      default: Date.now,
+    },
     grn: {
       type: String,
       unique: true,
@@ -40,29 +35,16 @@ const productSchema = new mongoose.Schema(
       required: [true, "Category is required"],
       trim: true,
       enum: {
-        values: ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Garments", "Accessories", "Other"],
+        values: ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Garments","Accessories", "Other" ],
         message: "{VALUE} is not a valid category",
       },
     },
 
-    // Purchase Rate (Original purchase rate, per unit excluding overhead)
+    // Purchase Rate (Original purchase rate)
     purchaseRate: {
       type: Number,
       required: [true, "Purchase rate is required"],
       min: [0, "Purchase rate cannot be negative"],
-    },
-
-    // ── Total factory overhead per unit (auto-summed from breakdown) ───────
-    factoryOverhead: {
-      type: Number,
-      default: 0,
-      min: [0, "Factory overhead cannot be negative"],
-    },
-
-    // ── Itemised overhead breakdown stored for display & editing ───────────
-    factoryOverheadBreakdown: {
-      type: [overheadItemSchema],
-      default: [],
     },
 
     // Sale Rate
@@ -72,7 +54,7 @@ const productSchema = new mongoose.Schema(
       min: [0, "Sale rate cannot be negative"],
     },
 
-    // ORIGINAL PURCHASE DATA (Initial snapshot)
+    // ORIGINAL PURCHASE DATA (Unchangeable - Initial Purchase)
     purchaseQuantity: {
       type: Number,
       required: [true, "Purchase quantity is required"],
@@ -85,8 +67,9 @@ const productSchema = new mongoose.Schema(
       min: [0, "Purchase amount cannot be negative"],
       default: 0,
     },
+    balanceAmount: { type: Number, default: 0 },
 
-    // CURRENT / BALANCE DATA
+    // CURRENT/BALANCE DATA (Changes with each transaction)
     quantity: {
       type: Number,
       required: [true, "Quantity is required"],
@@ -128,6 +111,7 @@ const productSchema = new mongoose.Schema(
       },
     },
 
+    // Reference to Liability model for vendor
     vendorName: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Liability",
@@ -138,80 +122,96 @@ const productSchema = new mongoose.Schema(
       maxlength: [20, "Vendor phone cannot exceed 20 characters"],
     },
 
-    ReturnedAmount: { type: Number, default: 0, min: [0, "Returned amount cannot be negative"] },
-    ReturnedDate:   { type: Date },
-    ReturnQuantity: { type: Number, default: 0, min: [0, "Return quantity cannot be negative"] },
-
+    ReturnedAmount: {
+      type: Number,
+      default: 0,
+      min: [0, "Returned amount cannot be negative"],
+    },
+    ReturnedDate: {
+      type: Date,
+    },
+    ReturnQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, "Return quantity cannot be negative"],
+    },
+    // Reference to Asset model for purchase type
     purchaseType: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Asset",
       required: [true, "Purchase type is required"],
     },
-    notes:  { type: String, trim: true, maxlength: [500, "Notes cannot exceed 500 characters"] },
-    Reason: { type: String, trim: true, maxlength: [500, "Reason for return cannot exceed 500 characters"] },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Notes cannot exceed 500 characters"],
+    },
+    Reason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Reason for return cannot exceed 500 characters"],
+    },
   },
   {
     timestamps: true,
-    toJSON:   { virtuals: true },
+    toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 )
 
-// ── Virtuals ──────────────────────────────────────────────────────────────────
-
-productSchema.virtual("totalCostPerUnit").get(function () {
-  return this.purchaseRate + (this.factoryOverhead || 0)
-})
-
+// Virtual for profit per unit
 productSchema.virtual("profitPerUnit").get(function () {
   return this.saleRate - this.purchaseRate
 })
 
+// Virtual for total profit from sold items
 productSchema.virtual("totalProfit").get(function () {
   return (this.saleRate - this.purchaseRate) * this.totalSoldQuantity
 })
 
+// Virtual for total sale amount
 productSchema.virtual("totalSaleAmount").get(function () {
   return this.totalSoldQuantity * this.saleRate
 })
 
+// Virtual for stock status
 productSchema.virtual("stockStatus").get(function () {
   if (this.quantity === 0) return "OUT_OF_STOCK"
-  if (this.quantity < 5)  return "LOW_STOCK"
+  if (this.quantity < 5) return "LOW_STOCK"
   return "IN_STOCK"
 })
 
+// Virtual for expiry status
 productSchema.virtual("expiryStatus").get(function () {
   if (!this.expiryDate) return "NO_EXPIRY"
-  const now  = new Date()
-  const exp  = new Date(this.expiryDate)
-  if (exp < now) return "EXPIRED"
-  const days = Math.ceil((exp - now) / (1000 * 60 * 60 * 24))
-  if (days <= 7)  return "EXPIRING_SOON"
-  if (days <= 30) return "EXPIRING_THIS_MONTH"
+
+  const now = new Date()
+  const expiryDate = new Date(this.expiryDate)
+
+  if (expiryDate < now) return "EXPIRED"
+
+  const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
+
+  if (daysUntilExpiry <= 7) return "EXPIRING_SOON"
+  if (daysUntilExpiry <= 30) return "EXPIRING_THIS_MONTH"
+
   return "VALID"
 })
 
+// Virtual for balance percentage
 productSchema.virtual("balancePercentage").get(function () {
   if (this.purchaseQuantity === 0) return 0
   return ((this.quantity / this.purchaseQuantity) * 100).toFixed(2)
 })
 
-// ── Pre-save: re-sum breakdown → factoryOverhead → balanceAmount ──────────────
+// Pre-save middleware to calculate balance amount
 productSchema.pre("save", function (next) {
-  // Always keep factoryOverhead in sync with breakdown array
-  if (this.factoryOverheadBreakdown && this.factoryOverheadBreakdown.length > 0) {
-    this.factoryOverhead = this.factoryOverheadBreakdown.reduce(
-      (sum, item) => sum + (Number(item.amount) || 0),
-      0
-    )
-  }
-  const totalCostPerUnit = this.purchaseRate + (this.factoryOverhead || 0)
-  this.balanceAmount = this.quantity * totalCostPerUnit
+  // Calculate balance amount based on current quantity and purchase rate
+  this.balanceAmount = this.quantity * this.purchaseRate
   next()
 })
 
-// ── Indexes ───────────────────────────────────────────────────────────────────
+// Index for better query performance
 productSchema.index({ name: 1 })
 productSchema.index({ category: 1 })
 productSchema.index({ vendorName: 1 })

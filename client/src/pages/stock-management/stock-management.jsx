@@ -19,7 +19,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 
-const productCategories = ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Garments", "Accessories", "Other" ] 
+const productCategories = ["Garments"]
 
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
@@ -750,7 +750,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-blue-600">Total Purchase Amount</p>
-             
+              <p className="text-xs text-blue-400 mb-1">Purchase Qty × Purchase Rate</p>
               <p className="text-xl font-bold text-blue-900">{formatCurrency(subtotals.purchaseAmount)}</p>
             </div>
             <TrendingUp className="h-8 w-8 text-blue-600" />
@@ -760,7 +760,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-green-600">Total Balance Amount</p>
-         
+              <p className="text-xs text-green-400 mb-1">Balance Qty × Purchase Rate</p>
               <p className="text-xl font-bold text-green-900">{formatCurrency(subtotals.balanceAmount)}</p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-600" />
@@ -853,9 +853,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
               {/* ✅ KEY COLUMN: Purchase Amount = Qty × Rate */}
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50">
+              <th className="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase tracking-wider bg-blue-50">
                 Purchase Amount
-             
+                <div className="text-xs font-normal text-blue-400 normal-case">Qty × Rate</div>
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
@@ -876,9 +876,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{entry.purchaseQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(entry.purchaseRate)}</td>
                   {/* ✅ Purchase Amount = purchaseQuantity × purchaseRate */}
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-bold bg-blue-50">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 text-right font-bold bg-blue-50">
                     {formatCurrency(entry.purchaseQuantity * entry.purchaseRate)}
-                   
+                    <div className="text-xs text-blue-400 font-normal">{entry.purchaseQuantity} × {formatCurrency(entry.purchaseRate)}</div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{entry.balanceQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-green-600 text-right font-bold">{formatCurrency(entry.balanceAmount)}</td>
@@ -1043,6 +1043,19 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* ✅ Date field */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
+                      <input
+                        type="date"
+                        name="date"
+                        value={formData.date}
+                        onChange={handleChange}
+                        required
+                        max={new Date().toISOString().split("T")[0]}
+                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item / Model Name <span className="text-red-500">*</span></label>
                       <input type="text" name="name" value={formData.name} onChange={handleChange} required
