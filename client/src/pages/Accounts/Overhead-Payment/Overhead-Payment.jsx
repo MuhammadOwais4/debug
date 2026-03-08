@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BASE_URL = "https://debug-nxby.vercel.app";
+const BASE_URL = "http://localhost:5000";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 const http = {
   get: async (path) => {
@@ -190,6 +190,7 @@ export default function OverheadVoucher() {
     lines.forEach((l, i) => {
       if (!l.category) e[`cat_${i}`] = true;
       if (!l.amount || isNaN(l.amount) || parseFloat(l.amount) <= 0) e[`amt_${i}`] = true;
+      if (!l.note || !l.note.trim()) e[`note_${i}`] = true;
     });
     return e;
   }
@@ -298,6 +299,240 @@ export default function OverheadVoucher() {
     finally { setDeleting(false); }
   }
 
+  // ── Print Voucher ─────────────────────────────────────────────────────────
+  function handlePrint() {
+    const win = window.open("", "", "height=900,width=750");
+    const accountName = selectedAccountObj?.name || selectedAsset || "—";
+    const accountCode = selectedAccountObj?.code || "";
+    const mode = paymentMode || "—";
+    const vno  = editMode ? editVoucherNumber : voucherNo;
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Overhead Voucher - ${vno}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size:12px; color:#1e293b; background:#fff; padding:0; }
+
+  /* ── Header ── */
+  .header { background:linear-gradient(135deg,#1a3c5e,#2563a8); color:#fff; padding:18px 28px 14px; }
+  .company { font-size:20px; font-weight:700; letter-spacing:0.04em; margin-bottom:2px; }
+  .sub     { font-size:11px; opacity:0.75; letter-spacing:0.08em; text-transform:uppercase; }
+  .vno-box { text-align:right; }
+  .vno-label { font-size:9px; opacity:0.6; text-transform:uppercase; letter-spacing:0.12em; }
+  .vno-val   { font-size:16px; font-weight:700; font-family:'Courier New',monospace; }
+  .hdr-row   { display:flex; justify-content:space-between; align-items:flex-start; }
+
+  /* ── Title band ── */
+  .title-band { background:#e8edf5; padding:8px 28px; border-bottom:2px solid #2563a8; display:flex; justify-content:space-between; align-items:center; }
+  .title-text  { font-size:13px; font-weight:700; color:#1a3c5e; letter-spacing:0.06em; text-transform:uppercase; }
+  .title-date  { font-size:11px; color:#64748b; }
+
+  /* ── Info grid ── */
+  .info-section { padding:14px 28px 0; display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; }
+  .info-row { display:flex; flex-direction:column; gap:2px; }
+  .info-label { font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; font-weight:600; }
+  .info-val   { font-size:12px; font-weight:600; color:#1e293b; }
+  .mode-cash  { color:#15803d; } .mode-bank  { color:#1d4ed8; }
+
+  /* ── Journal preview ── */
+  .journal-section { margin:14px 28px 0; }
+  .section-title { font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; font-weight:700; margin-bottom:6px; padding-bottom:3px; border-bottom:1px solid #e2e8f0; }
+  .journal-table { width:100%; border-collapse:collapse; font-size:11px; }
+  .journal-table th { background:#dcfce7; color:#15803d; padding:5px 8px; text-align:left; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; }
+  .journal-table th.right { text-align:right; }
+  .journal-table td { padding:6px 8px; border-bottom:1px solid #f1f5f9; }
+  .journal-table td.right { text-align:right; font-family:'Courier New',monospace; font-weight:700; }
+  .journal-table tr.dr-row { background:#eff6ff; }
+  .journal-table tr.cr-row { background:#fff; }
+  .badge-dr { background:#dbeafe; color:#1d4ed8; font-weight:700; border-radius:3px; padding:1px 6px; font-size:9px; margin-right:5px; }
+  .badge-cr { background:#fee2e2; color:#dc2626; font-weight:700; border-radius:3px; padding:1px 6px; font-size:9px; margin-right:5px; }
+  .journal-total { background:#f9fafb; border-top:1px solid #86efac; }
+  .journal-total td { font-weight:700; font-size:11px; padding:5px 8px; }
+  .dr-amt { color:#1d4ed8; } .cr-amt { color:#dc2626; }
+
+  /* ── Lines table ── */
+  .lines-section { margin:14px 28px 0; }
+  .lines-table { width:100%; border-collapse:collapse; font-size:11px; }
+  .lines-table th { background:linear-gradient(180deg,#2563a8,#1a4d8f); color:#fff; padding:6px 8px; text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+  .lines-table th.right { text-align:right; }
+  .lines-table td { padding:6px 8px; border-bottom:1px solid #e5eaf0; }
+  .lines-table td.right { text-align:right; font-family:'Courier New',monospace; }
+  .lines-table tr:nth-child(even) { background:#f7fafd; }
+  .cat-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; background:#dbeafe; color:#1d4ed8; }
+  .lod-no { font-family:'Courier New',monospace; font-size:11px; color:#374151; font-weight:600; }
+
+  /* ── Total bar ── */
+  .total-bar { margin:10px 28px 0; background:linear-gradient(90deg,#1a3c5e,#2563a8); color:#fff; border-radius:4px; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .total-label { font-size:10px; text-transform:uppercase; letter-spacing:0.1em; opacity:0.75; }
+  .total-val   { font-size:18px; font-weight:700; font-family:'Courier New',monospace; }
+
+  /* ── Description ── */
+  .desc-section { margin:10px 28px 0; padding:8px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; font-size:11px; color:#374151; }
+  .desc-label { font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:#94a3b8; font-weight:600; margin-bottom:3px; }
+
+  /* ── Signatures ── */
+  .sig-section { margin:28px 28px 0; display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+  .sig-box { text-align:center; }
+  .sig-line { border-top:1px solid #1e293b; margin-bottom:5px; }
+  .sig-label { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:0.06em; }
+
+  /* ── Footer ── */
+  .footer { margin:20px 28px 0; padding:8px 0 0; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; }
+
+  @media print {
+    body { padding:0; }
+    @page { size: A4; margin:12mm; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="hdr-row">
+    <div>
+      <div class="company">YOUR COMPANY NAME</div>
+      <div class="sub">Overhead Expense Voucher</div>
+    </div>
+    <div class="vno-box">
+      <div class="vno-label">Voucher No.</div>
+      <div class="vno-val">${vno}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Title band -->
+<div class="title-band">
+  <span class="title-text">📋 Overhead Expense Voucher</span>
+  <span class="title-date">Date: ${new Date(date).toLocaleDateString("en-PK", {day:"2-digit",month:"long",year:"numeric"})}</span>
+</div>
+
+<!-- Info Grid -->
+<div class="info-section">
+  <div class="info-row">
+    <span class="info-label">Payment Mode</span>
+    <span class="info-val ${mode === "Cash" ? "mode-cash" : "mode-bank"}">${mode === "Cash" ? "💵" : "🏦"} ${mode}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Account (CR)</span>
+    <span class="info-val">${accountCode ? accountCode + " — " : ""}${accountName}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Overhead Account (DR)</span>
+    <span class="info-val">OHV-EXP — Overhead Expenses</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Status</span>
+    <span class="info-val" style="color:#15803d;">SAVED</span>
+  </div>
+</div>
+
+<!-- Journal Preview -->
+<div class="journal-section">
+  <div class="section-title">📒 Journal Entry</div>
+  <table class="journal-table">
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Type</th>
+        <th class="right">Debit (DR)</th>
+        <th class="right">Credit (CR)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="dr-row">
+        <td><span class="badge-dr">DR</span><b>Overhead Expenses</b> <span style="color:#6b7280;font-size:10px;">(OHV-EXP)</span></td>
+        <td><span style="background:#dbeafe;color:#1d4ed8;padding:1px 8px;border-radius:10px;font-size:10px;">EXPENSE</span></td>
+        <td class="right dr-amt">PKR ${fmtNum(total)}</td>
+        <td class="right" style="color:#9ca3af;">—</td>
+      </tr>
+      <tr class="cr-row">
+        <td style="padding-left:20px;"><span class="badge-cr">CR</span><b>${accountName}</b> <span style="color:#6b7280;font-size:10px;">${mode === "Cash" ? "💵 Cash" : "🏦 Bank"}</span></td>
+        <td><span style="background:${mode==="Cash"?"#dcfce7":"#dbeafe"};color:${mode==="Cash"?"#15803d":"#1d4ed8"};padding:1px 8px;border-radius:10px;font-size:10px;">${mode}</span></td>
+        <td class="right" style="color:#9ca3af;">—</td>
+        <td class="right cr-amt">PKR ${fmtNum(total)}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="journal-total">
+        <td colspan="2" style="color:#6b7280;font-size:10px;font-style:italic;">✅ Double entry balanced</td>
+        <td class="right dr-amt">PKR ${fmtNum(total)}</td>
+        <td class="right cr-amt">PKR ${fmtNum(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<!-- Expense Lines -->
+<div class="lines-section">
+  <div class="section-title">Expense Lines</div>
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:32px;">#</th>
+        <th>Category</th>
+        <th>Lod No.</th>
+        <th class="right" style="width:130px;">Amount (PKR)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lines.map((l, i) => {
+        const cat = categories.find(c => c.id === l.category);
+        return \`<tr>
+          <td style="color:#94a3b8;font-family:'Courier New',monospace;font-weight:700;">\${i+1}</td>
+          <td><span class="cat-badge">\${cat?.icon || ""} \${cat?.label || l.category || "—"}</span></td>
+          <td><span class="lod-no">\${l.note || "—"}</span></td>
+          <td class="right"><b>PKR \${fmtNum(l.amount)}</b></td>
+        </tr>\`;
+      }).join("")}
+    </tbody>
+  </table>
+</div>
+
+<!-- Total Bar -->
+<div class="total-bar">
+  <span class="total-label">Total Amount</span>
+  <span class="total-val">PKR ${fmtNum(total)}</span>
+</div>
+
+${description ? \`
+<!-- Description -->
+<div class="desc-section">
+  <div class="desc-label">Description / Remarks</div>
+  \${description}
+</div>\` : ""}
+
+<!-- Signatures -->
+<div class="sig-section">
+  <div class="sig-box">
+    <div class="sig-line"></div>
+    <div class="sig-label">Prepared By</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-line"></div>
+    <div class="sig-label">Checked By</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-line"></div>
+    <div class="sig-label">Approved By</div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <span>Generated: ${new Date().toLocaleString("en-PK")}</span>
+  <span>Created by Soft-Technix</span>
+</div>
+
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`);
+    win.document.close();
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={S.page}>
@@ -334,6 +569,9 @@ export default function OverheadVoucher() {
           {editMode ? `✏️ Change (${editVoucherNumber})` : "Edit"}
         </button>
         <button style={S.btn("default")} onClick={handleNew}>Cancel</button>
+        <button style={{ ...S.btn("default"), marginLeft:"auto", borderColor:"#7c3aed", color:"#7c3aed", fontWeight:600 }} onClick={handlePrint}>
+          🖨️ Print
+        </button>
       </div>
 
       {/* ── Edit banner ── */}
@@ -537,8 +775,12 @@ export default function OverheadVoucher() {
                     style={{ ...S.input, ...(errors[`amt_${idx}`] ? S.inputErr : {}), textAlign:"right" }} />
                 </div>
                 <div style={{ flex:1.5 }}>
-                  <input placeholder="Optional note" value={line.note}
-                    onChange={(e) => updateLine(line.id, "note", e.target.value)} style={S.input} />
+                  <input 
+                    placeholder="Enter Lod No. *" 
+                    value={line.note}
+                    onChange={(e) => updateLine(line.id, "note", e.target.value)} 
+                    style={{ ...S.input, ...(errors[`note_${idx}`] ? S.inputErr : {}) }} />
+                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lod No. required</span>}
                 </div>
                 <button disabled={lines.length === 1} onClick={() => removeLine(line.id)}
                   style={{ ...S.removeBtn, opacity: lines.length === 1 ? 0.3 : 1 }}>×</button>
@@ -562,6 +804,9 @@ export default function OverheadVoucher() {
         {/* Actions */}
         <div style={S.actions}>
           <button style={S.resetBtn} onClick={handleNew}>Reset</button>
+          <button style={{ padding:"4px 16px", fontSize:12, height:28, border:"1px solid #7c3aed", borderRadius:3, background:"#f5f3ff", color:"#7c3aed", cursor:"pointer", fontWeight:600 }} onClick={handlePrint}>
+            🖨️ Print Voucher
+          </button>
           <button style={{ ...S.submitBtn, background: editMode ? "linear-gradient(90deg,#92400e,#b45309)" : "linear-gradient(90deg,#1a3c5e,#2563a8)" }}
             onClick={handleSave} disabled={saving}>
             {saving ? "⏳ Processing..." : editMode ? "✏️ Update Voucher" : "✅ Save Voucher"}
@@ -592,6 +837,7 @@ export default function OverheadVoucher() {
                     <th style={S.th}>Account</th>
                     <th style={S.thC}>Mode</th>
                     <th style={S.thR}>Total</th>
+                    <th style={S.th}>Lod No.</th>
                     <th style={S.thC}>Status</th>
                     <th style={S.thC}>Actions</th>
                   </tr>
@@ -608,6 +854,9 @@ export default function OverheadVoucher() {
                         </span>
                       </td>
                       <td style={S.tdR(i)}>Rs. {fmtNum(v.totalAmount)}</td>
+                      <td style={S.td(i)}>
+                        {v.lines?.map((l, li) => l.note).filter(Boolean).join(", ") || <span style={{color:"#9ca3af",fontSize:10}}>—</span>}
+                      </td>
                       <td style={S.tdC(i)}><span style={S.badge(v.status)}>{v.status}</span></td>
                       <td style={{ ...S.tdC(i), gap:4, display:"flex", justifyContent:"center" }}>
                         <button style={{ ...S.btn("warning"), padding:"2px 10px", fontSize:11 }}
