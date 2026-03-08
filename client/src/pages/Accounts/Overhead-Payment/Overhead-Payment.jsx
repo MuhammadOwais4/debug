@@ -1,3 +1,4 @@
+import { WarehouseIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -60,7 +61,12 @@ const FALLBACK_CATEGORIES = [
   { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red"    },
   { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow" },
   { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange" },
+ { id: "Checking",      label: "Checking",                icon: "🛠️", color: "teal"   },
+  { id: "Warehouse-SHEHRAAZ",   label: "Warehouse 1 -(SHEHRAAZ)",    icon: "🏠", color: "aqua" },
+  { id: "Warehouse-NAWAZ-BHAI",   label: "Warehouse 2-(NAWAZ BHAI)",    icon: "🏠", color: "aqua" },
+  { id: "Watching",   label: "Watching ",    icon: "🏠", color: "indigo" },
   { id: "other",     label: "Other",               icon: "➕", color: "gray"   },
+  {}
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -86,6 +92,7 @@ const COLOR_MAP = {
   yellow: { bg:"#fef9c3", text:"#854d0e" }, orange: { bg:"#ffedd5", text:"#c2410c" },
   gray:   { bg:"#f3f4f6", text:"#374151" }, pink:   { bg:"#fce7f3", text:"#be185d" },
   teal:   { bg:"#ccfbf1", text:"#0f766e" }, indigo: { bg:"#e0e7ff", text:"#4338ca" },
+
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
