@@ -84,11 +84,21 @@ const ProductManagementDashboard = () => {
   useEffect(() => {
     productAPI.getOverheadVouchers().then(data => {
       const list = Array.isArray(data) ? data : [];
+      // Collect all unique Lod numbers from all voucher lines (line.note = Lod No.)
+      const lodNumbers = [];
+      list.forEach(v => {
+        (v.lines || []).forEach(line => {
+          if (line.note && line.note.trim() && !lodNumbers.includes(line.note.trim())) {
+            lodNumbers.push(line.note.trim());
+          }
+        });
+      });
       setOhvSummary({
         count: list.length,
         total: list.reduce((s,v) => s+(v.totalAmount||0), 0),
         cash:  list.filter(v=>v.paymentMode==='Cash').reduce((s,v) => s+(v.totalAmount||0), 0),
         bank:  list.filter(v=>v.paymentMode==='Bank').reduce((s,v) => s+(v.totalAmount||0), 0),
+        lodNumbers, // ✅ All unique Lod numbers
       });
     }).catch(() => {});
   }, []);
@@ -285,13 +295,21 @@ const ProductManagementDashboard = () => {
 
                       {/* Lines */}
                       {v.lines?.length > 0 && (
-                        <div className="space-y-1.5 mb-4">
+                        <div className="space-y-2 mb-4">
                           {v.lines.map((line, li) => (
-                            <div key={li} className="flex justify-between items-center text-xs">
-                              <span className={`px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[line.category]||'bg-gray-100 text-gray-700'}`}>
-                                {line.categoryLabel || line.category}
-                              </span>
-                              <span className="font-mono font-semibold text-slate-700">Rs. {fmtNum(line.amount)}</span>
+                            <div key={li} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                              <div className="flex justify-between items-center">
+                                <span className={`px-2 py-0.5 rounded-full font-medium text-xs ${CAT_COLORS[line.category]||'bg-gray-100 text-gray-700'}`}>
+                                  {line.categoryLabel || line.category}
+                                </span>
+                                <span className="font-mono font-semibold text-slate-700 text-xs">Rs. {fmtNum(line.amount)}</span>
+                              </div>
+                              {line.note && (
+                                <div className="mt-1 flex items-center gap-1">
+                                  <span className="text-xs text-slate-400">Lod No:</span>
+                                  <span className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{line.note}</span>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -449,7 +467,7 @@ const ProductManagementDashboard = () => {
                             return (
                               <div className="mt-1 flex justify-between items-center bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                                 <span className="text-xs text-blue-600 font-semibold flex items-center gap-1">
-                                  Purchases Amount 
+                                  🧮 {qty} × Rs.{fmtNum(rate)}
                                 </span>
                                 <span className="text-sm font-bold text-blue-800 font-mono">Rs. {fmtNum(total)}</span>
                               </div>
@@ -486,6 +504,19 @@ const ProductManagementDashboard = () => {
                                 <div className="text-xs font-bold text-blue-700">Rs.{fmtNum(ohvSummary.bank)}</div>
                               </div>
                             </div>
+                            {/* Lod Numbers from all voucher lines */}
+                            {ohvSummary.lodNumbers?.length > 0 && (
+                              <div className="mt-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
+                                <div className="text-xs text-slate-500 mb-1.5 font-semibold">Lod No.</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {ohvSummary.lodNumbers.map((lod, li) => (
+                                    <span key={li} className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                                      {lod}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <div className="mt-2 flex justify-between items-center bg-amber-100 rounded-lg px-3 py-1.5">
                               <span className="text-xs text-amber-700 font-semibold">Total Overhead</span>
                               <span className="text-sm font-bold text-amber-800 font-mono">Rs. {fmtNum(ohvSummary.total)}</span>
