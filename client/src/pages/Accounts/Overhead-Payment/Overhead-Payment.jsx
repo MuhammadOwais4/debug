@@ -444,7 +444,7 @@ export default function OverheadVoucher() {
         "<table class='lines-table'><thead><tr>" +
           "<th style='width:36px;text-align:center;'>#</th>" +
           "<th>Category</th>" +
-          "<th>Lod No.</th>" +
+          "<th>Lot No.</th>" +
           "<th class='right' style='width:140px;'>Amount (PKR)</th>" +
         "</tr></thead><tbody>" + linesRows + "</tbody>" +
         "<tfoot><tr class='lines-total'>" +
@@ -694,7 +694,7 @@ export default function OverheadVoucher() {
           <span style={{ flex:"0 0 30px" }}>#</span>
           <span style={{ flex:2 }}>Category</span>
           <span style={{ flex:1, textAlign:"right", paddingRight:4 }}>Amount (PKR)</span>
-          <span style={{ flex:1.5 }}>Lod No.</span>
+          <span style={{ flex:1.5 }}>Lot No.</span>
           <span style={{ flex:"0 0 30px" }}></span>
         </div>
 
@@ -722,11 +722,11 @@ export default function OverheadVoucher() {
                 </div>
                 <div style={{ flex:1.5 }}>
                   <input 
-                    placeholder="Enter Lod No. *" 
+                    placeholder="Enter Lot No. *" 
                     value={line.note}
                     onChange={(e) => updateLine(line.id, "note", e.target.value)} 
                     style={{ ...S.input, ...(errors[`note_${idx}`] ? S.inputErr : {}) }} />
-                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lod No. required</span>}
+                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lot No. required</span>}
                 </div>
                 <button disabled={lines.length === 1} onClick={() => removeLine(line.id)}
                   style={{ ...S.removeBtn, opacity: lines.length === 1 ? 0.3 : 1 }}>×</button>
@@ -783,7 +783,7 @@ export default function OverheadVoucher() {
                     <th style={S.th}>Account</th>
                     <th style={S.thC}>Mode</th>
                     <th style={S.thR}>Total</th>
-                    <th style={S.th}>Lod No.</th>
+                    <th style={S.th}>Lot No.</th>
                     <th style={S.thC}>Status</th>
                     <th style={S.thC}>Actions</th>
                   </tr>
