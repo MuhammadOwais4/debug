@@ -19,7 +19,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 
-const productCategories = ["Garments"]
+const productCategories = ["Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Food", "Garments", "Accessories", "Other" ] 
 
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
