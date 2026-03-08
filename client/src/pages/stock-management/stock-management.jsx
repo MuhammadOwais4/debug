@@ -855,7 +855,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               {/* ✅ KEY COLUMN: Purchase Amount = Qty × Rate */}
               <th className="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase tracking-wider bg-blue-50">
                 Purchase Amount
-                <div className="text-xs font-normal text-blue-400 normal-case">Qty × Rate</div>
+          
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
@@ -878,7 +878,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   {/* ✅ Purchase Amount = purchaseQuantity × purchaseRate */}
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 text-right font-bold bg-blue-50">
                     {formatCurrency(entry.purchaseQuantity * entry.purchaseRate)}
-                    <div className="text-xs text-blue-400 font-normal">{entry.purchaseQuantity} × {formatCurrency(entry.purchaseRate)}</div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{entry.balanceQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-green-600 text-right font-bold">{formatCurrency(entry.balanceAmount)}</td>
