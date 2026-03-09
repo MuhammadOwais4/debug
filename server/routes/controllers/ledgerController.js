@@ -11,7 +11,7 @@ const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
-const OverheadVoucher = require("../models/Overheadcategory")
+const OverheadVoucher = require("../models/OverheadVoucher")
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ HARDCODED TAX ACCOUNTS
@@ -93,7 +93,7 @@ const getAllAccounts = async (req, res) => {
     if (purchaseDiscountCount > 0)
       allAccounts.push({ code: "PURCH-DISC", name: "PURCHASES DISCOUNT", type: "PURCHASES DISCOUNT", balance: 0, fullName: "PURCH-DISC - PURCHASES DISCOUNT", category: "Revenue", normalBalance: "credit" })
 
-    // ✅ Add hardcoded "Overhead Expenses" account if any OHV vouchers exist
+    // ✅ Add hardcoded "Overhead Expenses" (OHV-EXP) if any OHV vouchers exist
     const ohvCount = await OverheadVoucher.countDocuments({ status: { $in: ["SAVED", "POSTED"] } })
     if (ohvCount > 0) {
       allAccounts.push({
@@ -105,6 +105,17 @@ const getAllAccounts = async (req, res) => {
         category:      "Expenses",
         normalBalance: "debit",
       })
+    }
+
+    // ✅ ACCRUED-EXPENSE liabilities already included from Liability.find() above
+    // They appear in GL with category: "Liabilities", normalBalance: "credit"
+    // OHV mode=Accrued → CR side posts to these accounts automatically
+    const accruedOhvCount = await OverheadVoucher.countDocuments({
+      status:      { $in: ["SAVED", "POSTED"] },
+      paymentMode: "Accrued",
+    })
+    if (accruedOhvCount > 0) {
+      console.log(`📋 ${accruedOhvCount} Accrued OHV vouchers found — ACCRUED-EXPENSE accounts active in GL`)
     }
 
     const spvWithTax = await SupplierPaymentVoucher.find({ taxRate: { $gt: 0 } }, { taxRate: 1, _id: 0 }).lean()
@@ -630,8 +641,17 @@ const getAccountLedger = async (req, res) => {
 
     // ══════════════════════════════════════════════════════════════════════════
     // 10. OVERHEAD VOUCHERS (OHV)
-    //   DR  Overhead/Expense Account   (totalAmount)  ← Expenses category
-    //   CR  Cash / Bank Account        (totalAmount)  ← Assets category
+    //
+    //   Voucher mein 3 payment modes hain:
+    //   ─────────────────────────────────────────────────────────────
+    //   Mode: Cash / Bank
+    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses (debit)
+    //     CR  Cash / Bank Account            ← Assets   (credit)
+    //
+    //   Mode: Accrued (ACCRUED-EXPENSE liability)
+    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses   (debit)
+    //     CR  Accrued Account               ← Liabilities (credit)
+    //   ─────────────────────────────────────────────────────────────
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc) {
       const overheadVouchers = await OverheadVoucher.find({
@@ -642,21 +662,26 @@ const getAccountLedger = async (req, res) => {
       console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers`)
 
       overheadVouchers.forEach((ohv) => {
-        const cashBankName = ohv.accountName || ""
-        const cashBankCode = ohv.accountCode || ohv.account || ""
-        const expName      = ohv.overheadAccountName || ""
-        const expCode      = ohv.overheadAccount     || ""
-        const vNo          = ohv.voucherNumber        || "OHV"
-        const amt          = parseFloat(ohv.totalAmount || 0)
+        const crName  = ohv.accountName || ""           // Cash/Bank/Accrued account name (CR side)
+        const crCode  = ohv.accountCode || ohv.account || ""  // CR account code
+        const expName = ohv.overheadAccountName || "Overhead Expenses"
+        const expCode = ohv.overheadAccount     || "OHV-EXP"
+        const mode    = ohv.paymentMode || "Cash"       // "Cash" | "Bank" | "Accrued"
+        const vNo     = ohv.voucherNumber || "OHV"
+        const amt     = parseFloat(ohv.totalAmount || 0)
         if (amt <= 0) return
-        const narr = ohv.description || `Overhead expense via ${cashBankName}`
 
-        // A. DR — Overhead/Expense Account
-        // ✅ OHV-EXP hardcoded account: SARE overhead vouchers dikhao
-        const isOhvExpAccount = accountCode === "OHV-EXP" || accountName === "Overhead Expenses"
+        const narr = ohv.description || `Overhead expense via ${crName}`
+
+        // ── A. DR — Overhead/Expense Account ─────────────────────────────────
+        // Matches: OHV-EXP hardcoded catch-all OR specific overhead account
+        const isOhvExpAccount =
+          accountCode === "OHV-EXP" ||
+          accountName === "Overhead Expenses" ||
+          accountName === "OHV-EXP"
 
         const expDirectMatch =
-          isOhvExpAccount ||  // ← hardcoded catch-all
+          isOhvExpAccount ||
           (expCode && expCode.length < 24 && (expCode === accountCode || expCode === accountName)) ||
           (expName && (expName === accountCode || expName === accountName)) ||
           matchAccount(expName, accountCode, accountName) ||
@@ -669,7 +694,7 @@ const getAccountLedger = async (req, res) => {
             date:        ohv.voucherDate,
             voucherNo:   vNo,
             voucherType: "OHV",
-            description: `${narr} [${ohv.paymentMode}: ${cashBankName}]`,
+            description: `${narr} [${mode}: ${crName}]`,
             debit:       amt,
             credit:      0,
             balance:     runningBalance,
@@ -678,22 +703,52 @@ const getAccountLedger = async (req, res) => {
           })
         }
 
-        // B. CR — Cash / Bank Account
-        // ✅ Direct code match OR name match for cash/bank
-        const bankMatch =
-          (cashBankCode && (cashBankCode === accountCode || cashBankCode === accountName)) ||
-          (cashBankName && (cashBankName === accountCode || cashBankName === accountName)) ||
-          matchAccount(cashBankName, accountCode, accountName) ||
-          matchAccount(cashBankCode, accountCode, accountName)
+        // ── B. CR — Cash / Bank Account (mode: Cash or Bank) ─────────────────
+        // Assets category: cash/bank account credit hota hai
+        const isCashBankMode  = mode === "Cash" || mode === "Bank"
+        const cashBankMatch   =
+          isCashBankMode && (
+            (crCode && (crCode === accountCode || crCode === accountName)) ||
+            (crName && (crName === accountCode || crName === accountName)) ||
+            matchAccount(crName, accountCode, accountName) ||
+            matchAccount(crCode, accountCode, accountName)
+          )
 
-        if (bankMatch) {
+        if (cashBankMatch) {
           runningBalance += normalBalance === "debit" ? -amt : amt
           ledgerEntries.push({
             id:          `ohv-${ohv._id}-cashbank`,
             date:        ohv.voucherDate,
             voucherNo:   vNo,
             voucherType: "OHV",
-            description: `${narr} — paid from ${cashBankName}`,
+            description: `${narr} — ${mode === "Cash" ? "💵 Cash" : "🏦 Bank"} paid: ${crName}`,
+            debit:       0,
+            credit:      amt,
+            balance:     runningBalance,
+            grn:         null,
+            sourceId:    ohv._id,
+          })
+        }
+
+        // ── C. CR — Accrued Expense Account (mode: Accrued) ──────────────────
+        // Liabilities category: accrued payable credit hota hai
+        const isAccruedMode  = mode === "Accrued"
+        const accruedMatch   =
+          isAccruedMode && (
+            (crCode && (crCode === accountCode || crCode === accountName)) ||
+            (crName && (crName === accountCode || crName === accountName)) ||
+            matchAccount(crName, accountCode, accountName) ||
+            matchAccount(crCode, accountCode, accountName)
+          )
+
+        if (accruedMatch) {
+          runningBalance += normalBalance === "debit" ? -amt : amt
+          ledgerEntries.push({
+            id:          `ohv-${ohv._id}-accrued`,
+            date:        ohv.voucherDate,
+            voucherNo:   vNo,
+            voucherType: "OHV",
+            description: `${narr} — 📋 Accrued payable: ${crName}`,
             debit:       0,
             credit:      amt,
             balance:     runningBalance,

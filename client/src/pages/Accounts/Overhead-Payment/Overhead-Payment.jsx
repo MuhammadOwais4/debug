@@ -1,8 +1,7 @@
-import { WarehouseIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BASE_URL ="https://debug-nxby.vercel.app";
+const BASE_URL = "https://debug-nxby.vercel.app";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 const http = {
   get: async (path) => {
@@ -61,12 +60,7 @@ const FALLBACK_CATEGORIES = [
   { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red"    },
   { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow" },
   { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange" },
- { id: "Checking",      label: "Checking",                icon: "🛠️", color: "teal"   },
-  { id: "Warehouse-SHEHRAAZ",   label: "Warehouse 1 -(SHEHRAAZ)",    icon: "🏠", color: "aqua" },
-  { id: "Warehouse-NAWAZ-BHAI",   label: "Warehouse 2-(NAWAZ BHAI)",    icon: "🏠", color: "aqua" },
-  { id: "Watching",   label: "Watching ",    icon: "🏠", color: "indigo" },
   { id: "other",     label: "Other",               icon: "➕", color: "gray"   },
-  {}
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,7 +86,6 @@ const COLOR_MAP = {
   yellow: { bg:"#fef9c3", text:"#854d0e" }, orange: { bg:"#ffedd5", text:"#c2410c" },
   gray:   { bg:"#f3f4f6", text:"#374151" }, pink:   { bg:"#fce7f3", text:"#be185d" },
   teal:   { bg:"#ccfbf1", text:"#0f766e" }, indigo: { bg:"#e0e7ff", text:"#4338ca" },
-
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +123,7 @@ export default function OverheadVoucher() {
 
   // ── API data ──────────────────────────────────────────────────────────────
   const [allAccounts,     setAllAccounts]     = useState([]);
+  const [accruedAccounts, setAccruedAccounts] = useState([]);  // ACCRUED-EXPENSE from Liabilities
   const [categories,      setCategories]      = useState(FALLBACK_CATEGORIES);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsError,   setAccountsError]   = useState("");
@@ -147,6 +141,15 @@ export default function OverheadVoucher() {
           setAccountsError(`${list.length} accounts mein koi CASH/BANK nahi. Type: "${list[0]?.type}"`);
       } catch (err) { setAccountsError(err.message); }
       finally { setLoadingAccounts(false); }
+    })();
+    // ✅ Also load ACCRUED-EXPENSE liabilities for overhead account selection
+    (async () => {
+      try {
+        const res = await http.get("/api/liabilities");
+        const list = res?.data ?? (Array.isArray(res) ? res : []);
+        const accrued = list.filter(l => l.type === "ACCRUED-EXPENSE");
+        setAccruedAccounts(accrued);
+      } catch (_) { setAccruedAccounts([]); }
     })();
   }, []);
 
@@ -171,7 +174,9 @@ export default function OverheadVoucher() {
     a.type === "EXPENSE" ||
     (!["CASH ACCOUNT","BANK ACCOUNT"].includes(a.type))
   );
-  const selectedAccountObj = allAccounts.find((a) => (a.code || a._id) === selectedAsset);
+  const selectedAccountObj = 
+    allAccounts.find((a) => (a.code || a._id) === selectedAsset) ||
+    accruedAccounts.find((a) => (a.code || a._id) === selectedAsset);
   const total              = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
 
   // ── Line helpers ──────────────────────────────────────────────────────────
@@ -191,7 +196,9 @@ export default function OverheadVoucher() {
   function validate() {
     const e = {};
     if (!date)          e.date = true;
-    if (!paymentMode)   e.paymentMode = true;
+    // paymentMode optional if ACCRUED-EXPENSE account selected
+    const isAccruedSelected = accruedAccounts.some(a => (a.code||a._id) === selectedAsset);
+    if (!paymentMode && !isAccruedSelected) e.paymentMode = true;
     if (!selectedAsset)  e.selectedAsset  = true;
     // overheadAcct optional — fallback to OHV-EXP if not selected
     lines.forEach((l, i) => {
@@ -397,7 +404,7 @@ export default function OverheadVoucher() {
 
     const body = (
       "<div class='header'><div class='hdr-row'>" +
-        "<div><div class='company'>Testing</div><div class='sub'>Overhead Expense Voucher</div></div>" +
+        "<div><div class='company'>YOUR COMPANY NAME</div><div class='sub'>Overhead Expense Voucher</div></div>" +
         "<div class='vno-box'><div class='vno-label'>Voucher No.</div><div class='vno-val'>" + vno + "</div></div>" +
       "</div></div>" +
 
@@ -444,7 +451,7 @@ export default function OverheadVoucher() {
         "<table class='lines-table'><thead><tr>" +
           "<th style='width:36px;text-align:center;'>#</th>" +
           "<th>Category</th>" +
-          "<th>Lot No.</th>" +
+          "<th>Lod No.</th>" +
           "<th class='right' style='width:140px;'>Amount (PKR)</th>" +
         "</tr></thead><tbody>" + linesRows + "</tbody>" +
         "<tfoot><tr class='lines-total'>" +
@@ -556,11 +563,15 @@ export default function OverheadVoucher() {
         <div style={S.row}>
           <Field label="Payment Mode *" error={errors.paymentMode}>
             <div style={S.modeGroup}>
-              {["Cash", "Bank"].map((m) => (
-                <button key={m}
-                  onClick={() => { setPaymentMode(m); setSelectedAsset(""); }}
-                  style={{ ...S.modeBtn, ...(paymentMode === m ? S.modeBtnActive : {}), ...(errors.paymentMode ? S.modeBtnErr : {}) }}>
-                  {m === "Cash" ? "💵" : "🏦"} {m}
+              {[{key:"Cash",label:"💵 Cash"},{key:"Bank",label:"🏦 Bank"},{key:"Accrued",label:"📋 Accrued"}].map((m) => (
+                <button key={m.key}
+                  onClick={() => { setPaymentMode(m.key); setSelectedAsset(""); }}
+                  style={{
+                    ...S.modeBtn,
+                    ...(paymentMode === m.key ? (m.key === "Accrued" ? S.modeBtnAccrued : S.modeBtnActive) : {}),
+                    ...(errors.paymentMode ? S.modeBtnErr : {})
+                  }}>
+                  {m.label}
                 </button>
               ))}
             </div>
@@ -576,6 +587,9 @@ export default function OverheadVoucher() {
               ))}
               {paymentMode === "Bank" && bankAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[BANK] {a.code} - {a.name}</option>
+              ))}
+              {paymentMode === "Accrued" && accruedAccounts.map((a) => (
+                <option key={a._id} value={a.code || a._id}>[ACCRUED] {a.code} - {a.name}</option>
               ))}
             </select>
             {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
@@ -646,11 +660,14 @@ export default function OverheadVoucher() {
                     <span style={{ background:"#fee2e2", color:"#dc2626", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>CR</span>
                     <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
                     <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>
-                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : "🏦 Bank balance kam hoga"}
+                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : paymentMode === "Bank" ? "🏦 Bank balance kam hoga" : "📋 Accrued payable badhega"}
                     </span>
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"center" }}>
-                    <span style={{ background: paymentMode==="Cash"?"#dcfce7":"#dbeafe", color: paymentMode==="Cash"?"#15803d":"#1d4ed8", fontSize:10, borderRadius:10, padding:"1px 8px" }}>
+                    <span style={{ 
+                      background: paymentMode==="Cash"?"#dcfce7": paymentMode==="Accrued"?"#ede9fe":"#dbeafe", 
+                      color: paymentMode==="Cash"?"#15803d": paymentMode==="Accrued"?"#7c3aed":"#1d4ed8", 
+                      fontSize:10, borderRadius:10, padding:"1px 8px" }}>
                       {paymentMode || "—"}
                     </span>
                   </td>
@@ -694,7 +711,7 @@ export default function OverheadVoucher() {
           <span style={{ flex:"0 0 30px" }}>#</span>
           <span style={{ flex:2 }}>Category</span>
           <span style={{ flex:1, textAlign:"right", paddingRight:4 }}>Amount (PKR)</span>
-          <span style={{ flex:1.5 }}>Lot No.</span>
+          <span style={{ flex:1.5 }}>Note</span>
           <span style={{ flex:"0 0 30px" }}></span>
         </div>
 
@@ -722,11 +739,11 @@ export default function OverheadVoucher() {
                 </div>
                 <div style={{ flex:1.5 }}>
                   <input 
-                    placeholder="Enter Lot No. *" 
+                    placeholder="Enter Lod No. *" 
                     value={line.note}
                     onChange={(e) => updateLine(line.id, "note", e.target.value)} 
                     style={{ ...S.input, ...(errors[`note_${idx}`] ? S.inputErr : {}) }} />
-                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lot No. required</span>}
+                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lod No. required</span>}
                 </div>
                 <button disabled={lines.length === 1} onClick={() => removeLine(line.id)}
                   style={{ ...S.removeBtn, opacity: lines.length === 1 ? 0.3 : 1 }}>×</button>
@@ -783,7 +800,7 @@ export default function OverheadVoucher() {
                     <th style={S.th}>Account</th>
                     <th style={S.thC}>Mode</th>
                     <th style={S.thR}>Total</th>
-                    <th style={S.th}>Lot No.</th>
+                    <th style={S.th}>Lod No.</th>
                     <th style={S.thC}>Status</th>
                     <th style={S.thC}>Actions</th>
                   </tr>
@@ -930,7 +947,8 @@ const S = {
     background:"#fff", cursor:"pointer", fontFamily:"'Segoe UI', Arial, sans-serif",
     color:"#374151", fontWeight:500, height:28,
   },
-  modeBtnActive: { background:"linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", borderColor:"#1a4d8f", fontWeight:600 },
+  modeBtnActive:   { background:"linear-gradient(90deg,#1a3c5e,#2563a8)", color:"#fff", borderColor:"#1a4d8f", fontWeight:600 },
+  modeBtnAccrued:  { background:"linear-gradient(90deg,#6d28d9,#7c3aed)", color:"#fff", borderColor:"#5b21b6", fontWeight:600 },
   modeBtnErr: { borderColor:"#fca5a5" },
   sectionHeader: {
     display:"flex", justifyContent:"space-between", alignItems:"center",
