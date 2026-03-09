@@ -615,7 +615,7 @@ export default function OverheadVoucher() {
             <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)}
               disabled={loadingAccounts && paymentMode !== "Accrued"}
               style={{ ...S.input, cursor: loadingAccounts ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
-              <option value="">{loadingAccounts ? "Loading..." : paymentMode ? "-- Select Account --" : "-- Pehle Mode Select Karein --"}</option>
+              <option value="">{loadingAccounts ? "Loading..." : paymentMode ? "-- Select Account " : "-- Select Mode --"}</option>
               {paymentMode === "Cash" && cashAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[CASH] {a.code} - {a.name}</option>
               ))}
@@ -681,7 +681,6 @@ export default function OverheadVoucher() {
                       <span>Overhead Expenses</span>
                       <span style={{ color:"#6b7280", fontSize:10, marginLeft:4 }}>(OHV-EXP)</span>
                     </b>
-                    <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>← Expense increase hogi</span>
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"center" }}>
                     <span style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:10, borderRadius:10, padding:"1px 8px" }}>EXPENSE</span>
@@ -695,17 +694,15 @@ export default function OverheadVoucher() {
                 <tr style={{ background:"#fff" }}>
                   <td style={{ padding:"5px 8px", paddingLeft:20 }}>
                     <span style={{ background:"#fee2e2", color:"#dc2626", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>CR</span>
-                    <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || accruedAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
-                    <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>
-                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : paymentMode === "Bank" ? "🏦 Bank balance kam hoga" : "📋 Accrued payable badhega"}
-                    </span>
+                    <b>{selectedAccountObj?.name || accruedAccounts.find(a=>a._id?.toString()===selectedAsset)?.name || accruedAccounts.find(a=>a._id===selectedAsset)?.name || allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
+
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"center" }}>
                     <span style={{ 
                       background: paymentMode==="Cash"?"#dcfce7": paymentMode==="Accrued"?"#ede9fe":"#dbeafe", 
                       color: paymentMode==="Cash"?"#15803d": paymentMode==="Accrued"?"#7c3aed":"#1d4ed8", 
                       fontSize:10, borderRadius:10, padding:"1px 8px" }}>
-                      {paymentMode || "—"}
+                      {paymentMode==="Cash" ? "💵 Cash" : paymentMode==="Accrued" ? "📋 Accrued" : "🏦 Bank"}
                     </span>
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"right", color:"#9ca3af" }}>—</td>
