@@ -60,6 +60,10 @@ const FALLBACK_CATEGORIES = [
   { id: "customs",   label: "Customs / Duty",      icon: "🏛️", color: "red"    },
   { id: "insurance", label: "Insurance",           icon: "🛡️", color: "yellow" },
   { id: "loading",   label: "Loading / Unloading", icon: "⚓", color: "orange" },
+  { id: "Labels", label: "Labels",           icon: "💡", color: "teal"   },
+  { id: "Washing",      label: "Washing",                icon: "🧼", color: "indigo" },
+  { id: "Warehouse-1",      label: "Warehouse-1", icon: "📦", color: "pink"   },
+  { id: "Warehouse-2",      label: "Warehouse-2", icon: "📦", color: "cyan"   },
   { id: "other",     label: "Other",               icon: "➕", color: "gray"   },
 ];
 
@@ -86,6 +90,7 @@ const COLOR_MAP = {
   yellow: { bg:"#fef9c3", text:"#854d0e" }, orange: { bg:"#ffedd5", text:"#c2410c" },
   gray:   { bg:"#f3f4f6", text:"#374151" }, pink:   { bg:"#fce7f3", text:"#be185d" },
   teal:   { bg:"#ccfbf1", text:"#0f766e" }, indigo: { bg:"#e0e7ff", text:"#4338ca" },
+  cyan:   { bg:"#cffafe", text:"#0891b2" },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
