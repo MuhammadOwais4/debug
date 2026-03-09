@@ -30,7 +30,7 @@ const overheadVoucherSchema = new mongoose.Schema(
     paymentMode: {
       type:     String,
       required: [true, "Payment mode is required"],
-      enum:     { values: ["Cash", "Bank"], message: "{VALUE} is not valid. Use Cash or Bank" },
+      enum:     { values: ["Cash", "Bank", "Accrued"], message: "{VALUE} is not valid. Use Cash, Bank, or Accrued" },
     },
 
     // ── CR side: Cash/Bank account credited ──────────────────────────────────

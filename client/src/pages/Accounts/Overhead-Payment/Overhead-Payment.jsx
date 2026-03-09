@@ -239,14 +239,15 @@ export default function OverheadVoucher() {
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
 
-    const accountObj = allAccounts.find(a=>(a.code||a._id)===selectedAsset) 
-      || accruedAccounts.find(a=>a._id===selectedAsset)
-      || accruedAccounts.find(a=>(a.code||a._id)===selectedAsset)
-      || accruedAccounts.find(a=>a.code===selectedAsset);
-    // ✅ For Accrued mode: ensure accountCode & accountName are always saved
-    // If accountObj not found, selectedAsset itself may be the code
-    const resolvedCode = accountObj?.code || (paymentMode === "Accrued" ? selectedAsset : "");
-    const resolvedName = accountObj?.name || (paymentMode === "Accrued" ? (accruedAccounts.find(a=>a._id?.toString()===selectedAsset)?.name || selectedAsset) : "");
+    // ✅ Fix: _id comparison needs .toString() — MongoDB ObjectId !== plain string
+    const accountObj = 
+      allAccounts.find(a => (a.code || a._id?.toString()) === selectedAsset) ||
+      accruedAccounts.find(a => a._id?.toString() === selectedAsset) ||
+      accruedAccounts.find(a => a._id === selectedAsset) ||
+      accruedAccounts.find(a => (a.code || "") === selectedAsset);
+
+    const resolvedCode = accountObj?.code || "";
+    const resolvedName = accountObj?.name || "";
     console.log("💾 Saving OHV:", { paymentMode, selectedAsset, resolvedCode, resolvedName, accountObj: accountObj?.name });
     console.log("💾 Saving OHV:", { paymentMode, selectedAsset, name: accountObj?.name, code: accountObj?.code });
     const payload = {
@@ -625,7 +626,7 @@ export default function OverheadVoucher() {
                 <option key={a._id} value={a._id}>[ACCRUED] {a.code} - {a.name}</option>
               ))}
               {paymentMode === "Accrued" && accruedAccounts.length === 0 && (
-   <></>
+                <option disabled value="">(Koi ACCRUED-EXPENSE account nahi mila — LiabilitiesPage mein add karein)</option>
               )}
             </select>
             {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
