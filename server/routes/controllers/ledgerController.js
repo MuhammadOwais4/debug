@@ -33,18 +33,6 @@ function isTaxAccount(code, name) {
   const n = (name || "").toLowerCase()
   return HARDCODED_TAX_ACCOUNTS.some(t => t.code === c || t.name.toLowerCase() === n)
 }
-function isWHTPayableAccount(code, name) {
-  const c = (code || "").toUpperCase()
-  const n = (name || "").toLowerCase()
-  return HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-WHT-PAYABLE")
-    .some(t => t.code === c || t.name.toLowerCase() === n)
-}
-function isAdvanceTaxAccount(code, name) {
-  const c = (code || "").toUpperCase()
-  const n = (name || "").toLowerCase()
-  return HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-ADVANCE")
-    .some(t => t.code === c || t.name.toLowerCase() === n)
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ STRICT matchAccount
@@ -61,6 +49,35 @@ function matchAccount(value, code, name) {
   if (n.length > 0 && v === n) return true
   if (c.length >= 5 && v.length >= 5 && (v.includes(c) || c.includes(v))) return true
   if (n.length >= 5 && v.length >= 5 && (v.includes(n) || n.includes(v))) return true
+  return false
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ matchAccruedAccount — ACCRUED-EXPENSE account ke liye flexible matching
+// OHV mein account field mein code ya _id store ho sakta hai
+// Isliye: code match, name match, _id match, ya accountName match
+// ═══════════════════════════════════════════════════════════════════════════════
+function matchAccruedAccount(ohv, accountCode, accountName) {
+  // ohv.account     = selected value (code, _id, or name)
+  // ohv.accountCode = saved account code
+  // ohv.accountName = saved account name
+  const crAccount  = (ohv.account     || "").toString().toLowerCase().trim()
+  const crCode     = (ohv.accountCode || "").toString().toLowerCase().trim()
+  const crName     = (ohv.accountName || "").toString().toLowerCase().trim()
+  const targetCode = (accountCode || "").toLowerCase().trim()
+  const targetName = (accountName || "").toLowerCase().trim()
+
+  // Direct code match
+  if (targetCode && crCode && crCode === targetCode) return true
+  // Direct name match
+  if (targetName && crName && crName === targetName) return true
+  // account field matches code
+  if (targetCode && crAccount && crAccount === targetCode) return true
+  // account field matches name
+  if (targetName && crAccount && crAccount === targetName) return true
+  // Partial name match (>=5 chars)
+  if (targetName.length >= 5 && crName.length >= 5 && (crName.includes(targetName) || targetName.includes(crName))) return true
+  if (targetCode.length >= 4 && crCode.length >= 4 && (crCode.includes(targetCode) || targetCode.includes(crCode))) return true
   return false
 }
 
@@ -93,29 +110,13 @@ const getAllAccounts = async (req, res) => {
     if (purchaseDiscountCount > 0)
       allAccounts.push({ code: "PURCH-DISC", name: "PURCHASES DISCOUNT", type: "PURCHASES DISCOUNT", balance: 0, fullName: "PURCH-DISC - PURCHASES DISCOUNT", category: "Revenue", normalBalance: "credit" })
 
-    // ✅ Add hardcoded "Overhead Expenses" (OHV-EXP) if any OHV vouchers exist
+    // ✅ OHV-EXP hardcoded overhead expenses account
     const ohvCount = await OverheadVoucher.countDocuments({ status: { $in: ["SAVED", "POSTED"] } })
     if (ohvCount > 0) {
       allAccounts.push({
-        code:          "OHV-EXP",
-        name:          "Overhead Expenses",
-        type:          "OVERHEAD",
-        balance:       0,
-        fullName:      "OHV-EXP - Overhead Expenses",
-        category:      "Expenses",
-        normalBalance: "debit",
+        code: "OHV-EXP", name: "Overhead Expenses", type: "OVERHEAD", balance: 0,
+        fullName: "OHV-EXP - Overhead Expenses", category: "Expenses", normalBalance: "debit",
       })
-    }
-
-    // ✅ ACCRUED-EXPENSE liabilities already included from Liability.find() above
-    // They appear in GL with category: "Liabilities", normalBalance: "credit"
-    // OHV mode=Accrued → CR side posts to these accounts automatically
-    const accruedOhvCount = await OverheadVoucher.countDocuments({
-      status:      { $in: ["SAVED", "POSTED"] },
-      paymentMode: "Accrued",
-    })
-    if (accruedOhvCount > 0) {
-      console.log(`📋 ${accruedOhvCount} Accrued OHV vouchers found — ACCRUED-EXPENSE accounts active in GL`)
     }
 
     const spvWithTax = await SupplierPaymentVoucher.find({ taxRate: { $gt: 0 } }, { taxRate: 1, _id: 0 }).lean()
@@ -123,11 +124,9 @@ const getAllAccounts = async (req, res) => {
 
     if (spvWithTax.length > 0) {
       HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-WHT-PAYABLE").forEach(t => allAccounts.push({ ...t }))
-      console.log("✅ Added WHT Payable (Liability) accounts")
     }
     if (crvWithTax.length > 0) {
       HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-ADVANCE").forEach(t => allAccounts.push({ ...t }))
-      console.log("✅ Added Advance Tax (Asset) accounts")
     }
 
     for (const account of allAccounts) {
@@ -191,7 +190,6 @@ const getAccountLedger = async (req, res) => {
       finalAccountName = taxAccInfo.name
       accountCategory  = taxAccInfo.category
     } else {
-      // ✅ Try code first, if empty or not found → try name
       const accountInfo = await findAccountInfo(accountCode && accountCode.trim() ? accountCode : accountName)
       if (accountInfo) {
         normalBalance    = accountInfo.normalBalance
@@ -201,7 +199,7 @@ const getAccountLedger = async (req, res) => {
       }
     }
 
-    console.log(`📋 Category: ${accountCategory} | normalBalance: ${normalBalance}`)
+    console.log(`📋 Category: ${accountCategory} | normalBalance: ${normalBalance} | code: ${finalAccountCode} | name: ${finalAccountName}`)
 
     const ledgerEntries = []
     let runningBalance  = 0
@@ -238,17 +236,12 @@ const getAccountLedger = async (req, res) => {
 
     // ══════════════════════════════════════════════════════════════════════════
     // 2. SUPPLIER PAYMENT VOUCHERS (SPV)
-    //   DR  Vendor/Supplier   (voucherAmount)
-    //   CR  Cash/Bank         (netAmount)
-    //   CR  WHT Payable       (taxAmount)
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount) {
       const spvVouchers = await SupplierPaymentVoucher.find({
         voucherDate: { $gte: from, $lte: to },
         status: { $in: ["SAVED", "POSTED"] },
       }).populate("accDrSupplier", "name code").sort({ voucherDate: 1 }).lean()
-
-      console.log(`✅ Found ${spvVouchers.length} SPV vouchers`)
 
       spvVouchers.forEach((spv) => {
         const supplierName = spv.accDrSupplier?.name || spv.accDrSupplierName || ""
@@ -265,45 +258,31 @@ const getAccountLedger = async (req, res) => {
         const narr         = spv.narration || `Payment to ${supplierName}`
         const taxPct       = taxRate > 0 ? `${(taxRate * 100).toFixed(2)}%` : ""
 
-        // A. Vendor DR
         if (matchAccount(supplierName, accountCode, accountName) || matchAccount(supplierCode, accountCode, accountName)) {
           runningBalance += normalBalance === "debit" ? fullAmt : -fullAmt
           ledgerEntries.push({
             id: `spv-${spv._id}-supplier`, date: spv.voucherDate, voucherNo: vNo, voucherType: "SPV",
-            description: taxAmt > 0
-              ? `${narr} [Gross: Rs.${fullAmt.toLocaleString()} | WHT ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net: Rs.${netAmt.toLocaleString()}]`
-              : narr,
-            debit: fullAmt, credit: 0, balance: runningBalance,
-            grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
+            description: taxAmt > 0 ? `${narr} [Gross: Rs.${fullAmt.toLocaleString()} | WHT ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net: Rs.${netAmt.toLocaleString()}]` : narr,
+            debit: fullAmt, credit: 0, balance: runningBalance, grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
           })
         }
 
-        // B. Bank CR (net amount)
         if (matchAccount(bankName, accountCode, accountName) || matchAccount(bankCode, accountCode, accountName)) {
           const cr = taxAmt > 0 ? netAmt : fullAmt
           runningBalance += normalBalance === "debit" ? -cr : cr
           ledgerEntries.push({
             id: `spv-${spv._id}-bank`, date: spv.voucherDate, voucherNo: vNo, voucherType: "SPV",
-            description: taxAmt > 0
-              ? `${narr} — Paid Rs.${netAmt.toLocaleString()} (WHT Rs.${taxAmt.toLocaleString()} @ ${taxPct})`
-              : `${narr} — via ${bankName}`,
-            debit: 0, credit: cr, balance: runningBalance,
-            grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
+            description: taxAmt > 0 ? `${narr} — Paid Rs.${netAmt.toLocaleString()} (WHT Rs.${taxAmt.toLocaleString()} @ ${taxPct})` : `${narr} — via ${bankName}`,
+            debit: 0, credit: cr, balance: runningBalance, grn: spv.lines?.[0]?.purchaseDetail || null, sourceId: spv._id,
           })
         }
 
-        // C. WHT Payable CR
-        if (taxAmt > 0 && (
-          matchAccount(taxCode, accountCode, accountName) ||
-          matchAccount(`${taxCode}`, accountCode, accountName) ||
-          (isTaxAcc && taxAccInfo?.type === "TAX-WHT-PAYABLE" && taxAccInfo?.rate === taxRate)
-        )) {
+        if (taxAmt > 0 && (matchAccount(taxCode, accountCode, accountName) || (isTaxAcc && taxAccInfo?.type === "TAX-WHT-PAYABLE" && taxAccInfo?.rate === taxRate))) {
           runningBalance += normalBalance === "debit" ? -taxAmt : taxAmt
           ledgerEntries.push({
             id: `spv-${spv._id}-wht-pay`, date: spv.voucherDate, voucherNo: vNo, voucherType: "WHT",
             description: `WHT Payable @ ${taxPct} on payment to ${supplierName} (${vNo})`,
-            debit: 0, credit: taxAmt, balance: runningBalance,
-            grn: null, sourceId: spv._id,
+            debit: 0, credit: taxAmt, balance: runningBalance, grn: null, sourceId: spv._id,
             accountCode: taxCode, accountName: taxName,
           })
         }
@@ -313,9 +292,7 @@ const getAccountLedger = async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     // 3. SALE DISCOUNTS
     // ══════════════════════════════════════════════════════════════════════════
-    const saleDiscounts = await SaleDiscount.find({ date: { $gte: from, $lte: to } })
-      .populate("customer", "name code").lean()
-
+    const saleDiscounts = await SaleDiscount.find({ date: { $gte: from, $lte: to } }).populate("customer", "name code").lean()
     saleDiscounts.forEach((discount) => {
       const customerName = discount.customer?.name || ""
       const customerCode = discount.customer?.code || ""
@@ -324,36 +301,18 @@ const getAccountLedger = async (req, res) => {
 
       if (accountCode === "SALES-DISC" || accountName === "SALES DISCOUNT") {
         runningBalance += normalBalance === "debit" ? dr : -dr
-        ledgerEntries.push({
-          id: `sale-discount-${discount._id}-type`, date: discount.date,
-          voucherNo: discount.invoice || "N/A", voucherType: "Sale Discount",
-          description: discount.description || `Sale discount for ${customerName}`,
-          debit: dr, credit: 0, balance: runningBalance,
-          grn: null, sourceId: discount._id,
-          accountCode: "SALES-DISC", accountName: "SALES DISCOUNT",
-        })
+        ledgerEntries.push({ id: `sale-discount-${discount._id}-type`, date: discount.date, voucherNo: discount.invoice || "N/A", voucherType: "Sale Discount", description: discount.description || `Sale discount for ${customerName}`, debit: dr, credit: 0, balance: runningBalance, grn: null, sourceId: discount._id, accountCode: "SALES-DISC", accountName: "SALES DISCOUNT" })
       }
-      if (!isDiscountAccount && accountCategory === "Assets" && (
-        matchAccount(customerName, accountCode, accountName) ||
-        matchAccount(customerCode, accountCode, accountName)
-      )) {
+      if (!isDiscountAccount && accountCategory === "Assets" && (matchAccount(customerName, accountCode, accountName) || matchAccount(customerCode, accountCode, accountName))) {
         runningBalance += normalBalance === "debit" ? -cr : cr
-        ledgerEntries.push({
-          id: `sale-discount-${discount._id}-customer`, date: discount.date,
-          voucherNo: discount.invoice || "N/A", voucherType: "Sale Discount",
-          description: discount.description || `Discount allowed to ${customerName}`,
-          debit: 0, credit: cr, balance: runningBalance,
-          grn: null, sourceId: discount._id,
-        })
+        ledgerEntries.push({ id: `sale-discount-${discount._id}-customer`, date: discount.date, voucherNo: discount.invoice || "N/A", voucherType: "Sale Discount", description: discount.description || `Discount allowed to ${customerName}`, debit: 0, credit: cr, balance: runningBalance, grn: null, sourceId: discount._id })
       }
     })
 
     // ══════════════════════════════════════════════════════════════════════════
     // 4. PURCHASE DISCOUNTS
     // ══════════════════════════════════════════════════════════════════════════
-    const purchaseDiscounts = await PurchasesDiscount.find({ date: { $gte: from, $lte: to } })
-      .populate("vendor", "name code").lean()
-
+    const purchaseDiscounts = await PurchasesDiscount.find({ date: { $gte: from, $lte: to } }).populate("vendor", "name code").lean()
     purchaseDiscounts.forEach((discount) => {
       const vendorName = discount.vendor?.name || ""
       const vendorCode = discount.vendor?.code || ""
@@ -362,27 +321,11 @@ const getAccountLedger = async (req, res) => {
 
       if (accountCode === "PURCH-DISC" || accountName === "PURCHASES DISCOUNT") {
         runningBalance += normalBalance === "debit" ? -cr : cr
-        ledgerEntries.push({
-          id: `purchase-discount-${discount._id}-type`, date: discount.date,
-          voucherNo: discount.invoice || "N/A", voucherType: "Purchase Discount",
-          description: discount.description || `Purchase discount from ${vendorName}`,
-          debit: 0, credit: cr, balance: runningBalance,
-          grn: null, sourceId: discount._id,
-          accountCode: "PURCH-DISC", accountName: "PURCHASES DISCOUNT",
-        })
+        ledgerEntries.push({ id: `purchase-discount-${discount._id}-type`, date: discount.date, voucherNo: discount.invoice || "N/A", voucherType: "Purchase Discount", description: discount.description || `Purchase discount from ${vendorName}`, debit: 0, credit: cr, balance: runningBalance, grn: null, sourceId: discount._id, accountCode: "PURCH-DISC", accountName: "PURCHASES DISCOUNT" })
       }
-      if (!isDiscountAccount && accountCategory === "Liabilities" && (
-        matchAccount(vendorName, accountCode, accountName) ||
-        matchAccount(vendorCode, accountCode, accountName)
-      )) {
+      if (!isDiscountAccount && accountCategory === "Liabilities" && (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName))) {
         runningBalance += normalBalance === "debit" ? dr : -dr
-        ledgerEntries.push({
-          id: `purchase-discount-${discount._id}-vendor`, date: discount.date,
-          voucherNo: discount.invoice || "N/A", voucherType: "Purchase Discount",
-          description: discount.description || `Discount received from ${vendorName}`,
-          debit: dr, credit: 0, balance: runningBalance,
-          grn: null, sourceId: discount._id,
-        })
+        ledgerEntries.push({ id: `purchase-discount-${discount._id}-vendor`, date: discount.date, voucherNo: discount.invoice || "N/A", voucherType: "Purchase Discount", description: discount.description || `Discount received from ${vendorName}`, debit: dr, credit: 0, balance: runningBalance, grn: null, sourceId: discount._id })
       }
     })
 
@@ -392,7 +335,6 @@ const getAccountLedger = async (req, res) => {
     if (!isDiscountAccount && !isTaxAcc && accountCategory !== "Liabilities" && accountCategory !== "Expenses") {
       const sales = await Sale.find({ createdAt: { $gte: from, $lte: to } }).lean()
       const processedSaleIds = new Set()
-
       sales.forEach((sale) => {
         const customerName = sale.customerName || ""
         if (customerName.toLowerCase().includes("test")) return
@@ -403,23 +345,11 @@ const getAccountLedger = async (req, res) => {
 
         if (accountCategory === "Assets" && matchAccount(customerName, accountCode, accountName)) {
           runningBalance += normalBalance === "debit" ? amount : -amount
-          ledgerEntries.push({
-            id: `${saleId}-customer`, date: sale.createdAt,
-            voucherNo: sale.invoice || "N/A", voucherType: "Sale",
-            description: `${sale.saleType} - ${sale.notes || "Sale"}`,
-            debit: amount, credit: 0, balance: runningBalance,
-            grn: null, sourceId: sale._id,
-          })
+          ledgerEntries.push({ id: `${saleId}-customer`, date: sale.createdAt, voucherNo: sale.invoice || "N/A", voucherType: "Sale", description: `${sale.saleType} - ${sale.notes || "Sale"}`, debit: amount, credit: 0, balance: runningBalance, grn: null, sourceId: sale._id })
         }
         if (accountCategory === "Revenue" && matchAccount(sale.saleType || "", accountCode, accountName)) {
           runningBalance += normalBalance === "debit" ? -amount : amount
-          ledgerEntries.push({
-            id: `${saleId}-revenue`, date: sale.createdAt,
-            voucherNo: sale.invoice || "N/A", voucherType: "Sale",
-            description: `Sale to ${customerName} - ${sale.notes || "Sale"}`,
-            debit: 0, credit: amount, balance: runningBalance,
-            grn: null, sourceId: sale._id,
-          })
+          ledgerEntries.push({ id: `${saleId}-revenue`, date: sale.createdAt, voucherNo: sale.invoice || "N/A", voucherType: "Sale", description: `Sale to ${customerName} - ${sale.notes || "Sale"}`, debit: 0, credit: amount, balance: runningBalance, grn: null, sourceId: sale._id })
         }
       })
     }
@@ -428,39 +358,23 @@ const getAccountLedger = async (req, res) => {
     // 6. SALE RETURNS
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc && accountCategory !== "Liabilities" && accountCategory !== "Expenses") {
-      const salesWithReturns = await Sale.find({
-        returnedQuantity: { $gt: 0 },
-        "returnHistory.date": { $gte: from, $lte: to },
-      }).lean()
-
+      const salesWithReturns = await Sale.find({ returnedQuantity: { $gt: 0 }, "returnHistory.date": { $gte: from, $lte: to } }).lean()
       salesWithReturns.forEach((sale) => {
         if (!sale.returnHistory?.length) return
         sale.returnHistory.forEach((ret) => {
           const retDate = new Date(ret.date)
           if (retDate < from || retDate > to) return
-          const retAmt       = parseFloat(ret.refundAmount || (ret.quantity * sale.saleRate))
+          const retAmt = parseFloat(ret.refundAmount || (ret.quantity * sale.saleRate))
           const customerName = sale.customerName || ""
           const saleType     = sale.saleType     || ""
 
           if (accountCategory === "Revenue" && matchAccount(saleType, accountCode, accountName)) {
             runningBalance += normalBalance === "debit" ? retAmt : -retAmt
-            ledgerEntries.push({
-              id: `sale-return-${sale._id}-${ret._id}-revenue`, date: retDate,
-              voucherNo: sale.invoice || "N/A", voucherType: "Sale Return",
-              description: `Return from ${customerName} - ${ret.reason || "Sale return"}`,
-              debit: retAmt, credit: 0, balance: runningBalance,
-              grn: null, sourceId: sale._id,
-            })
+            ledgerEntries.push({ id: `sale-return-${sale._id}-${ret._id}-revenue`, date: retDate, voucherNo: sale.invoice || "N/A", voucherType: "Sale Return", description: `Return from ${customerName} - ${ret.reason || "Sale return"}`, debit: retAmt, credit: 0, balance: runningBalance, grn: null, sourceId: sale._id })
           }
           if (accountCategory === "Assets" && matchAccount(customerName, accountCode, accountName)) {
             runningBalance += normalBalance === "debit" ? -retAmt : retAmt
-            ledgerEntries.push({
-              id: `sale-return-${sale._id}-${ret._id}-customer`, date: retDate,
-              voucherNo: sale.invoice || "N/A", voucherType: "Sale Return",
-              description: `Return: ${ret.quantity} units - ${ret.reason || "Sale return"}`,
-              debit: 0, credit: retAmt, balance: runningBalance,
-              grn: null, sourceId: sale._id,
-            })
+            ledgerEntries.push({ id: `sale-return-${sale._id}-${ret._id}-customer`, date: retDate, voucherNo: sale.invoice || "N/A", voucherType: "Sale Return", description: `Return: ${ret.quantity} units - ${ret.reason || "Sale return"}`, debit: 0, credit: retAmt, balance: runningBalance, grn: null, sourceId: sale._id })
           }
         })
       })
@@ -483,31 +397,13 @@ const getAccountLedger = async (req, res) => {
         const vendorName       = product.vendorName?.name   || ""
         const vendorCode       = product.vendorName?.code   || ""
 
-        if (accountCategory === "Expenses" && (
-          matchAccount(purchaseTypeName, accountCode, accountName) ||
-          matchAccount(purchaseTypeCode, accountCode, accountName)
-        )) {
+        if (accountCategory === "Expenses" && (matchAccount(purchaseTypeName, accountCode, accountName) || matchAccount(purchaseTypeCode, accountCode, accountName))) {
           runningBalance += normalBalance === "debit" ? amount : -amount
-          ledgerEntries.push({
-            id: `product-${product._id}-purchaseType`, date: product.createdAt,
-            voucherNo: product.grn || "N/A", voucherType: "Purchase",
-            description: `Purchase from ${vendorName || "Vendor"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`,
-            debit: amount, credit: 0, balance: runningBalance,
-            grn: product.grn, sourceId: product._id,
-          })
+          ledgerEntries.push({ id: `product-${product._id}-purchaseType`, date: product.createdAt, voucherNo: product.grn || "N/A", voucherType: "Purchase", description: `Purchase from ${vendorName || "Vendor"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`, debit: amount, credit: 0, balance: runningBalance, grn: product.grn, sourceId: product._id })
         }
-        if (accountCategory === "Liabilities" && (
-          matchAccount(vendorName, accountCode, accountName) ||
-          matchAccount(vendorCode, accountCode, accountName)
-        )) {
+        if (accountCategory === "Liabilities" && (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName))) {
           runningBalance += normalBalance === "debit" ? -amount : amount
-          ledgerEntries.push({
-            id: `product-${product._id}-vendor`, date: product.createdAt,
-            voucherNo: product.grn || "N/A", voucherType: "Purchase",
-            description: `${purchaseTypeName || "Purchase"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`,
-            debit: 0, credit: amount, balance: runningBalance,
-            grn: product.grn, sourceId: product._id,
-          })
+          ledgerEntries.push({ id: `product-${product._id}-vendor`, date: product.createdAt, voucherNo: product.grn || "N/A", voucherType: "Purchase", description: `${purchaseTypeName || "Purchase"} - ${product.name}: ${product.purchaseQuantity} units @ Rs.${product.purchaseRate}`, debit: 0, credit: amount, balance: runningBalance, grn: product.grn, sourceId: product._id })
         }
       })
     }
@@ -516,10 +412,7 @@ const getAccountLedger = async (req, res) => {
     // 8. PURCHASE RETURNS
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc && accountCategory !== "Revenue") {
-      const productsWithReturns = await Product.find({
-        ReturnQuantity: { $gt: 0 },
-        ReturnedDate:   { $gte: from, $lte: to },
-      })
+      const productsWithReturns = await Product.find({ ReturnQuantity: { $gt: 0 }, ReturnedDate: { $gte: from, $lte: to } })
         .populate({ path: "purchaseType", model: "Expense", select: "name code" })
         .populate("vendorName", "name code")
         .lean()
@@ -533,48 +426,25 @@ const getAccountLedger = async (req, res) => {
         const vendorCode       = product.vendorName?.code   || ""
         const retDate          = new Date(product.ReturnedDate)
 
-        if (accountCategory === "Liabilities" && (
-          matchAccount(vendorName, accountCode, accountName) ||
-          matchAccount(vendorCode, accountCode, accountName)
-        )) {
+        if (accountCategory === "Liabilities" && (matchAccount(vendorName, accountCode, accountName) || matchAccount(vendorCode, accountCode, accountName))) {
           runningBalance += normalBalance === "debit" ? retAmt : -retAmt
-          ledgerEntries.push({
-            id: `purchase-return-${product._id}-vendor`, date: retDate,
-            voucherNo: product.grn || "N/A", voucherType: "Purchase Return",
-            description: `Return to ${vendorName} - ${product.name}: ${product.ReturnQuantity} units`,
-            debit: retAmt, credit: 0, balance: runningBalance,
-            grn: product.grn, sourceId: product._id,
-          })
+          ledgerEntries.push({ id: `purchase-return-${product._id}-vendor`, date: retDate, voucherNo: product.grn || "N/A", voucherType: "Purchase Return", description: `Return to ${vendorName} - ${product.name}: ${product.ReturnQuantity} units`, debit: retAmt, credit: 0, balance: runningBalance, grn: product.grn, sourceId: product._id })
         }
-        if (accountCategory === "Expenses" && (
-          matchAccount(purchaseTypeName, accountCode, accountName) ||
-          matchAccount(purchaseTypeCode, accountCode, accountName)
-        )) {
+        if (accountCategory === "Expenses" && (matchAccount(purchaseTypeName, accountCode, accountName) || matchAccount(purchaseTypeCode, accountCode, accountName))) {
           runningBalance += normalBalance === "debit" ? -retAmt : retAmt
-          ledgerEntries.push({
-            id: `purchase-return-${product._id}-purchaseType`, date: retDate,
-            voucherNo: product.grn || "N/A", voucherType: "Purchase Return",
-            description: `Return to ${vendorName || "Vendor"} - ${product.name}: ${product.ReturnQuantity} units`,
-            debit: 0, credit: retAmt, balance: runningBalance,
-            grn: product.grn, sourceId: product._id,
-          })
+          ledgerEntries.push({ id: `purchase-return-${product._id}-purchaseType`, date: retDate, voucherNo: product.grn || "N/A", voucherType: "Purchase Return", description: `Return to ${vendorName || "Vendor"} - ${product.name}: ${product.ReturnQuantity} units`, debit: 0, credit: retAmt, balance: runningBalance, grn: product.grn, sourceId: product._id })
         }
       })
     }
 
     // ══════════════════════════════════════════════════════════════════════════
     // 9. CUSTOMER RECEIPT VOUCHERS (CRV)
-    //   DR  Cash/Bank          (netAmount)
-    //   CR  Customer           (voucherAmount)
-    //   DR  Advance Tax        (taxAmount)
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount) {
       const crvVouchers = await CustomerReceiptVoucher.find({
         voucherDate: { $gte: from, $lte: to },
         status: { $in: ["SAVED", "POSTED"] },
       }).populate("accCrCustomer", "name code").sort({ voucherDate: 1 }).lean()
-
-      console.log(`✅ Found ${crvVouchers.length} CRV vouchers`)
 
       crvVouchers.forEach((crv) => {
         const customerName = crv.accCrCustomer?.name || crv.accCrCustomerName || ""
@@ -591,50 +461,20 @@ const getAccountLedger = async (req, res) => {
         const narr         = crv.narration || `Receipt from ${customerName}`
         const taxPct       = taxRate > 0 ? `${(taxRate * 100).toFixed(2)}%` : ""
 
-        // A. Bank DR
         if (matchAccount(bankName, accountCode, accountName) || matchAccount(bankCode, accountCode, accountName)) {
           const dr = taxAmt > 0 ? netAmt : fullAmt
           runningBalance += normalBalance === "debit" ? dr : -dr
-          ledgerEntries.push({
-            id: `crv-${crv._id}-bank`, date: crv.voucherDate, voucherNo: vNo, voucherType: "CRV",
-            description: taxAmt > 0
-              ? `${narr} — Received Rs.${netAmt.toLocaleString()} (Advance Tax Rs.${taxAmt.toLocaleString()} @ ${taxPct})`
-              : `${narr} — via ${bankName}`,
-            debit: dr, credit: 0, balance: runningBalance,
-            grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id,
-          })
+          ledgerEntries.push({ id: `crv-${crv._id}-bank`, date: crv.voucherDate, voucherNo: vNo, voucherType: "CRV", description: taxAmt > 0 ? `${narr} — Received Rs.${netAmt.toLocaleString()} (Advance Tax Rs.${taxAmt.toLocaleString()} @ ${taxPct})` : `${narr} — via ${bankName}`, debit: dr, credit: 0, balance: runningBalance, grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id })
         }
 
-        // B. Customer CR
-        if (accountCategory === "Assets" && (
-          matchAccount(customerName, accountCode, accountName) ||
-          matchAccount(customerCode, accountCode, accountName)
-        )) {
+        if (accountCategory === "Assets" && (matchAccount(customerName, accountCode, accountName) || matchAccount(customerCode, accountCode, accountName))) {
           runningBalance += normalBalance === "debit" ? -fullAmt : fullAmt
-          ledgerEntries.push({
-            id: `crv-${crv._id}-customer`, date: crv.voucherDate, voucherNo: vNo, voucherType: "CRV",
-            description: taxAmt > 0
-              ? `${narr} [Total: Rs.${fullAmt.toLocaleString()} | Advance Tax ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net: Rs.${netAmt.toLocaleString()}]`
-              : narr,
-            debit: 0, credit: fullAmt, balance: runningBalance,
-            grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id,
-          })
+          ledgerEntries.push({ id: `crv-${crv._id}-customer`, date: crv.voucherDate, voucherNo: vNo, voucherType: "CRV", description: taxAmt > 0 ? `${narr} [Total: Rs.${fullAmt.toLocaleString()} | Advance Tax ${taxPct}: Rs.${taxAmt.toLocaleString()} | Net: Rs.${netAmt.toLocaleString()}]` : narr, debit: 0, credit: fullAmt, balance: runningBalance, grn: crv.lines?.[0]?.saleDetail || null, sourceId: crv._id })
         }
 
-        // C. Advance Tax DR
-        if (taxAmt > 0 && (
-          matchAccount(taxCode, accountCode, accountName) ||
-          matchAccount(taxName, accountCode, accountName) ||
-          (isTaxAcc && taxAccInfo?.type === "TAX-ADVANCE" && taxAccInfo?.rate === taxRate)
-        )) {
+        if (taxAmt > 0 && (matchAccount(taxCode, accountCode, accountName) || matchAccount(taxName, accountCode, accountName) || (isTaxAcc && taxAccInfo?.type === "TAX-ADVANCE" && taxAccInfo?.rate === taxRate))) {
           runningBalance += normalBalance === "debit" ? taxAmt : -taxAmt
-          ledgerEntries.push({
-            id: `crv-${crv._id}-adv-tax`, date: crv.voucherDate, voucherNo: vNo, voucherType: "WHT",
-            description: `Advance Tax @ ${taxPct} on receipt from ${customerName} (${vNo})`,
-            debit: taxAmt, credit: 0, balance: runningBalance,
-            grn: null, sourceId: crv._id,
-            accountCode: taxCode, accountName: taxName,
-          })
+          ledgerEntries.push({ id: `crv-${crv._id}-adv-tax`, date: crv.voucherDate, voucherNo: vNo, voucherType: "WHT", description: `Advance Tax @ ${taxPct} on receipt from ${customerName} (${vNo})`, debit: taxAmt, credit: 0, balance: runningBalance, grn: null, sourceId: crv._id, accountCode: taxCode, accountName: taxName })
         }
       })
     }
@@ -642,16 +482,17 @@ const getAccountLedger = async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     // 10. OVERHEAD VOUCHERS (OHV)
     //
-    //   Voucher mein 3 payment modes hain:
-    //   ─────────────────────────────────────────────────────────────
     //   Mode: Cash / Bank
-    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses (debit)
-    //     CR  Cash / Bank Account            ← Assets   (credit)
+    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses  (debit)
+    //     CR  Cash / Bank Account            ← Assets    (credit)
     //
-    //   Mode: Accrued (ACCRUED-EXPENSE liability)
-    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses   (debit)
-    //     CR  Accrued Account               ← Liabilities (credit)
-    //   ─────────────────────────────────────────────────────────────
+    //   Mode: Accrued
+    //     DR  Overhead Expenses (OHV-EXP)   ← Expenses    (debit)
+    //     CR  Accrued Account (e.g. 2020)    ← Liabilities (credit)
+    //
+    //   ✅ KEY FIX: accruedMatch uses matchAccruedAccount() which checks
+    //      ohv.account (the raw selected value), ohv.accountCode, ohv.accountName
+    //      — handles ObjectId, code string, or name string stored in any field
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc) {
       const overheadVouchers = await OverheadVoucher.find({
@@ -659,42 +500,42 @@ const getAccountLedger = async (req, res) => {
         status:      { $in: ["SAVED", "POSTED"] },
       }).sort({ voucherDate: 1 }).lean()
 
-      console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers`)
+      console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers in range`)
 
       overheadVouchers.forEach((ohv) => {
-        const crName  = ohv.accountName || ""           // Cash/Bank/Accrued account name (CR side)
-        const crCode  = ohv.accountCode || ohv.account || ""  // CR account code
-        const expName = ohv.overheadAccountName || "Overhead Expenses"
-        const expCode = ohv.overheadAccount     || "OHV-EXP"
-        const mode    = ohv.paymentMode || "Cash"       // "Cash" | "Bank" | "Accrued"
+        const crName  = ohv.accountName || ""
+        const crCode  = ohv.accountCode || ""
+        const crRaw   = (ohv.account || "").toString()   // raw value — could be ObjectId, code, or name
+        const mode    = ohv.paymentMode || "Cash"
         const vNo     = ohv.voucherNumber || "OHV"
         const amt     = parseFloat(ohv.totalAmount || 0)
         if (amt <= 0) return
 
-        const narr = ohv.description || `Overhead expense via ${crName}`
+        const narr = ohv.description || `Overhead expense`
 
-        // ── A. DR — Overhead/Expense Account ─────────────────────────────────
-        // Matches: OHV-EXP hardcoded catch-all OR specific overhead account
+        // ── A. DR — Overhead/Expense Account (OHV-EXP) ───────────────────────
         const isOhvExpAccount =
           accountCode === "OHV-EXP" ||
           accountName === "Overhead Expenses" ||
           accountName === "OHV-EXP"
 
-        const expDirectMatch =
-          isOhvExpAccount ||
-          (expCode && expCode.length < 24 && (expCode === accountCode || expCode === accountName)) ||
-          (expName && (expName === accountCode || expName === accountName)) ||
-          matchAccount(expName, accountCode, accountName) ||
-          (expCode && expCode.length < 24 && matchAccount(expCode, accountCode, accountName))
+        const expCode = ohv.overheadAccount     || "OHV-EXP"
+        const expName = ohv.overheadAccountName || "Overhead Expenses"
 
-        if (expDirectMatch) {
+        const expMatch =
+          isOhvExpAccount ||
+          (expCode.length < 24 && (expCode === accountCode || expCode === accountName)) ||
+          matchAccount(expName, accountCode, accountName) ||
+          (expCode.length < 24 && matchAccount(expCode, accountCode, accountName))
+
+        if (expMatch) {
           runningBalance += normalBalance === "debit" ? amt : -amt
           ledgerEntries.push({
             id:          `ohv-${ohv._id}-expense`,
             date:        ohv.voucherDate,
             voucherNo:   vNo,
             voucherType: "OHV",
-            description: `${narr} [${mode}: ${crName}]`,
+            description: `${narr} [${mode}: ${crName || crRaw}]`,
             debit:       amt,
             credit:      0,
             balance:     runningBalance,
@@ -704,57 +545,54 @@ const getAccountLedger = async (req, res) => {
         }
 
         // ── B. CR — Cash / Bank Account (mode: Cash or Bank) ─────────────────
-        // Assets category: cash/bank account credit hota hai
-        const isCashBankMode  = mode === "Cash" || mode === "Bank"
-        const cashBankMatch   =
-          isCashBankMode && (
+        if (mode === "Cash" || mode === "Bank") {
+          const cashBankMatch =
             (crCode && (crCode === accountCode || crCode === accountName)) ||
             (crName && (crName === accountCode || crName === accountName)) ||
             matchAccount(crName, accountCode, accountName) ||
             matchAccount(crCode, accountCode, accountName)
-          )
 
-        if (cashBankMatch) {
-          runningBalance += normalBalance === "debit" ? -amt : amt
-          ledgerEntries.push({
-            id:          `ohv-${ohv._id}-cashbank`,
-            date:        ohv.voucherDate,
-            voucherNo:   vNo,
-            voucherType: "OHV",
-            description: `${narr} — ${mode === "Cash" ? "💵 Cash" : "🏦 Bank"} paid: ${crName}`,
-            debit:       0,
-            credit:      amt,
-            balance:     runningBalance,
-            grn:         null,
-            sourceId:    ohv._id,
-          })
+          if (cashBankMatch) {
+            runningBalance += normalBalance === "debit" ? -amt : amt
+            ledgerEntries.push({
+              id:          `ohv-${ohv._id}-cashbank`,
+              date:        ohv.voucherDate,
+              voucherNo:   vNo,
+              voucherType: "OHV",
+              description: `${narr} — ${mode === "Cash" ? "💵 Cash" : "🏦 Bank"} paid: ${crName}`,
+              debit:       0,
+              credit:      amt,
+              balance:     runningBalance,
+              grn:         null,
+              sourceId:    ohv._id,
+            })
+          }
         }
 
         // ── C. CR — Accrued Expense Account (mode: Accrued) ──────────────────
-        // Liabilities category: accrued payable credit hota hai
-        const isAccruedMode  = mode === "Accrued"
-        const accruedMatch   =
-          isAccruedMode && (
-            (crCode && (crCode === accountCode || crCode === accountName)) ||
-            (crName && (crName === accountCode || crName === accountName)) ||
-            matchAccount(crName, accountCode, accountName) ||
-            matchAccount(crCode, accountCode, accountName)
-          )
+        // ✅ Uses matchAccruedAccount() — checks ohv.account, ohv.accountCode,
+        //    ohv.accountName against the queried accountCode/accountName
+        //    Also handles case where account was saved as Liability _id
+        if (mode === "Accrued") {
+          const accruedMatch = matchAccruedAccount(ohv, accountCode, accountName)
 
-        if (accruedMatch) {
-          runningBalance += normalBalance === "debit" ? -amt : amt
-          ledgerEntries.push({
-            id:          `ohv-${ohv._id}-accrued`,
-            date:        ohv.voucherDate,
-            voucherNo:   vNo,
-            voucherType: "OHV",
-            description: `${narr} — 📋 Accrued payable: ${crName}`,
-            debit:       0,
-            credit:      amt,
-            balance:     runningBalance,
-            grn:         null,
-            sourceId:    ohv._id,
-          })
+          console.log(`📋 OHV Accrued check: vNo=${vNo} | crCode="${crCode}" | crName="${crName}" | crRaw="${crRaw}" | targetCode="${accountCode}" | targetName="${accountName}" | match=${accruedMatch}`)
+
+          if (accruedMatch) {
+            runningBalance += normalBalance === "debit" ? -amt : amt
+            ledgerEntries.push({
+              id:          `ohv-${ohv._id}-accrued`,
+              date:        ohv.voucherDate,
+              voucherNo:   vNo,
+              voucherType: "OHV",
+              description: `${narr} — 📋 Accrued payable: ${crName || crRaw}`,
+              debit:       0,
+              credit:      amt,
+              balance:     runningBalance,
+              grn:         null,
+              sourceId:    ohv._id,
+            })
+          }
         }
       })
     }
@@ -786,10 +624,7 @@ const getAccountLedger = async (req, res) => {
       else if (entry.id.includes("product"))           srcType = "Product"
 
       let dbVoucherType = entry.voucherType
-      const allowedVoucherTypes = [
-        "Sale", "Purchase", "CPV", "BPV", "CRV", "BRV", "JV", "SPV", "OHV",
-        "Sale Return", "Purchase Return", "Sale Discount", "Purchase Discount", "WHT",
-      ]
+      const allowedVoucherTypes = ["Sale","Purchase","CPV","BPV","CRV","BRV","JV","SPV","OHV","Sale Return","Purchase Return","Sale Discount","Purchase Discount","WHT"]
       if (!allowedVoucherTypes.includes(dbVoucherType)) dbVoucherType = "JV"
 
       ledgerDocsToSave.push({
@@ -848,16 +683,15 @@ async function findAccountInfo(accountIdentifier) {
       return { code: "SALES-DISC", name: "SALES DISCOUNT", category: "Expenses", normalBalance: "debit" }
     if (accountIdentifier === "PURCH-DISC" || accountIdentifier === "PURCHASES DISCOUNT")
       return { code: "PURCH-DISC", name: "PURCHASES DISCOUNT", category: "Revenue", normalBalance: "credit" }
+    if (accountIdentifier === "OHV-EXP" || accountIdentifier === "Overhead Expenses")
+      return { code: "OHV-EXP", name: "Overhead Expenses", category: "Expenses", normalBalance: "debit" }
 
-    const taxMatch = HARDCODED_TAX_ACCOUNTS.find(
-      t => t.code === accountIdentifier || t.name === accountIdentifier
-    )
+    const taxMatch = HARDCODED_TAX_ACCOUNTS.find(t => t.code === accountIdentifier || t.name === accountIdentifier)
     if (taxMatch) return taxMatch
 
-    // Search by code OR name (handles empty code case)
     const searchQ = accountIdentifier
       ? { $or: [{ code: accountIdentifier }, { name: accountIdentifier }] }
-      : { name: "__no_match__" }  // prevent empty string matching all
+      : { name: "__no_match__" }
 
     const [asset, equity, expense, liability, revenue] = await Promise.all([
       Asset.findOne(searchQ).lean(),
@@ -880,7 +714,7 @@ async function findAccountInfo(accountIdentifier) {
 }
 
 function determineEntryType(voucherType, debit, credit) {
-  if (voucherType === "OHV")               return debit > 0 ? "EXPENSE"          : "CASH"
+  if (voucherType === "OHV")               return debit > 0 ? "EXPENSE"          : "ACCRUED_PAYABLE"
   if (voucherType === "WHT")               return debit > 0 ? "WHT_EXPENSE"      : "WHT_PAYABLE"
   if (voucherType === "Sale")              return debit > 0 ? "RECEIVABLE"       : "REVENUE"
   if (voucherType === "Sale Return")       return debit > 0 ? "SALE_RETURN"      : "RECEIVABLE_REVERSAL"
