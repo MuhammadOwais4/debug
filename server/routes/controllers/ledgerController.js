@@ -11,14 +11,8 @@ const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
-// ✅ Load OHV model — tries OverheadVoucher first, falls back to Overheadcategory
-let OverheadVoucher
-try {
-  OverheadVoucher = require("../models/OverheadVoucher")
-  // Quick validation — if model has no voucherDate field, use other model
-} catch (e) {
-  OverheadVoucher = require("../models/Overheadcategory")
-}
+const OverheadVoucher = require("../models/Overheadcategory")
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ HARDCODED TAX ACCOUNTS
