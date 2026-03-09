@@ -11,7 +11,7 @@ const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
-const OverheadVoucher = require("../models/Overheadcategory")
+const OverheadVoucher = require("../models/OverheadVoucher")
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ HARDCODED TAX ACCOUNTS
