@@ -533,13 +533,7 @@ export default function TrialBalanceIntegrated() {
                     <td className="px-4 py-4 text-sm border border-gray-300" colSpan="3">
                       <span className="text-lg">TOTAL</span>
                     </td>
-                    <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-green-700 text-lg">
-                      {format(totals.openingDebit)}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-red-700 text-lg">
-                      {format(totals.openingCredit)}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-green-700 text-lg">
+                 <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-green-700 text-lg">
                       {format(totals.currentDebit)}
                     </td>
                     <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-red-700 text-lg">
