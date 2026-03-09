@@ -105,55 +105,21 @@ export default function BalanceSheet() {
 
     try {
       // ── parallel fetches ─────────────────────────────────────────────
-      const [accsRes, liabsRes, stockRes, plRes, ohvRes] = await Promise.all([
+      const [accsRes, liabsRes, plRes] = await Promise.all([
         get("/ledgers/accounts"),
         get("/chart-of-accounts/liabilities"),
-        get("/products/get-stock"),
         get(`/profit-loss?fromDate=${from}&toDate=${to}`),
-        get("/overhead-voucher"),
       ]);
 
-      // ── 1. Closing Stock = balanceAmount sum OR balanceQty × purchaseRate ──
-      let closingStock = 0;
-      const stockProducts = stockRes?.data ?? [];
-      if (stockProducts.length > 0) {
-        // try balanceAmount first (if backend computes it)
-        const byAmount = stockProducts.reduce((s, p) => s + (p.balanceAmount || 0), 0);
-        if (byAmount > 0) {
-          closingStock = byAmount;
-        } else {
-          // fallback: qty × rate
-          closingStock = stockProducts.reduce((s, p) => {
-            const qty  = p.balanceQty   ?? p.balance_qty  ?? p.balance ?? p.qty   ?? 0;
-            const rate = p.purchaseRate ?? p.purchase_rate ?? p.rate   ?? p.price  ?? 0;
-            return s + Number(qty) * Number(rate);
-          }, 0);
-        }
-      }
+      // ── 1. Closing Stock — directly from backend P&L (Product.balanceAmount) ──
+      //    Backend mein: allProducts.reduce((s,p) => s + p.balanceAmount, 0)
+      const closingStock = plRes?.data?.cogs?.closingStock ?? 0;
 
-      // ── 2. Net Profit from P&L (with overhead included) ─────────────
-      let netProfit = 0;
-      if (plRes?.success) {
-        // ── also get overhead to recalculate correctly ──────────────────
-        let ohvTotal = 0;
-        const ohvList = ohvRes?.data ?? (Array.isArray(ohvRes) ? ohvRes : []);
-        const fromD = new Date(from + "T00:00:00");
-        const toD   = new Date(to   + "T23:59:59");
-        ohvTotal = ohvList
-          .filter(v => {
-            const d = new Date(v.voucherDate || v.createdAt);
-            return d >= fromD && d <= toD && (v.status === "SAVED" || v.status === "POSTED");
-          })
-          .reduce((s, v) => s + (v.totalAmount || 0), 0);
+      // ── 2. Net Profit — directly from backend P&L summary ───────────
+      //    Backend mein: netProfit = grossProfit - opExpenses + otherIncome
+      const netProfit = plRes?.data?.summary?.netProfit ?? 0;
 
-        const d = plRes.data;
-        const cogsAvail  = (d.cogs?.cogsAvailableForSale || 0) + ohvTotal;
-        const cogsTotal  = cogsAvail - closingStock;
-        const grossP     = (d.revenue?.netRevenue || 0) - cogsTotal;
-        netProfit        = grossP - (d.expenses?.totalExpenses || 0) + (d.otherIncome?.totalOtherIncome || 0);
-      }
-
-      // ── 3. Vendor (PAYABLES) balances from liabilities API ──────────
+      // ── 3. Vendor (PAYABLES) balances from liabilities API ─────────
       const liabsAll = liabsRes?.data ?? (Array.isArray(liabsRes) ? liabsRes : []);
       const vendors  = liabsAll.filter(l => l.type === "PAYABLES");
 
@@ -227,7 +193,7 @@ export default function BalanceSheet() {
         balance: closingStock,
         type: "INVENTORY",
         isStock: true,
-        note: "Balance Qty × Purchase Rate",
+        note: "From P&L (Product.balanceAmount)",
       });
 
       // ── 7. Add Net Profit/Loss to equity ────────────────────────────
