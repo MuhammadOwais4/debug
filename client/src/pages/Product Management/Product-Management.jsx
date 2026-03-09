@@ -306,7 +306,7 @@ const ProductManagementDashboard = () => {
                               </div>
                               {line.note && (
                                 <div className="mt-1 flex items-center gap-1">
-                                  <span className="text-xs text-slate-400">Lod No:</span>
+                                  <span className="text-xs text-slate-400">Lot No:</span>
                                   <span className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{line.note}</span>
                                 </div>
                               )}
@@ -507,7 +507,7 @@ const ProductManagementDashboard = () => {
                             {/* Lod Numbers from all voucher lines */}
                             {ohvSummary.lodNumbers?.length > 0 && (
                               <div className="mt-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-1.5 font-semibold">Lod No.</div>
+                                <div className="text-xs text-slate-500 mb-1.5 font-semibold">Lot No.</div>
                                 <div className="flex flex-wrap gap-1">
                                   {ohvSummary.lodNumbers.map((lod, li) => (
                                     <span key={li} className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
