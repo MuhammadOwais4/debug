@@ -454,12 +454,6 @@ export default function TrialBalanceIntegrated() {
                     Category
                   </th>
                   <th className="px-4 py-3 border border-gray-300 text-right font-semibold text-green-600">
-                    Opening<br />Debit
-                  </th>
-                  <th className="px-4 py-3 border border-gray-300 text-right font-semibold text-red-600">
-                    Opening<br />Credit
-                  </th>
-                  <th className="px-4 py-3 border border-gray-300 text-right font-semibold text-green-600">
                     Current<br />Debit
                   </th>
                   <th className="px-4 py-3 border border-gray-300 text-right font-semibold text-red-600">
@@ -490,20 +484,6 @@ export default function TrialBalanceIntegrated() {
                         <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
                           {row.category}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.openingDebit > 0 ? (
-                          <span className="text-green-600 font-semibold">{format(row.openingDebit)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
-                        {row.openingCredit > 0 ? (
-                          <span className="text-red-600 font-semibold">{format(row.openingCredit)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-right border border-gray-300 font-mono">
                         {row.currentDebit > 0 ? (
