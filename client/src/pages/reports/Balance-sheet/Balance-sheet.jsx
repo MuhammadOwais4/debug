@@ -1,670 +1,455 @@
-import React, { useState, useEffect } from "react";
-import { Calendar, RefreshCw, Printer } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
 
-function BalanceSheet() {
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
-  const [vendors, setVendors] = useState([]);
-  const [loadingVendors, setLoadingVendors] = useState(false);
-  
-  const [currentAssets, setCurrentAssets] = useState([]);
-  const [fixedAssets, setFixedAssets] = useState([]);
-  const [otherAssets, setOtherAssets] = useState([]);
-  
-  const [currentLiabilities, setCurrentLiabilities] = useState([]);
-  const [longTermLiabilities, setLongTermLiabilities] = useState([]);
-  
-  const [equity, setEquity] = useState([]);
-  
-  const [closingStock, setClosingStock] = useState(0);
-  const [netProfit, setNetProfit] = useState(null); // null = not loaded yet
+const BASE = "https://debug-nxby.vercel.app/api";
 
-  const [totalCurrentAssets, setTotalCurrentAssets] = useState(0);
-  const [totalFixedAssets, setTotalFixedAssets] = useState(0);
-  const [totalOtherAssets, setTotalOtherAssets] = useState(0);
-  const [totalAssets, setTotalAssets] = useState(0);
-  
-  const [totalCurrentLiabilities, setTotalCurrentLiabilities] = useState(0);
-  const [totalLongTermLiabilities, setTotalLongTermLiabilities] = useState(0);
-  const [totalLiabilities, setTotalLiabilities] = useState(0);
-  
-  const [totalEquity, setTotalEquity] = useState(0);
-  const [totalLiabilitiesEquity, setTotalLiabilitiesEquity] = useState(0);
+// ── helpers ───────────────────────────────────────────────────────────────────
+const get = (path) =>
+  fetch(`${BASE}${path}`).then((r) => r.json()).catch(() => ({ success: false }));
 
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const firstDayOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-    setStartDate(firstDayOfYear);
-    setEndDate(today);
-  }, []);
+const fmt = (v) =>
+  new Intl.NumberFormat("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0);
 
-  useEffect(() => {
-    if (startDate && endDate) {
-      loadVendors();
-    }
-  }, [startDate, endDate]);
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
-  useEffect(() => {
-    if (startDate && endDate && vendors.length >= 0) {
-      loadBalanceSheetData();
-    }
-  }, [startDate, endDate, vendors]);
+const today = () => new Date().toISOString().split("T")[0];
+const yearStart = () => new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
 
-  const loadVendors = async () => {
-    try {
-      setLoadingVendors(true);
-      console.log("📋 Loading vendors from liabilities...");
-      
-      const response = await fetch(`https://debug-nxby.vercel.app/api/chart-of-accounts/liabilities`);
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error("Failed to fetch liabilities");
-      }
-
-      const liabilities = data.data || [];
-      const vendorList = liabilities.filter((liability) => liability.type === "PAYABLES");
-      
-      setVendors(vendorList);
-      console.log(`✅ Loaded ${vendorList.length} vendors from liabilities`);
-    } catch (err) {
-      console.error("❌ Error loading vendors:", err);
-      setVendors([]);
-    } finally {
-      setLoadingVendors(false);
-    }
-  };
-
-  const loadClosingStock = async () => {
-    try {
-      console.log("📦 Fetching Closing Stock from /products/get-stock...");
-      const response = await fetch(`https://debug-nxby.vercel.app/api/products/get-stock`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      if (!data.success) { setClosingStock(0); return 0; }
-      const products = data.data || [];
-      const totalClosingStock = products.reduce((sum, product) => sum + (product.balanceAmount || 0), 0);
-      console.log(`📦 Total Closing Stock: ${totalClosingStock}`);
-      setClosingStock(totalClosingStock);
-      return totalClosingStock;
-    } catch (err) {
-      console.error("❌ Error loading closing stock:", err);
-      setClosingStock(0);
-      return 0;
-    }
-  };
-
-  // ✅ NEW: Fetch Net Profit/Loss from P&L API
-  const loadNetProfit = async () => {
-    try {
-      console.log("📊 Fetching Net Profit/Loss from P&L API...");
-      const response = await fetch(
-        `https://debug-nxby.vercel.app/api/profit-loss?fromDate=${startDate}&toDate=${endDate}`
-      );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      if (!data.success) {
-        console.warn("❌ P&L API returned success: false");
-        return 0;
-      }
-      const np = data.data?.summary?.netProfit || 0;
-      console.log(`✅ Net Profit/Loss: ${np}`);
-      setNetProfit(np);
-      return np;
-    } catch (err) {
-      console.error("❌ Error loading Net Profit:", err);
-      setNetProfit(0);
-      return 0;
-    }
-  };
-
-  // ✅ NEW: Fetch Tax Account Balances (WHT Payable + Advance Tax)
-  const loadTaxAccountBalances = async () => {
-    const TAX_CODES = [
-      { code: "TAX-0025-PAY", name: "Withholding Tax 0.25% Payable", category: "Liabilities", type: "TAX-WHT-PAYABLE" },
-      { code: "TAX-0050-PAY", name: "Withholding Tax 0.50% Payable", category: "Liabilities", type: "TAX-WHT-PAYABLE" },
-      { code: "TAX-0100-PAY", name: "Withholding Tax 1% Payable",    category: "Liabilities", type: "TAX-WHT-PAYABLE" },
-      { code: "TAX-ADV-0025", name: "Advance Tax 0.25%",             category: "Assets",      type: "TAX-ADVANCE"    },
-      { code: "TAX-ADV-0050", name: "Advance Tax 0.50%",             category: "Assets",      type: "TAX-ADVANCE"    },
-      { code: "TAX-ADV-0100", name: "Advance Tax 1%",                category: "Assets",      type: "TAX-ADVANCE"    },
-    ];
-
-    const results = [];
-
-    for (const tax of TAX_CODES) {
-      try {
-        const params = new URLSearchParams({
-          accountCode: tax.code,
-          accountName: tax.name,
-          fromDate: startDate,
-          toDate: endDate,
-        });
-        const response = await fetch(
-          `https://debug-nxby.vercel.app/api/ledgers/account-ledger?${params}`
-        );
-        const data = await response.json();
-        let balance = 0;
-        if (data.success && data.data) {
-          balance = Math.abs(data.data.summary?.closingBalance || 0);
-        }
-        if (balance > 0) {
-          results.push({ ...tax, balance, isTaxAccount: true });
-          console.log(`✅ Tax Account ${tax.code}: ${balance}`);
-        }
-      } catch (err) {
-        console.error(`❌ Error loading tax account ${tax.code}:`, err);
-      }
-    }
-
-    return results;
-  };
-
-  const loadBalanceSheetData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log(`📊 Fetching Balance Sheet from ${startDate} to ${endDate}`);
-
-      // Load closing stock, net profit, and tax accounts in parallel
-      const [stockValue, netProfitValue, taxAccounts] = await Promise.all([
-        loadClosingStock(),
-        loadNetProfit(),
-        loadTaxAccountBalances(),
-      ]);
-
-      const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
-      const accountsData = await accountsResponse.json();
-      
-      if (!accountsData.success) throw new Error("Failed to fetch accounts");
-
-      console.log(`✅ Loaded ${accountsData.count} accounts from ledger`);
-
-      const currentAssetsList = [];
-      const fixedAssetsList = [];
-      const otherAssetsList = [];
-      const currentLiabilitiesList = [];
-      const longTermLiabilitiesList = [];
-      const equityList = [];
-
-      // Load vendor balances from ledger
-      for (const vendor of vendors) {
-        try {
-          const params = new URLSearchParams({
-            accountCode: vendor.code || "",
-            accountName: vendor.name || "",
-            fromDate: startDate,
-            toDate: endDate,
-          });
-
-          const ledgerResponse = await fetch(
-            `https://debug-nxby.vercel.app/api/ledgers/account-ledger?${params}`
-          );
-          const ledgerData = await ledgerResponse.json();
-
-          let vendorBalance = 0;
-          if (ledgerData.success && ledgerData.data) {
-            vendorBalance = Math.abs(ledgerData.data.summary?.closingBalance || 0);
-          }
-          if (vendorBalance === 0) vendorBalance = Math.abs(vendor.balance || 0);
-          
-          currentLiabilitiesList.push({
-            code: vendor.code,
-            name: `${vendor.name} (${vendor.code})`,
-            originalName: vendor.name,
-            type: 'PAYABLES',
-            balance: vendorBalance,
-            category: 'Liabilities',
-            vendorInfo: vendor,
-            isVendor: true
-          });
-        } catch (err) {
-          console.error(`Error loading ledger for vendor ${vendor.name}:`, err);
-          currentLiabilitiesList.push({
-            code: vendor.code,
-            name: `${vendor.name} (${vendor.code})`,
-            originalName: vendor.name,
-            type: 'PAYABLES',
-            balance: 0,
-            category: 'Liabilities',
-            vendorInfo: vendor,
-            isVendor: true
-          });
-        }
-      }
-
-      // ✅ Add WHT Payable accounts to Current Liabilities
-      const whtAccounts = taxAccounts.filter(t => t.type === "TAX-WHT-PAYABLE");
-      whtAccounts.forEach(wht => {
-        currentLiabilitiesList.push({
-          code: wht.code,
-          name: wht.name,
-          originalName: wht.name,
-          type: wht.type,
-          balance: wht.balance,
-          category: 'Liabilities',
-          isWHT: true
-        });
-        console.log(`✅ Added WHT Payable to Current Liabilities: ${wht.name} = ${wht.balance}`);
-      });
-
-      // ✅ Add Advance Tax accounts to Current Assets
-      const advanceTaxAccounts = taxAccounts.filter(t => t.type === "TAX-ADVANCE");
-      advanceTaxAccounts.forEach(adv => {
-        currentAssetsList.push({
-          code: adv.code,
-          name: adv.name,
-          originalName: adv.name,
-          type: adv.type,
-          balance: adv.balance,
-          category: 'Assets',
-          isAdvanceTax: true
-        });
-        console.log(`✅ Added Advance Tax to Current Assets: ${adv.name} = ${adv.balance}`);
-      });
-
-      // Process other accounts
-      accountsData.data.forEach(account => {
-        const balance = account.balance || 0;
-        const absBalance = Math.abs(balance);
-        
-        // Skip vendor accounts (already loaded above)
-        const isVendorAccount = account.category === 'Liabilities' && 
-                               (account.type === 'PAYABLES' || account.type?.toLowerCase().includes('payable'));
-        if (isVendorAccount) return;
-
-        // Skip tax accounts (already added above)
-        const isTaxAcc = account.code?.startsWith("TAX-");
-        if (isTaxAcc) return;
-
-        // Skip zero balance accounts
-        if (absBalance === 0) return;
-
-        let displayName = account.name || account.accountName || 'Unknown Account';
-        
-        if (account.category === 'Assets' && (account.type === 'RECEIVABLES' || account.type?.toLowerCase().includes('receivable'))) {
-          displayName = `${displayName} (Customer)`;
-        }
-
-        const accountData = {
-          code: account.code,
-          name: displayName,
-          originalName: account.name || account.accountName,
-          type: account.type,
-          balance: absBalance,
-          category: account.category,
-          isVendor: false
-        };
-
-        if (account.category === 'Assets') {
-          const typeLower = (account.type || '').toLowerCase();
-          if (typeLower.includes('inventory') || typeLower.includes('stock') ||
-              typeLower.includes('raw material') || typeLower.includes('purchases')) {
-            return;
-          }
-          if (typeLower.includes('current') || typeLower.includes('cash') || 
-              typeLower.includes('bank') || typeLower.includes('receivable') ||
-              typeLower === 'receivables') {
-            currentAssetsList.push(accountData);
-          } else {
-            fixedAssetsList.push(accountData);
-          }
-        } else if (account.category === 'Liabilities') {
-          const typeLower = (account.type || '').toLowerCase();
-          if (typeLower.includes('current') || typeLower.includes('payable') ||
-              typeLower.includes('short-term')) {
-            currentLiabilitiesList.push(accountData);
-          } else {
-            longTermLiabilitiesList.push(accountData);
-          }
-        } else if (account.category === 'Equity') {
-          equityList.push(accountData);
-        }
-      });
-
-      // Add Closing Stock to Current Assets
-      currentAssetsList.push({
-        code: 'CLOSING_STOCK',
-        name: 'Closing Stock (Inventory)',
-        originalName: 'Closing Stock',
-        type: 'INVENTORY',
-        balance: stockValue,
-        category: 'Assets',
-        isClosingStock: true
-      });
-
-      // ✅ Add Net Profit/Loss to Equity list
-      if (netProfitValue !== null) {
-        equityList.push({
-          code: 'NET_PROFIT',
-          name: netProfitValue >= 0 ? 'Net Profit (Current Period)' : 'Net Loss (Current Period)',
-          originalName: 'Net Profit/Loss',
-          type: 'NET_PROFIT',
-          balance: netProfitValue, // can be negative
-          category: 'Equity',
-          isNetProfit: true
-        });
-        console.log(`✅ Added Net Profit/Loss to Equity: ${netProfitValue}`);
-      }
-
-      setCurrentAssets(currentAssetsList);
-      setFixedAssets(fixedAssetsList);
-      setOtherAssets(otherAssetsList);
-      setCurrentLiabilities(currentLiabilitiesList);
-      setLongTermLiabilities(longTermLiabilitiesList);
-      setEquity(equityList);
-
-      // Calculate totals
-      const currentAssetsTotal = currentAssetsList.reduce((sum, acc) => sum + acc.balance, 0);
-      const fixedAssetsTotal = fixedAssetsList.reduce((sum, acc) => sum + acc.balance, 0);
-      const assetsTotal = currentAssetsTotal + fixedAssetsTotal;
-
-      const currentLiabilitiesTotal = currentLiabilitiesList.reduce((sum, acc) => sum + acc.balance, 0);
-      const longTermLiabilitiesTotal = longTermLiabilitiesList.reduce((sum, acc) => sum + acc.balance, 0);
-      const liabilitiesTotal = currentLiabilitiesTotal + longTermLiabilitiesTotal;
-
-      // ✅ For equity total, use actual value (netProfit can be negative)
-      const equityTotal = equityList.reduce((sum, acc) => sum + acc.balance, 0);
-      const liabilitiesEquityTotal = liabilitiesTotal + equityTotal;
-
-      setTotalCurrentAssets(currentAssetsTotal);
-      setTotalFixedAssets(fixedAssetsTotal);
-      setTotalOtherAssets(0);
-      setTotalAssets(assetsTotal);
-
-      setTotalCurrentLiabilities(currentLiabilitiesTotal);
-      setTotalLongTermLiabilities(longTermLiabilitiesTotal);
-      setTotalLiabilities(liabilitiesTotal);
-
-      setTotalEquity(equityTotal);
-      setTotalLiabilitiesEquity(liabilitiesEquityTotal);
-
-      console.log("💰 Balance Sheet Totals:", {
-        currentAssets: currentAssetsTotal,
-        fixedAssets: fixedAssetsTotal,
-        totalAssets: assetsTotal,
-        currentLiabilities: currentLiabilitiesTotal,
-        longTermLiabilities: longTermLiabilitiesTotal,
-        totalLiabilities: liabilitiesTotal,
-        equity: equityTotal,
-        totalLiabilitiesEquity: liabilitiesEquityTotal,
-        closingStock: stockValue,
-        netProfit: netProfitValue,
-        balanced: Math.abs(assetsTotal - liabilitiesEquityTotal) < 0.01
-      });
-
-    } catch (error) {
-      console.error("❌ Error loading balance sheet:", error);
-      setError(error.message || "Failed to load balance sheet");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-PK', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value || 0);
-  };
-
-  const formatDateRange = () => {
-    if (!startDate || !endDate) return "";
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return `From ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  };
-
-  const handlePrint = () => window.print();
-
-  const vendorCount = currentLiabilities.filter(l => l.isVendor).length;
-
+// ── sub-components ────────────────────────────────────────────────────────────
+function SectionBar({ title, color = "#1e3a5f" }) {
   return (
-    <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "20px", fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      {/* Header Controls */}
-      <div style={{ marginBottom: "30px", padding: "20px", backgroundColor: "#f8f9fa", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "15px", flexWrap: "wrap" }}>
-          <div style={{ flex: "1", minWidth: "200px" }}>
-            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#495057", fontSize: "14px" }}>
-              <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
-              Start Date:
-            </label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", border: "2px solid #dee2e6", borderRadius: "6px", fontSize: "14px", fontWeight: "500" }} />
-          </div>
-          <div style={{ flex: "1", minWidth: "200px" }}>
-            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#495057", fontSize: "14px" }}>
-              <Calendar style={{ width: "16px", height: "16px", display: "inline", marginRight: "5px" }} />
-              End Date:
-            </label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", border: "2px solid #dee2e6", borderRadius: "6px", fontSize: "14px", fontWeight: "500" }} />
-          </div>
-          <button onClick={() => { loadVendors(); loadBalanceSheetData(); }}
-            disabled={loading || loadingVendors || !startDate || !endDate}
-            style={{ padding: "10px 20px", backgroundColor: loading || loadingVendors ? "#6c757d" : "#0d6efd", color: "white", border: "none", borderRadius: "6px", cursor: loading || loadingVendors ? "not-allowed" : "pointer", fontWeight: "500", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px", marginTop: "24px" }}>
-            <RefreshCw style={{ width: "16px", height: "16px" }} />
-            {loading || loadingVendors ? "Loading..." : "Refresh Data"}
-          </button>
-          <button onClick={handlePrint} disabled={loading || loadingVendors}
-            style={{ padding: "10px 20px", backgroundColor: "#198754", color: "white", border: "none", borderRadius: "6px", cursor: loading || loadingVendors ? "not-allowed" : "pointer", fontWeight: "500", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px", marginTop: "24px" }}>
-            <Printer style={{ width: "16px", height: "16px" }} />
-            Print
-          </button>
-        </div>
-      </div>
+    <div style={{
+      background: color, color: "#fff",
+      padding: "9px 18px", fontSize: 13, fontWeight: 700,
+      letterSpacing: "0.08em", textTransform: "uppercase",
+      marginTop: 24,
+    }}>{title}</div>
+  );
+}
 
-      {/* Error */}
-      {error && (
-        <div style={{ padding: "15px", backgroundColor: "#f8d7da", color: "#721c24", border: "1px solid #f5c6cb", borderRadius: "6px", marginBottom: "20px" }}>
-          ⚠️ {error}
-        </div>
-      )}
+function SubBar({ title }) {
+  return (
+    <div style={{
+      background: "#eef2f8", color: "#1e3a5f",
+      padding: "6px 18px", fontSize: 12, fontWeight: 700,
+      letterSpacing: "0.05em", borderLeft: "3px solid #3f64a8",
+      marginTop: 8,
+    }}>{title}</div>
+  );
+}
 
-      {/* Title */}
-      <h2 style={{ color: "#2c5ca9", textAlign: "center", marginBottom: "5px", fontWeight: "700", fontSize: "28px", letterSpacing: "-0.5px" }}>
-        ABC & Co.<br />Balance Sheet
-      </h2>
-      <p style={{ textAlign: "center", fontWeight: "500", fontSize: "14px", color: "#6c757d", marginBottom: "40px" }}>
-        {formatDateRange()}
-      </p>
-
-      {/* Loading */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "40px", color: "#6c757d" }}>
-          <div style={{ display: "inline-block", width: "40px", height: "40px", border: "4px solid #f3f3f3", borderTop: "4px solid #3f64a8", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          <p style={{ marginTop: "15px" }}>Loading Balance Sheet...</p>
-        </div>
-      ) : (
-        <>
-          {/* ═══════════════════════════════════════════════════ */}
-          {/* ASSETS SECTION */}
-          {/* ═══════════════════════════════════════════════════ */}
-          <div style={{ backgroundColor: "#3f64a8", color: "white", fontWeight: "bold", padding: "10px 15px", fontSize: "16px" }}>
-            Assets
-          </div>
-
-          {/* Current Assets */}
-          <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "10px" }}>
-            Current Assets
-          </div>
-          <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-            {currentAssets.length > 0 ? currentAssets.map((asset, index) => (
-              <div key={index} style={{
-                display: "flex", justifyContent: "space-between", padding: "6px 15px 6px 0",
-                borderBottom: "1px solid #f0f0f0",
-                backgroundColor: asset.isClosingStock ? "#f0fff4" : asset.isAdvanceTax ? "#f0f8ff" : "#fff"
-              }}>
-                <span style={{ fontSize: "15px", color: "#000", fontWeight: (asset.isClosingStock || asset.isAdvanceTax) ? "600" : "normal" }}>
-                  {asset.name}
-                  {asset.isClosingStock && <span style={{ fontSize: "11px", color: "#16a34a", marginLeft: "8px" }}>[From Products Stock]</span>}
-                  {asset.isAdvanceTax && <span style={{ fontSize: "11px", color: "#1d4ed8", marginLeft: "8px" }}>[Advance Tax - Asset]</span>}
-                </span>
-                <span style={{ fontSize: "15px", color: asset.isClosingStock ? "#16a34a" : asset.isAdvanceTax ? "#1d4ed8" : "#000", fontFamily: "monospace", minWidth: "120px", textAlign: "right", fontWeight: (asset.isClosingStock || asset.isAdvanceTax) ? "600" : "normal" }}>
-                  {formatCurrency(asset.balance)}
-                </span>
-              </div>
-            )) : (
-              <div style={{ padding: "10px 0", color: "#999", fontSize: "14px" }}>No current assets</div>
-            )}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 15px", backgroundColor: "#f8f9fa", fontWeight: "600", borderTop: "1px solid #dee2e6" }}>
-            <span>Total Current Assets</span>
-            <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalCurrentAssets)}</span>
-          </div>
-
-          {/* Fixed Assets */}
-          <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
-            Fixed (Long-Term) Assets
-          </div>
-          <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-            {fixedAssets.length > 0 ? fixedAssets.map((asset, index) => (
-              <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "6px 15px 6px 0", borderBottom: "1px solid #f0f0f0" }}>
-                <span style={{ fontSize: "15px", color: "#000" }}>{asset.name}</span>
-                <span style={{ fontSize: "15px", color: "#000", fontFamily: "monospace", minWidth: "120px", textAlign: "right" }}>{formatCurrency(asset.balance)}</span>
-              </div>
-            )) : (
-              <div style={{ padding: "10px 0", color: "#999", fontSize: "14px" }}>No fixed assets</div>
-            )}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 15px", backgroundColor: "#f8f9fa", fontWeight: "600", borderTop: "1px solid #dee2e6" }}>
-            <span>Total Fixed Assets</span>
-            <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalFixedAssets)}</span>
-          </div>
-
-          {/* Total Assets */}
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "15px", backgroundColor: "#d1e7dd", fontWeight: "700", fontSize: "17px", marginTop: "15px", borderTop: "2px solid #0f5132", borderBottom: "2px solid #0f5132" }}>
-            <span>TOTAL ASSETS</span>
-            <span style={{ fontFamily: "monospace", color: "#0f5132" }}>{formatCurrency(totalAssets)}</span>
-          </div>
-
-          {/* ═══════════════════════════════════════════════════ */}
-          {/* LIABILITIES & EQUITY SECTION */}
-          {/* ═══════════════════════════════════════════════════ */}
-          <div style={{ backgroundColor: "#3f64a8", color: "white", fontWeight: "bold", padding: "10px 15px", fontSize: "16px", marginTop: "30px" }}>
-            Liabilities and Owner's Equity
-          </div>
-
-          {/* Current Liabilities */}
-          <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "10px" }}>
-            Current Liabilities ({vendorCount} vendors)
-          </div>
-          <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-            {currentLiabilities.length > 0 ? currentLiabilities.map((liability, index) => (
-              <div key={index} style={{
-                display: "flex", justifyContent: "space-between", padding: "6px 15px 6px 0",
-                borderBottom: "1px solid #f0f0f0",
-                backgroundColor: liability.isVendor ? "#fff8f0" : liability.isWHT ? "#fff0f5" : "#fff"
-              }}>
-                <span style={{ fontSize: "15px", color: "#000" }}>
-                  {liability.name}
-                  {liability.isVendor && <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px" }}>[Vendor Payable]</span>}
-                  {liability.isWHT && <span style={{ fontSize: "11px", color: "#9333ea", marginLeft: "8px" }}>[WHT Payable]</span>}
-                </span>
-                <span style={{ fontSize: "15px", color: liability.isVendor ? "#d63384" : liability.isWHT ? "#9333ea" : "#000", fontFamily: "monospace", minWidth: "120px", textAlign: "right", fontWeight: (liability.isVendor || liability.isWHT) ? "600" : "normal" }}>
-                  {formatCurrency(liability.balance)}
-                </span>
-              </div>
-            )) : (
-              <div style={{ padding: "10px 0", color: "#999", fontSize: "14px" }}>No current liabilities</div>
-            )}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 15px", backgroundColor: "#f8f9fa", fontWeight: "600", borderTop: "1px solid #dee2e6" }}>
-            <span>Total Current Liabilities</span>
-            <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalCurrentLiabilities)}</span>
-          </div>
-
-          {/* Long-Term Liabilities */}
-          {longTermLiabilities.length > 0 && (
-            <>
-              <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
-                Long-Term Liabilities
-              </div>
-              <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-                {longTermLiabilities.map((liability, index) => (
-                  <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "6px 15px 6px 0", borderBottom: "1px solid #f0f0f0" }}>
-                    <span style={{ fontSize: "15px", color: "#000" }}>{liability.name}</span>
-                    <span style={{ fontSize: "15px", color: "#000", fontFamily: "monospace", minWidth: "120px", textAlign: "right" }}>{formatCurrency(liability.balance)}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 15px", backgroundColor: "#f8f9fa", fontWeight: "600", borderTop: "1px solid #dee2e6" }}>
-                <span>Total Long-Term Liabilities</span>
-                <span style={{ fontFamily: "monospace" }}>{formatCurrency(totalLongTermLiabilities)}</span>
-              </div>
-            </>
-          )}
-
-          {/* Owner's Equity */}
-          <div style={{ background: "#e6edf8", fontWeight: "700", padding: "8px 15px", marginTop: "15px" }}>
-            Owner's Equity
-          </div>
-          <div style={{ paddingLeft: "25px", lineHeight: "1.8", backgroundColor: "#fff" }}>
-            {equity.length > 0 ? equity.map((eq, index) => (
-              <div key={index} style={{
-                display: "flex", justifyContent: "space-between", padding: "6px 15px 6px 0",
-                borderBottom: "1px solid #f0f0f0",
-                backgroundColor: eq.isNetProfit
-                  ? (eq.balance >= 0 ? "#f0fff4" : "#fff5f5")
-                  : "#fff"
-              }}>
-                <span style={{ fontSize: "15px", color: "#000", fontWeight: eq.isNetProfit ? "700" : "normal" }}>
-                  {eq.name}
-                  {eq.isNetProfit && (
-                    <span style={{ fontSize: "11px", marginLeft: "8px", color: eq.balance >= 0 ? "#16a34a" : "#dc2626" }}>
-                      [{eq.balance >= 0 ? "Profit" : "Loss"} — from P&L]
-                    </span>
-                  )}
-                </span>
-                <span style={{
-                  fontSize: "15px",
-                  color: eq.isNetProfit ? (eq.balance >= 0 ? "#16a34a" : "#dc2626") : "#000",
-                  fontFamily: "monospace",
-                  minWidth: "120px",
-                  textAlign: "right",
-                  fontWeight: eq.isNetProfit ? "700" : "normal"
-                }}>
-                  {eq.isNetProfit && eq.balance < 0 ? `(${formatCurrency(Math.abs(eq.balance))})` : formatCurrency(eq.balance)}
-                </span>
-              </div>
-            )) : (
-              <div style={{ padding: "10px 0", color: "#999", fontSize: "14px" }}>No equity accounts</div>
-            )}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 15px", backgroundColor: "#f8f9fa", fontWeight: "600", borderTop: "1px solid #dee2e6" }}>
-            <span>Total Owner's Equity</span>
-            <span style={{ fontFamily: "monospace", color: totalEquity < 0 ? "#dc2626" : "inherit" }}>
-              {totalEquity < 0 ? `(${formatCurrency(Math.abs(totalEquity))})` : formatCurrency(totalEquity)}
-            </span>
-          </div>
-
-          {/* Total Liabilities & Equity */}
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "15px", backgroundColor: "#cfe2ff", fontWeight: "700", fontSize: "17px", marginTop: "15px", borderTop: "2px solid #084298", borderBottom: "2px solid #084298" }}>
-            <span>TOTAL LIABILITIES AND OWNER'S EQUITY</span>
-            <span style={{ fontFamily: "monospace", color: "#084298" }}>
-              {formatCurrency(totalLiabilitiesEquity)}
-            </span>
-          </div>
-
-          {/* Balance Check */}
-          {Math.abs(totalAssets - totalLiabilitiesEquity) > 0.01 ? (
-            <div style={{ marginTop: "20px", padding: "15px", backgroundColor: "#fff3cd", border: "1px solid #ffc107", borderRadius: "6px", color: "#856404" }}>
-              ⚠️ Balance Sheet is not balanced!
-              <br />Difference: {formatCurrency(Math.abs(totalAssets - totalLiabilitiesEquity))}
-            </div>
-          ) : (
-            <div style={{ marginTop: "20px", padding: "15px", backgroundColor: "#d1e7dd", border: "1px solid #198754", borderRadius: "6px", color: "#0f5132" }}>
-              ✅ Balance Sheet is balanced!
-            </div>
-          )}
-        </>
-      )}
+function AccountRow({ name, amount, sub, highlight, color, note }) {
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: sub ? "5px 18px 5px 36px" : "5px 18px",
+      borderBottom: "1px solid #f0f3f8",
+      background: highlight || "#fff",
+      fontSize: 13,
+    }}>
+      <span style={{ color: "#1a1a2e" }}>
+        {name}
+        {note && <span style={{ fontSize: 10, color: "#888", marginLeft: 8, fontStyle: "italic" }}>{note}</span>}
+      </span>
+      <span style={{
+        fontFamily: "monospace", fontSize: 13, minWidth: 120,
+        textAlign: "right", fontWeight: 500,
+        color: color || "#1a1a2e",
+      }}>
+        {typeof amount === "number" && amount < 0
+          ? `(${fmt(Math.abs(amount))})`
+          : fmt(amount)}
+      </span>
     </div>
   );
 }
 
-export default BalanceSheet;
+function TotalRow({ label, amount, big, color }) {
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: big ? "12px 18px" : "8px 18px",
+      background: big ? "#1e3a5f" : "#eef2f8",
+      borderTop: big ? "none" : "1px solid #c8d3e0",
+      fontSize: big ? 15 : 13,
+      fontWeight: 700,
+      marginTop: big ? 12 : 0,
+    }}>
+      <span style={{ color: big ? "#fff" : "#1e3a5f" }}>{label}</span>
+      <span style={{
+        fontFamily: "monospace",
+        color: big ? (color || "#7dd3fc") : (color || "#1e3a5f"),
+        minWidth: 120, textAlign: "right",
+      }}>
+        {typeof amount === "number" && amount < 0
+          ? `(${fmt(Math.abs(amount))})`
+          : fmt(amount)}
+      </span>
+    </div>
+  );
+}
+
+// ── main component ────────────────────────────────────────────────────────────
+export default function BalanceSheet() {
+  const [from, setFrom] = useState(yearStart);
+  const [to,   setTo]   = useState(today);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+  const [bs,      setBS]      = useState(null);   // processed balance sheet
+
+  const load = useCallback(async () => {
+    if (!from || !to) return;
+    setLoading(true);
+    setError("");
+    setBS(null);
+
+    try {
+      // ── parallel fetches ─────────────────────────────────────────────
+      const [accsRes, liabsRes, stockRes, plRes, ohvRes] = await Promise.all([
+        get("/ledgers/accounts"),
+        get("/chart-of-accounts/liabilities"),
+        get("/products/get-stock"),
+        get(`/profit-loss?fromDate=${from}&toDate=${to}`),
+        get("/overhead-voucher"),
+      ]);
+
+      // ── 1. Closing Stock = balanceAmount sum OR balanceQty × purchaseRate ──
+      let closingStock = 0;
+      const stockProducts = stockRes?.data ?? [];
+      if (stockProducts.length > 0) {
+        // try balanceAmount first (if backend computes it)
+        const byAmount = stockProducts.reduce((s, p) => s + (p.balanceAmount || 0), 0);
+        if (byAmount > 0) {
+          closingStock = byAmount;
+        } else {
+          // fallback: qty × rate
+          closingStock = stockProducts.reduce((s, p) => {
+            const qty  = p.balanceQty   ?? p.balance_qty  ?? p.balance ?? p.qty   ?? 0;
+            const rate = p.purchaseRate ?? p.purchase_rate ?? p.rate   ?? p.price  ?? 0;
+            return s + Number(qty) * Number(rate);
+          }, 0);
+        }
+      }
+
+      // ── 2. Net Profit from P&L (with overhead included) ─────────────
+      let netProfit = 0;
+      if (plRes?.success) {
+        // ── also get overhead to recalculate correctly ──────────────────
+        let ohvTotal = 0;
+        const ohvList = ohvRes?.data ?? (Array.isArray(ohvRes) ? ohvRes : []);
+        const fromD = new Date(from + "T00:00:00");
+        const toD   = new Date(to   + "T23:59:59");
+        ohvTotal = ohvList
+          .filter(v => {
+            const d = new Date(v.voucherDate || v.createdAt);
+            return d >= fromD && d <= toD && (v.status === "SAVED" || v.status === "POSTED");
+          })
+          .reduce((s, v) => s + (v.totalAmount || 0), 0);
+
+        const d = plRes.data;
+        const cogsAvail  = (d.cogs?.cogsAvailableForSale || 0) + ohvTotal;
+        const cogsTotal  = cogsAvail - closingStock;
+        const grossP     = (d.revenue?.netRevenue || 0) - cogsTotal;
+        netProfit        = grossP - (d.expenses?.totalExpenses || 0) + (d.otherIncome?.totalOtherIncome || 0);
+      }
+
+      // ── 3. Vendor (PAYABLES) balances from liabilities API ──────────
+      const liabsAll = liabsRes?.data ?? (Array.isArray(liabsRes) ? liabsRes : []);
+      const vendors  = liabsAll.filter(l => l.type === "PAYABLES");
+
+      // ── 4. Classify ledger accounts ─────────────────────────────────
+      const accounts = accsRes?.data ?? (Array.isArray(accsRes) ? accsRes : []);
+
+      const currentAssets   = [];
+      const fixedAssets     = [];
+      const currentLiabs    = [];
+      const longTermLiabs   = [];
+      const equityAccs      = [];
+
+      // Vendor code set for deduplication
+      const vendorCodes = new Set(vendors.map(v => v.code));
+
+      accounts.forEach(a => {
+        const bal     = Math.abs(a.balance || 0);
+        if (bal === 0) return;   // skip zero balance
+        const cat  = (a.category || "").toLowerCase();
+        const type = (a.type     || "").toLowerCase();
+        const code = (a.code     || "").toUpperCase();
+
+        // Skip TAX accounts — handled separately if needed
+        // Skip vendor/payable accounts from general accounts (already from liabilities API)
+        if (cat === "liabilities" && (type.includes("payable") || type === "payables")) return;
+
+        const row = { code: a.code, name: a.name || a.accountName || a.code, balance: bal, type: a.type };
+
+        if (cat === "assets") {
+          // Inventory/stock type → skip (we use /products/get-stock)
+          if (type.includes("inventory") || type.includes("stock") || type.includes("raw material")) return;
+
+          if (
+            type.includes("cash") || type.includes("bank") ||
+            type.includes("current") || type.includes("receivable") ||
+            type === "receivables"
+          ) {
+            currentAssets.push(row);
+          } else {
+            fixedAssets.push(row);
+          }
+        } else if (cat === "liabilities") {
+          if (
+            type.includes("current") || type.includes("short") ||
+            type.includes("accrued") || type === "accrued-expense"
+          ) {
+            currentLiabs.push(row);
+          } else {
+            longTermLiabs.push(row);
+          }
+        } else if (cat === "equity") {
+          equityAccs.push(row);
+        }
+      });
+
+      // ── 5. Add vendor payables to current liabilities ───────────────
+      vendors.forEach(v => {
+        currentLiabs.unshift({
+          code:    v.code,
+          name:    v.name,
+          balance: Math.abs(v.balance || 0),
+          type:    "PAYABLES",
+          isVendor: true,
+        });
+      });
+
+      // ── 6. Add Closing Stock to current assets ───────────────────────
+      currentAssets.push({
+        code: "CLOS-STOCK",
+        name: "Closing Stock",
+        balance: closingStock,
+        type: "INVENTORY",
+        isStock: true,
+        note: "Balance Qty × Purchase Rate",
+      });
+
+      // ── 7. Add Net Profit/Loss to equity ────────────────────────────
+      equityAccs.push({
+        code:     "NET-PROFIT",
+        name:     netProfit >= 0 ? "Net Profit (Current Period)" : "Net Loss (Current Period)",
+        balance:  netProfit,
+        type:     "NET_PROFIT",
+        isNetProfit: true,
+      });
+
+      // ── 8. Totals ────────────────────────────────────────────────────
+      const sum = (arr) => arr.reduce((s, r) => s + (r.balance || 0), 0);
+
+      const totCA   = sum(currentAssets);
+      const totFA   = sum(fixedAssets);
+      const totA    = totCA + totFA;
+
+      const totCL   = sum(currentLiabs);
+      const totLTL  = sum(longTermLiabs);
+      const totL    = totCL + totLTL;
+
+      const totEq   = equityAccs.reduce((s, r) => s + (r.balance || 0), 0);  // netProfit can be negative
+      const totLE   = totL + totEq;
+
+      setBS({
+        currentAssets,  fixedAssets,
+        currentLiabs,   longTermLiabs,  equityAccs,
+        totCA, totFA, totA,
+        totCL, totLTL, totL,
+        totEq, totLE,
+        closingStock, netProfit,
+        isBalanced: Math.abs(totA - totLE) < 1,
+      });
+
+    } catch (err) {
+      setError("Error loading balance sheet: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── print ─────────────────────────────────────────────────────────────────
+  const handlePrint = () => {
+    const win = window.open("", "", "height=900,width=780");
+    if (!win) return;
+    const body = document.getElementById("bs-print-area")?.innerHTML || "";
+    win.document.write(
+      `<!DOCTYPE html><html><head><title>Balance Sheet</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#000}
+        @media print{@page{size:A4;margin:12mm}}
+      </style></head><body>${body}
+      <script>window.onload=function(){window.print()}<\/script>
+      </body></html>`
+    );
+    win.document.close();
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px", fontFamily: "'Segoe UI', Arial, sans-serif", color: "#1a1a2e", fontSize: 13 }}>
+      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+
+      {/* ── Controls ── */}
+      <div style={{ background: "#f4f7fc", border: "1px solid #d6dff0", borderRadius: 6, padding: "16px 20px", marginBottom: 24, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+        {[["From Date", from, setFrom], ["To Date", to, setTo]].map(([lbl, val, set], i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 160 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#4a5568", letterSpacing: "0.06em", textTransform: "uppercase" }}>{lbl}</label>
+            <input type="date" value={val} onChange={e => set(e.target.value)}
+              style={{ padding: "7px 10px", border: "1.5px solid #c8d3e0", borderRadius: 4, fontSize: 13, color: "#1a1a2e", background: "#fff", outline: "none" }} />
+          </div>
+        ))}
+        <button onClick={load} disabled={loading}
+          style={{ padding: "8px 18px", background: loading ? "#94a3b8" : "#1e3a5f", color: "#fff", border: "none", borderRadius: 4, fontWeight: 700, fontSize: 12, cursor: loading ? "not-allowed" : "pointer", letterSpacing: "0.04em", height: 36 }}>
+          {loading ? "⏳ Loading..." : "🔄 Refresh"}
+        </button>
+        <button onClick={handlePrint} disabled={loading || !bs}
+          style={{ padding: "8px 18px", background: "#15803d", color: "#fff", border: "none", borderRadius: 4, fontWeight: 700, fontSize: 12, cursor: "pointer", letterSpacing: "0.04em", height: 36 }}>
+          🖨️ Print
+        </button>
+      </div>
+
+      {/* ── Error ── */}
+      {error && (
+        <div style={{ background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 4, padding: "10px 16px", color: "#dc2626", fontSize: 13, marginBottom: 16 }}>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* ── Loading spinner ── */}
+      {loading && (
+        <div style={{ textAlign: "center", padding: 60, color: "#64748b" }}>
+          <div style={{ display: "inline-block", width: 36, height: 36, border: "4px solid #e2e8f0", borderTop: "4px solid #1e3a5f", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <p style={{ marginTop: 14, fontSize: 13 }}>Loading Balance Sheet...</p>
+        </div>
+      )}
+
+      {/* ── Balance Sheet ── */}
+      {!loading && bs && (
+        <div id="bs-print-area">
+
+          {/* Title */}
+          <div style={{ textAlign: "center", marginBottom: 24, borderBottom: "2px solid #1e3a5f", paddingBottom: 16 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a5f", letterSpacing: "-0.3px" }}>Balance Sheet</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+              As of <b style={{ color: "#1e3a5f" }}>{fmtDate(from)}</b> — <b style={{ color: "#1e3a5f" }}>{fmtDate(to)}</b>
+            </div>
+            {bs.isBalanced
+              ? <div style={{ marginTop: 8, display: "inline-block", fontSize: 11, background: "#dcfce7", color: "#15803d", padding: "2px 10px", borderRadius: 20, fontWeight: 700 }}>✅ Balanced</div>
+              : <div style={{ marginTop: 8, display: "inline-block", fontSize: 11, background: "#fee2e2", color: "#dc2626", padding: "2px 10px", borderRadius: 20, fontWeight: 700 }}>⚠️ Not Balanced — Diff: {fmt(Math.abs(bs.totA - bs.totLE))}</div>
+            }
+          </div>
+
+          {/* ══════════════════ ASSETS ══════════════════ */}
+          <SectionBar title="Assets" color="#1e3a5f" />
+
+          {/* Current Assets */}
+          <SubBar title="Current Assets" />
+          {bs.currentAssets.length === 0
+            ? <div style={{ padding: "8px 18px", color: "#94a3b8", fontSize: 12 }}>No current assets</div>
+            : bs.currentAssets.map((a, i) => (
+              <AccountRow key={i}
+                name={a.name}
+                amount={a.balance}
+                note={a.note}
+                highlight={a.isStock ? "#f0fdf4" : a.isAdvanceTax ? "#eff6ff" : undefined}
+                color={a.isStock ? "#15803d" : a.isAdvanceTax ? "#1d4ed8" : undefined}
+              />
+            ))
+          }
+          <TotalRow label="Total Current Assets" amount={bs.totCA} />
+
+          {/* Fixed Assets */}
+          <SubBar title="Fixed (Long-Term) Assets" />
+          {bs.fixedAssets.length === 0
+            ? <div style={{ padding: "8px 18px", color: "#94a3b8", fontSize: 12 }}>No fixed assets</div>
+            : bs.fixedAssets.map((a, i) => <AccountRow key={i} name={a.name} amount={a.balance} />)
+          }
+          <TotalRow label="Total Fixed Assets" amount={bs.totFA} />
+
+          {/* Total Assets */}
+          <TotalRow label="TOTAL ASSETS" amount={bs.totA} big color="#7dd3fc" />
+
+          {/* ══════════════════ LIABILITIES & EQUITY ══════════════════ */}
+          <SectionBar title="Liabilities & Owner's Equity" color="#1e3a5f" />
+
+          {/* Current Liabilities */}
+          <SubBar title={`Current Liabilities (${bs.currentLiabs.filter(l => l.isVendor).length} Vendors)`} />
+          {bs.currentLiabs.length === 0
+            ? <div style={{ padding: "8px 18px", color: "#94a3b8", fontSize: 12 }}>No current liabilities</div>
+            : bs.currentLiabs.map((l, i) => (
+              <AccountRow key={i}
+                name={l.name}
+                amount={l.balance}
+                note={l.isVendor ? "Vendor Payable" : l.type === "ACCRUED-EXPENSE" ? "Accrued" : undefined}
+                highlight={l.isVendor ? "#fff8f0" : l.type === "ACCRUED-EXPENSE" ? "#faf5ff" : undefined}
+                color={l.isVendor ? "#b45309" : l.type === "ACCRUED-EXPENSE" ? "#7c3aed" : undefined}
+              />
+            ))
+          }
+          <TotalRow label="Total Current Liabilities" amount={bs.totCL} />
+
+          {/* Long-Term Liabilities */}
+          {bs.longTermLiabs.length > 0 && (
+            <>
+              <SubBar title="Long-Term Liabilities" />
+              {bs.longTermLiabs.map((l, i) => <AccountRow key={i} name={l.name} amount={l.balance} />)}
+              <TotalRow label="Total Long-Term Liabilities" amount={bs.totLTL} />
+            </>
+          )}
+
+          {/* Total Liabilities */}
+          <TotalRow label="Total Liabilities" amount={bs.totL} color="#b45309" />
+
+          {/* Owner's Equity */}
+          <SubBar title="Owner's Equity" />
+          {bs.equityAccs.length === 0
+            ? <div style={{ padding: "8px 18px", color: "#94a3b8", fontSize: 12 }}>No equity accounts</div>
+            : bs.equityAccs.map((e, i) => (
+              <AccountRow key={i}
+                name={e.name}
+                amount={e.balance}
+                note={e.isNetProfit ? "From P&L" : undefined}
+                highlight={e.isNetProfit ? (e.balance >= 0 ? "#f0fdf4" : "#fff5f5") : undefined}
+                color={e.isNetProfit ? (e.balance >= 0 ? "#15803d" : "#dc2626") : undefined}
+              />
+            ))
+          }
+          <TotalRow label="Total Owner's Equity" amount={bs.totEq} color={bs.totEq < 0 ? "#dc2626" : "#15803d"} />
+
+          {/* Total Liabilities + Equity */}
+          <TotalRow label="TOTAL LIABILITIES & EQUITY" amount={bs.totLE} big color="#7dd3fc" />
+
+          {/* ── Summary Cards ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 24 }}>
+            {[
+              { label: "Total Assets",      value: bs.totA,         bg: "#eff6ff", border: "#bfdbfe", tc: "#1d4ed8",  lc: "#1e40af" },
+              { label: "Total Liabilities", value: bs.totL,         bg: "#fff7ed", border: "#fed7aa", tc: "#b45309",  lc: "#92400e" },
+              { label: "Closing Stock",     value: bs.closingStock, bg: "#f0fdf4", border: "#bbf7d0", tc: "#15803d",  lc: "#14532d" },
+              { label: "Net Profit/Loss",   value: bs.netProfit,    bg: bs.netProfit >= 0 ? "#f0fdf4" : "#fff5f5", border: bs.netProfit >= 0 ? "#bbf7d0" : "#fecaca", tc: bs.netProfit >= 0 ? "#15803d" : "#dc2626", lc: bs.netProfit >= 0 ? "#14532d" : "#991b1b" },
+            ].map((c, i) => (
+              <div key={i} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                <div style={{ fontSize: 11, color: c.lc, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.05em" }}>{c.label}</div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: c.tc, fontFamily: "monospace" }}>
+                  {typeof c.value === "number" && c.value < 0 ? `(${fmt(Math.abs(c.value))})` : fmt(c.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+
+      {!loading && !bs && !error && (
+        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>
+          Select date range and click Refresh
+        </div>
+      )}
+    </div>
+  );
+}
