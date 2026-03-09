@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BASE_URL = "https://debug-nxby.vercel.app";
+const BASE_URL = "http://localhost:5000";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 const http = {
   get: async (path) => {
@@ -581,17 +581,20 @@ export default function OverheadVoucher() {
           <Field label="Account *" error={errors.selectedAsset}>
             <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)}
               disabled={loadingAccounts}
-              style={{ ...S.input, cursor:(loadingAccounts || !paymentMode) ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
-              <option value="">{loadingAccounts ? "Loading..." : "-- Select Account --"}</option>
+              style={{ ...S.input, cursor: loadingAccounts ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
+              <option value="">{loadingAccounts ? "Loading..." : paymentMode ? "-- Select Account --" : "-- Pehle Mode Select Karein --"}</option>
               {paymentMode === "Cash" && cashAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[CASH] {a.code} - {a.name}</option>
               ))}
               {paymentMode === "Bank" && bankAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[BANK] {a.code} - {a.name}</option>
               ))}
-              {paymentMode === "Accrued" && accruedAccounts.map((a) => (
+              {paymentMode === "Accrued" && accruedAccounts.length > 0 && accruedAccounts.map((a) => (
                 <option key={a._id} value={a.code || a._id}>[ACCRUED] {a.code} - {a.name}</option>
               ))}
+              {paymentMode === "Accrued" && accruedAccounts.length === 0 && (
+                <option disabled value="">(Koi ACCRUED-EXPENSE account nahi mila — LiabilitiesPage mein add karein)</option>
+              )}
             </select>
             {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
             {selectedAccountObj && (
@@ -813,7 +816,7 @@ export default function OverheadVoucher() {
                       <td style={S.td(i)}>{fmtDate(v.voucherDate)}</td>
                       <td style={S.td(i)}>{v.accountName || v.account || "—"}</td>
                       <td style={S.tdC(i)}>
-                        <span style={{ fontWeight:600, color: v.paymentMode === "Cash" ? "#15803d" : "#1d4ed8" }}>
+                        <span style={{ fontWeight:600, color: v.paymentMode === "Cash" ? "#15803d" : v.paymentMode === "Accrued" ? "#7c3aed" : "#1d4ed8" }}>
                           {v.paymentMode === "Cash" ? "💵" : v.paymentMode === "Accrued" ? "📋" : "🏦"} {v.paymentMode}
                         </span>
                       </td>
