@@ -132,56 +132,81 @@ export default function BalanceSheet() {
       const longTermLiabs   = [];
       const equityAccs      = [];
 
-      // Vendor code set for deduplication
-      const vendorCodes = new Set(vendors.map(v => v.code));
+      // Vendor codes for deduplication
+      const vendorCodes = new Set(vendors.map(v => (v.code || "").toUpperCase()));
 
       accounts.forEach(a => {
-        const bal     = Math.abs(a.balance || 0);
-        if (bal === 0) return;   // skip zero balance
-        const cat  = (a.category || "").toLowerCase();
-        const type = (a.type     || "").toLowerCase();
+        // ✅ Use ALL balance fields available — trial balance style
+        const bal = Math.abs(
+          a.closingBalance ?? a.closing_balance ??
+          a.closingDebit   ?? a.closingCredit   ??
+          a.balance        ?? 0
+        );
+
+        // ✅ Do NOT skip zero balance — show all accounts from ledger
+        const cat  = (a.category || "").toLowerCase().trim();
+        const type = (a.type     || "").toLowerCase().trim();
         const code = (a.code     || "").toUpperCase();
 
-        // Skip TAX accounts — handled separately if needed
-        // Skip vendor/payable accounts from general accounts (already from liabilities API)
-        if (cat === "liabilities" && (type.includes("payable") || type === "payables")) return;
+        // Skip vendors already added from liabilities API
+        if (vendorCodes.has(code)) return;
 
-        const row = { code: a.code, name: a.name || a.accountName || a.code, balance: bal, type: a.type };
+        const row = {
+          code:    a.code,
+          name:    a.name || a.accountName || a.code || "—",
+          balance: bal,
+          type:    a.type,
+        };
 
+        // ── ASSETS ──────────────────────────────────────────────────
         if (cat === "assets") {
-          // Inventory/stock type → skip (we use /products/get-stock)
-          if (type.includes("inventory") || type.includes("stock") || type.includes("raw material")) return;
+          // Skip inventory/stock (closingStock from P&L)
+          if (type.includes("inventory") || type.includes("stock") ||
+              type.includes("raw material")) return;
 
-          if (
-            type.includes("cash") || type.includes("bank") ||
-            type.includes("current") || type.includes("receivable") ||
-            type === "receivables"
-          ) {
+          // CASH or BANK → Current Assets
+          if (type.includes("cash") || type.includes("bank") ||
+              type.includes("current") || type.includes("receivable")) {
             currentAssets.push(row);
           } else {
+            // Anything else under Assets → Fixed Assets
             fixedAssets.push(row);
           }
+
+        // ── LIABILITIES ──────────────────────────────────────────────
         } else if (cat === "liabilities") {
-          if (
-            type.includes("current") || type.includes("short") ||
-            type.includes("accrued") || type === "accrued-expense"
-          ) {
+          // ACCRUED-EXPENSE, short-term → Current Liabilities
+          if (type.includes("accrued") || type.includes("current") ||
+              type.includes("short") || type.includes("payable") ||
+              type === "payables") {
             currentLiabs.push(row);
           } else {
             longTermLiabs.push(row);
           }
+
+        // ── EQUITY ───────────────────────────────────────────────────
         } else if (cat === "equity") {
           equityAccs.push(row);
         }
+        // Expenses/Revenue categories are P&L items — not on Balance Sheet
       });
 
       // ── 5. Add vendor payables to current liabilities ───────────────
+      // Vendors from /chart-of-accounts/liabilities (type=PAYABLES)
       vendors.forEach(v => {
+        // Use ledger balance if available, otherwise liabilities API balance
+        const ledgerAcc = accounts.find(a =>
+          (a.code || "").toUpperCase() === (v.code || "").toUpperCase()
+        );
+        const bal = Math.abs(
+          ledgerAcc?.closingBalance ?? ledgerAcc?.balance ??
+          v.balance ?? 0
+        );
         currentLiabs.unshift({
-          code:    v.code,
-          name:    v.name,
-          balance: Math.abs(v.balance || 0),
-          type:    "PAYABLES",
+          code:     v.code,
+          name:     v.name,
+          balance:  bal,
+          type:     "PAYABLES",
           isVendor: true,
         });
       });
@@ -323,8 +348,8 @@ export default function BalanceSheet() {
                 name={a.name}
                 amount={a.balance}
                 note={a.note}
-                highlight={a.isStock ? "#f0fdf4" : a.isAdvanceTax ? "#eff6ff" : undefined}
-                color={a.isStock ? "#15803d" : a.isAdvanceTax ? "#1d4ed8" : undefined}
+                highlight={a.isStock ? "#f0fdf4" : undefined}
+                color={a.isStock ? "#15803d" : undefined}
               />
             ))
           }
