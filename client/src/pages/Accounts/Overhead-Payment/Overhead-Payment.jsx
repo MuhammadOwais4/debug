@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = "https://debug-nxby.vercel.app";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 const http = {
   get: async (path) => {
@@ -145,9 +145,9 @@ export default function OverheadVoucher() {
     // ✅ Also load ACCRUED-EXPENSE liabilities for overhead account selection
     (async () => {
       try {
-        const res = await http.get("/api/chart-of-accounts/liabilities");
+        const res = await http.get("/api/liabilities");
         const list = res?.data ?? (Array.isArray(res) ? res : []);
-        const accrued = list.filter(l => l.type === "ACCRUED-EXPENSE");
+        const accrued = list.filter(l => l.type === "ACCRUED EXPENSE");
         setAccruedAccounts(accrued);
       } catch (_) { setAccruedAccounts([]); }
     })();
@@ -215,8 +215,7 @@ export default function OverheadVoucher() {
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
 
-    const accountObj = allAccounts.find(a=>(a.code||a._id)===selectedAsset) 
-      || accruedAccounts.find(a=>(a.code||a._id)===selectedAsset);
+    const accountObj = selectedAccountObj;
     const payload = {
       voucherDate:  date,
       description,
@@ -325,8 +324,8 @@ export default function OverheadVoucher() {
     const vno   = editMode ? editVoucherNumber : voucherNo;
     const dateStr = date ? new Date(date).toLocaleDateString("en-PK", { day:"2-digit", month:"long", year:"numeric" }) : "";
     const nowStr  = new Date().toLocaleString("en-PK");
-    const modeColor = mode === "Cash" ? "#15803d" : mode === "Accrued" ? "#7c3aed" : "#1d4ed8";
-    const modeBg    = mode === "Cash" ? "#dcfce7"  : mode === "Accrued" ? "#ede9fe" : "#dbeafe";
+    const modeColor = mode === "Cash" ? "#15803d" : "#1d4ed8";
+    const modeBg    = mode === "Cash" ? "#dcfce7"  : "#dbeafe";
     const totalFmt  = fmtNum(total);
 
     // Build lines rows using string concatenation — no nested template literals
@@ -416,7 +415,7 @@ export default function OverheadVoucher() {
 
       "<div class='info-section'>" +
         "<div class='info-row'><span class='info-label'>Payment Mode</span>" +
-          "<span class='info-val' style='color:" + modeColor + ";'>" + (mode === "Cash" ? "&#x1F4B5;" : mode === "Accrued" ? "&#x1F4CB;" : "&#x1F3E6;") + " " + mode + "</span></div>" +
+          "<span class='info-val' style='color:" + modeColor + ";'>" + (mode === "Cash" ? "&#x1F4B5;" : "&#x1F3E6;") + " " + mode + "</span></div>" +
         "<div class='info-row'><span class='info-label'>Account (CR)</span>" +
           "<span class='info-val'>" + (accountCode ? accountCode + " — " : "") + accountName + "</span></div>" +
         "<div class='info-row'><span class='info-label'>Overhead Account (DR)</span>" +
@@ -436,7 +435,7 @@ export default function OverheadVoucher() {
           "<td class='right' style='color:#9ca3af;'>—</td>" +
         "</tr>" +
         "<tr class='cr-row'>" +
-          "<td style='padding-left:20px;'><span class='badge-cr'>CR</span><b>" + accountName + "</b> <span style='color:#6b7280;font-size:10px;'>" + (mode === "Cash" ? "Cash" : mode === "Accrued" ? "Accrued Payable" : "Bank") + "</span></td>" +
+          "<td style='padding-left:20px;'><span class='badge-cr'>CR</span><b>" + accountName + "</b> <span style='color:#6b7280;font-size:10px;'>" + (mode === "Cash" ? "Cash" : "Bank") + "</span></td>" +
           "<td><span style='background:" + modeBg + ";color:" + modeColor + ";padding:1px 8px;border-radius:10px;font-size:10px;'>" + mode + "</span></td>" +
           "<td class='right' style='color:#9ca3af;'>—</td>" +
           "<td class='right cr-amt'>PKR " + totalFmt + "</td>" +
@@ -580,27 +579,24 @@ export default function OverheadVoucher() {
 
           <Field label="Account *" error={errors.selectedAsset}>
             <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)}
-              disabled={loadingAccounts}
-              style={{ ...S.input, cursor: loadingAccounts ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
-              <option value="">{loadingAccounts ? "Loading..." : paymentMode ? "-- Select Account --" : "-- Pehle Mode Select Karein --"}</option>
+              disabled={loadingAccounts || !paymentMode}
+              style={{ ...S.input, cursor:(loadingAccounts || !paymentMode) ? "not-allowed" : "pointer", ...(errors.selectedAsset ? S.inputErr : {}) }}>
+              <option value="">{loadingAccounts ? "Loading..." : "-- Select Account --"}</option>
               {paymentMode === "Cash" && cashAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[CASH] {a.code} - {a.name}</option>
               ))}
               {paymentMode === "Bank" && bankAccounts.map((a) => (
                 <option key={a.code || a._id} value={a.code || a._id}>[BANK] {a.code} - {a.name}</option>
               ))}
-              {paymentMode === "Accrued" && accruedAccounts.length > 0 && accruedAccounts.map((a) => (
+              {paymentMode === "Accrued" && accruedAccounts.map((a) => (
                 <option key={a._id} value={a.code || a._id}>[ACCRUED] {a.code} - {a.name}</option>
               ))}
-              {paymentMode === "Accrued" && accruedAccounts.length === 0 && (
-                <option disabled value="">(Koi ACCRUED-EXPENSE account nahi mila — LiabilitiesPage mein add karein)</option>
-              )}
             </select>
             {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
             {selectedAccountObj && (
               <div style={S.infoStrip}>
-                <span style={{ color: selectedAccountObj.type === "CASH ACCOUNT" ? "#15803d" : selectedAccountObj.type === "ACCRUED-EXPENSE" ? "#7c3aed" : "#1d4ed8", fontWeight:700 }}>
-                  {selectedAccountObj.type === "CASH ACCOUNT" ? "💵" : selectedAccountObj.type === "ACCRUED-EXPENSE" ? "📋" : "🏦"} {selectedAccountObj.type}
+                <span style={{ color: selectedAccountObj.type === "CASH ACCOUNT" ? "#15803d" : "#1d4ed8", fontWeight:700 }}>
+                  {selectedAccountObj.type === "CASH ACCOUNT" ? "💵" : "🏦"} {selectedAccountObj.type}
                 </span>
                 <span style={{ color:"#c8d3de" }}>|</span>
                 <span><b>Code:</b> {selectedAccountObj.code}</span>
@@ -662,7 +658,7 @@ export default function OverheadVoucher() {
                 <tr style={{ background:"#fff" }}>
                   <td style={{ padding:"5px 8px", paddingLeft:20 }}>
                     <span style={{ background:"#fee2e2", color:"#dc2626", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>CR</span>
-                    <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || accruedAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
+                    <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
                     <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>
                       ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : paymentMode === "Bank" ? "🏦 Bank balance kam hoga" : "📋 Accrued payable badhega"}
                     </span>
@@ -816,8 +812,8 @@ export default function OverheadVoucher() {
                       <td style={S.td(i)}>{fmtDate(v.voucherDate)}</td>
                       <td style={S.td(i)}>{v.accountName || v.account || "—"}</td>
                       <td style={S.tdC(i)}>
-                        <span style={{ fontWeight:600, color: v.paymentMode === "Cash" ? "#15803d" : v.paymentMode === "Accrued" ? "#7c3aed" : "#1d4ed8" }}>
-                          {v.paymentMode === "Cash" ? "💵" : v.paymentMode === "Accrued" ? "📋" : "🏦"} {v.paymentMode}
+                        <span style={{ fontWeight:600, color: v.paymentMode === "Cash" ? "#15803d" : "#1d4ed8" }}>
+                          {v.paymentMode === "Cash" ? "💵" : "🏦"} {v.paymentMode}
                         </span>
                       </td>
                       <td style={S.tdR(i)}>Rs. {fmtNum(v.totalAmount)}</td>
