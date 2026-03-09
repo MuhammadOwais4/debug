@@ -485,7 +485,7 @@ export default function OverheadVoucher() {
         "<table class='lines-table'><thead><tr>" +
           "<th style='width:36px;text-align:center;'>#</th>" +
           "<th>Category</th>" +
-          "<th>Lod No.</th>" +
+          "<th>Lot No.</th>" +
           "<th class='right' style='width:140px;'>Amount (PKR)</th>" +
         "</tr></thead><tbody>" + linesRows + "</tbody>" +
         "<tfoot><tr class='lines-total'>" +
@@ -777,7 +777,7 @@ export default function OverheadVoucher() {
                     value={line.note}
                     onChange={(e) => updateLine(line.id, "note", e.target.value)} 
                     style={{ ...S.input, ...(errors[`note_${idx}`] ? S.inputErr : {}) }} />
-                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lod No. required</span>}
+                  {errors[`note_${idx}`] && <span style={S.errorMsg}>⚠ Lot No. required</span>}
                 </div>
                 <button disabled={lines.length === 1} onClick={() => removeLine(line.id)}
                   style={{ ...S.removeBtn, opacity: lines.length === 1 ? 0.3 : 1 }}>×</button>
@@ -834,7 +834,7 @@ export default function OverheadVoucher() {
                     <th style={S.th}>Account</th>
                     <th style={S.thC}>Mode</th>
                     <th style={S.thR}>Total</th>
-                    <th style={S.th}>Lod No.</th>
+                    <th style={S.th}>Lot No.</th>
                     <th style={S.thC}>Status</th>
                     <th style={S.thC}>Actions</th>
                   </tr>
