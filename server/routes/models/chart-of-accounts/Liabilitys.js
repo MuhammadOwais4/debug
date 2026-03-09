@@ -16,7 +16,7 @@ const liabilitySchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["PAYABLES"],
+      enum: ["PAYABLES","ACCRUED-EXPENSE", ],
       default: "PAYABLES",
     },
     parentAccount: {
