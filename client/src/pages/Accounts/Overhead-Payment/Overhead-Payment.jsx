@@ -713,10 +713,7 @@ export default function OverheadVoucher() {
               </tbody>
               <tfoot>
                 <tr style={{ background:"#f9fafb", borderTop:"1px solid #86efac" }}>
-                  <td colSpan={2} style={{ padding:"4px 8px", fontSize:10, color:"#6b7280", fontStyle:"italic" }}>
-                    ✅ Double entry balanced
-                  </td>
-                  <td style={{ padding:"4px 8px", textAlign:"right", fontWeight:700, fontSize:11, color:"#1d4ed8", fontFamily:"monospace" }}>
+                <td style={{ padding:"4px 8px", textAlign:"right", fontWeight:700, fontSize:11, color:"#1d4ed8", fontFamily:"monospace" }}>
                     PKR {fmtNum(total||0)}
                   </td>
                   <td style={{ padding:"4px 8px", textAlign:"right", fontWeight:700, fontSize:11, color:"#dc2626", fontFamily:"monospace" }}>
