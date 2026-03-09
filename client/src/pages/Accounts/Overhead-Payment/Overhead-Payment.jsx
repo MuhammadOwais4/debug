@@ -641,10 +641,8 @@ export default function OverheadVoucher() {
                   <td style={{ padding:"5px 8px" }}>
                     <span style={{ background:"#dbeafe", color:"#1d4ed8", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>DR</span>
                     <b>
-                      <span>Overhead Expenses</span>
-                      <span style={{ color:"#6b7280", fontSize:10, marginLeft:4 }}>(OHV-EXP)</span>
+                   
                     </b>
-                    <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>← Expense increase hogi</span>
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"center" }}>
                     <span style={{ background:"#dbeafe", color:"#1d4ed8", fontSize:10, borderRadius:10, padding:"1px 8px" }}>EXPENSE</span>
@@ -660,7 +658,7 @@ export default function OverheadVoucher() {
                     <span style={{ background:"#fee2e2", color:"#dc2626", fontWeight:700, borderRadius:3, padding:"1px 6px", marginRight:6, fontSize:10 }}>CR</span>
                     <b>{allAccounts.find(a=>(a.code||a._id)===selectedAsset)?.name || selectedAsset || "—"}</b>
                     <span style={{ color:"#6b7280", marginLeft:6, fontSize:10 }}>
-                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : paymentMode === "Bank" ? "🏦 Bank balance kam hoga" : "📋 Accrued payable badhega"}
+                      ← {paymentMode === "Cash" ? "💵 Cash kam hoga" : paymentMode === "Bank" }
                     </span>
                   </td>
                   <td style={{ padding:"5px 8px", textAlign:"center" }}>
