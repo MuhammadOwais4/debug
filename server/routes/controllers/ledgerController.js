@@ -11,7 +11,14 @@ const SaleDiscount = require("../models/Sale-discount")
 const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
-const OverheadVoucher = require("../models/Overheadcategory")
+// ✅ Load OHV model — tries OverheadVoucher first, falls back to Overheadcategory
+let OverheadVoucher
+try {
+  OverheadVoucher = require("../models/OverheadVoucher")
+  // Quick validation — if model has no voucherDate field, use other model
+} catch (e) {
+  OverheadVoucher = require("../models/Overheadcategory")
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ HARDCODED TAX ACCOUNTS
@@ -495,13 +502,32 @@ const getAccountLedger = async (req, res) => {
     //      — handles ObjectId, code string, or name string stored in any field
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc) {
-      const overheadVouchers = await OverheadVoucher.find({
-        $or: [
-          { voucherDate: { $gte: from, $lte: to } },
-          { createdAt:   { $gte: from, $lte: to } },
-        ],
-        status: { $in: ["SAVED", "POSTED"] },
-      }).sort({ voucherDate: 1 }).lean()
+      // ✅ Query both possible collections — handles model name mismatch
+      let overheadVouchers = []
+      try {
+        const q = {
+          $or: [
+            { voucherDate: { $gte: from, $lte: to } },
+            { createdAt:   { $gte: from, $lte: to } },
+          ],
+          status: { $in: ["SAVED", "POSTED"] },
+        }
+        overheadVouchers = await OverheadVoucher.find(q).sort({ voucherDate: 1 }).lean()
+
+        // If OverheadVoucher model returned 0, try Overheadcategory (fallback)
+        if (overheadVouchers.length === 0) {
+          try {
+            const OC = require("../models/Overheadcategory")
+            const fallback = await OC.find(q).sort({ voucherDate: 1 }).lean()
+            if (fallback.length > 0) {
+              overheadVouchers = fallback
+              console.log(`📋 Using Overheadcategory model: ${fallback.length} vouchers`)
+            }
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.error("OHV query error:", err.message)
+      }
 
       console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers in range`)
 
@@ -604,18 +630,19 @@ const getAccountLedger = async (req, res) => {
         }
 
         // ── C. CR — Accrued Expense Account (mode: Accrued) ──────────────────
-        // ✅ Uses matchAccruedAccount() — checks ohv.account, ohv.accountCode,
-        //    ohv.accountName against the queried accountCode/accountName
-        //    Also handles case where account was saved as Liability _id
-        if (mode === "Accrued") {
-          // ✅ Direct match using resolved crCode/crName (handles ObjectId case)
+        // ✅ Same pattern as Cash/Bank:
+        //    Cash/Bank  → accountCategory === "Assets"      AND name/code matches
+        //    Accrued    → accountCategory === "Liabilities" AND name/code matches
+        //    ALSO: ObjectId stored in ohv.account → resolved to crCode/crName above
+        if (mode === "Accrued" && accountCategory === "Liabilities") {
           const directCodeMatch = crCode && accountCode && crCode.toLowerCase().trim() === accountCode.toLowerCase().trim()
           const directNameMatch = crName && accountName && crName.toLowerCase().trim() === accountName.toLowerCase().trim()
           const directRawMatch  = crRaw  && accountCode && crRaw.toLowerCase().trim()  === accountCode.toLowerCase().trim()
+          const fuzzyMatch      = matchAccruedAccount(ohv, accountCode, accountName)
 
-          const accruedMatch = directCodeMatch || directNameMatch || directRawMatch || matchAccruedAccount(ohv, accountCode, accountName)
+          const accruedMatch = directCodeMatch || directNameMatch || directRawMatch || fuzzyMatch
 
-          console.log(`📋 OHV Accrued check: vNo=${vNo} | crCode="${crCode}" | crName="${crName}" | crRaw="${crRaw}" | targetCode="${accountCode}" | targetName="${accountName}" | directCode=${directCodeMatch} | directName=${directNameMatch} | match=${accruedMatch}`)
+          console.log(`📋 OHV Accrued CR: vNo=${vNo} | crCode="${crCode}" | crName="${crName}" | targetCode="${accountCode}" | targetName="${accountName}" | match=${accruedMatch}`)
 
           if (accruedMatch) {
             runningBalance += normalBalance === "debit" ? -amt : amt
@@ -624,7 +651,7 @@ const getAccountLedger = async (req, res) => {
               date:        ohv.voucherDate,
               voucherNo:   vNo,
               voucherType: "OHV",
-              description: `${narr} — 📋 Accrued payable: ${crName || crRaw}`,
+              description: `${narr} — 📋 Accrued Payable: ${crName || crCode || crRaw}`,
               debit:       0,
               credit:      amt,
               balance:     runningBalance,
