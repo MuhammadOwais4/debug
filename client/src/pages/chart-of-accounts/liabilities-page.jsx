@@ -178,7 +178,7 @@ function LiabilitiesPage({ onBack }) {
                 disabled={loading}
               >
                 <option value="PAYABLES">Payables</option>
-                <option value="ACCRUED-EXPENSE">Accrued Expense</option>
+                <option value="Accurued-Payment">Accurued-Payment</option>
               </select>
             </div>
           </div>

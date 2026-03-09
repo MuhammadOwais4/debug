@@ -123,7 +123,7 @@ export default function OverheadVoucher() {
 
   // ── API data ──────────────────────────────────────────────────────────────
   const [allAccounts,     setAllAccounts]     = useState([]);
-  const [accruedAccounts, setAccruedAccounts] = useState([]);  // ACCRUED-EXPENSE from Liabilities
+  const [accruedAccounts, setAccruedAccounts] = useState([]);  // Accurued-Payment from Liabilities
   const [categories,      setCategories]      = useState(FALLBACK_CATEGORIES);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsError,   setAccountsError]   = useState("");
@@ -139,8 +139,8 @@ export default function OverheadVoucher() {
         const cashBank = list.filter((a) => a.type === "CASH ACCOUNT" || a.type === "BANK ACCOUNT");
         if (!cashBank.length && list.length)
           setAccountsError(`${list.length} accounts mein koi CASH/BANK nahi. Type: "${list[0]?.type}"`);
-        // ✅ Also extract ACCRUED-EXPENSE from allAccounts as fallback
-        const accruedFromLedger = list.filter((a) => a.type === "ACCRUED-EXPENSE");
+        // ✅ Also extract Accurued-Payment from allAccounts as fallback
+        const accruedFromLedger = list.filter((a) => a.type === "Accurued-Payment");
         if (accruedFromLedger.length > 0) {
           console.log("📋 Accrued from ledger accounts:", accruedFromLedger.length);
           setAccruedAccounts(prev => prev.length > 0 ? prev : accruedFromLedger);
@@ -148,7 +148,7 @@ export default function OverheadVoucher() {
       } catch (err) { setAccountsError(err.message); }
       finally { setLoadingAccounts(false); }
     })();
-    // ✅ Load ACCRUED-EXPENSE liabilities — try multiple routes
+    // ✅ Load Accurued-Payment liabilities — try multiple routes
     (async () => {
       try {
         // Try primary route first
@@ -162,11 +162,11 @@ export default function OverheadVoucher() {
             const res2 = await http.get("/api/liabilities");
             list = res2?.data ?? (Array.isArray(res2) ? res2 : []);
           } catch (_2) {
-            // fallback: extract from allAccounts already loaded (type ACCRUED-EXPENSE)
+            // fallback: extract from allAccounts already loaded (type Accurued-Payment)
             list = [];
           }
         }
-        const accrued = list.filter(l => l.type === "ACCRUED-EXPENSE");
+        const accrued = list.filter(l => l.type === "Accurued-Payment");
         console.log("📋 Accrued accounts loaded:", accrued.length, accrued.map(a => a.name));
         setAccruedAccounts(accrued);
       } catch (err) { 
@@ -220,7 +220,7 @@ export default function OverheadVoucher() {
   function validate() {
     const e = {};
     if (!date)          e.date = true;
-    // paymentMode optional if ACCRUED-EXPENSE account selected
+    // paymentMode optional if Accurued-Payment account selected
     const isAccruedSelected = accruedAccounts.some(a => (a.code||a._id) === selectedAsset);
     if (!paymentMode && !isAccruedSelected) e.paymentMode = true;
     if (!selectedAsset)  e.selectedAsset  = true;
@@ -256,7 +256,7 @@ export default function OverheadVoucher() {
       paymentMode,
       account:     selectedAsset,
       accountName: resolvedName,
-      accountType: accountObj?.type || (paymentMode === "Accrued" ? "ACCRUED-EXPENSE" : ""),
+      accountType: accountObj?.type || (paymentMode === "Accrued" ? "Accurued-Payment" : ""),
       accountCode: resolvedCode,
       // ✅ Always store overheadAccount — fallback to OHV-EXP (catch-all)
       overheadAccount:     allAccounts.find(a => (a.code||a.name||a._id)===overheadAcct)?.code || overheadAcct || "OHV-EXP",
@@ -626,14 +626,14 @@ export default function OverheadVoucher() {
                 <option key={a._id} value={a._id}>[ACCRUED] {a.code} - {a.name}</option>
               ))}
               {paymentMode === "Accrued" && accruedAccounts.length === 0 && (
-                <option disabled value="">(Koi ACCRUED-EXPENSE account nahi mila — LiabilitiesPage mein add karein)</option>
+                <></>
               )}
             </select>
             {accountsError && <div style={S.errorBox}>⚠️ {accountsError}</div>}
             {(selectedAccountObj || (paymentMode === "Accrued" && selectedAsset)) && (
               <div style={S.infoStrip}>
-                <span style={{ color: selectedAccountObj?.type === "CASH ACCOUNT" ? "#15803d" : selectedAccountObj?.type === "ACCRUED-EXPENSE" ? "#7c3aed" : "#1d4ed8", fontWeight:700 }}>
-                  {selectedAccountObj?.type === "CASH ACCOUNT" ? "💵" : selectedAccountObj?.type === "ACCRUED-EXPENSE" ? "📋" : "🏦"} {selectedAccountObj?.type || "ACCRUED-EXPENSE"}
+                <span style={{ color: selectedAccountObj?.type === "CASH ACCOUNT" ? "#15803d" : selectedAccountObj?.type === "Accurued-Payment" ? "#7c3aed" : "#1d4ed8", fontWeight:700 }}>
+                  {selectedAccountObj?.type === "CASH ACCOUNT" ? "💵" : selectedAccountObj?.type === "Accurued-Payment" ? "📋" : "🏦"} {selectedAccountObj?.type || "Accurued-Payment"}
                 </span>
                 <span style={{ color:"#c8d3de" }}>|</span>
                 <span><b>Code:</b> {selectedAccountObj.code}</span>
