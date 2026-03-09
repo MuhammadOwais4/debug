@@ -248,9 +248,6 @@ function ProfitLoss() {
               <div style={{ ...row(true), ...dividerRow }}>
                 <span style={{ fontSize: "15px", color: "#000" }}>
                   Less: Closing Stock
-                  <span style={{ fontSize: "11px", color: "#6b7280", marginLeft: "8px" }}>
-                    (Balance Qty × Purchase Rate)
-                  </span>
                 </span>
                 <span style={mono}>{fmt(closingStock)}</span>
               </div>
