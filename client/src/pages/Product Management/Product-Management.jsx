@@ -94,10 +94,12 @@ const ProductManagementDashboard = () => {
         });
       });
       setOhvSummary({
-        count: list.length,
-        total: list.reduce((s,v) => s+(v.totalAmount||0), 0),
-        cash:  list.filter(v=>v.paymentMode==='Cash').reduce((s,v) => s+(v.totalAmount||0), 0),
-        bank:  list.filter(v=>v.paymentMode==='Bank').reduce((s,v) => s+(v.totalAmount||0), 0),
+        count:   list.length,
+        total:   list.reduce((s,v) => s+(v.totalAmount||0), 0),
+        cash:    list.filter(v=>v.paymentMode==='Cash').reduce((s,v) => s+(v.totalAmount||0), 0),
+        bank:    list.filter(v=>v.paymentMode==='Bank').reduce((s,v) => s+(v.totalAmount||0), 0),
+        accrued: list.filter(v=>v.paymentMode==='Accrued').reduce((s,v) => s+(v.totalAmount||0), 0),
+        accruedCount: list.filter(v=>v.paymentMode==='Accrued').length,
         lodNumbers, // ✅ All unique Lod numbers
       });
     }).catch(() => {});
@@ -160,7 +162,7 @@ const ProductManagementDashboard = () => {
   });
   const ohvTotal = filteredOhv.reduce((s,v) => s + (v.totalAmount||0), 0);
 
-  const BADGE = { Cash:'bg-green-100 text-green-800', Bank:'bg-blue-100 text-blue-800', SAVED:'bg-emerald-100 text-emerald-800', POSTED:'bg-blue-100 text-blue-700', DRAFT:'bg-yellow-100 text-yellow-800', CANCELLED:'bg-red-100 text-red-800' };
+  const BADGE = { Cash:'bg-green-100 text-green-800', Bank:'bg-blue-100 text-blue-800', Accrued:'bg-purple-100 text-purple-800', SAVED:'bg-emerald-100 text-emerald-800', POSTED:'bg-blue-100 text-blue-700', DRAFT:'bg-yellow-100 text-yellow-800', CANCELLED:'bg-red-100 text-red-800' };
 
   const CAT_COLORS = { labour:'bg-blue-100 text-blue-800', transport:'bg-green-100 text-green-800', packaging:'bg-purple-100 text-purple-800', customs:'bg-red-100 text-red-800', insurance:'bg-yellow-100 text-yellow-800', loading:'bg-orange-100 text-orange-800', other:'bg-gray-100 text-gray-800' };
 
@@ -220,9 +222,10 @@ const ProductManagementDashboard = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
                 { label:'Total Vouchers', value: ohvList.length, color:'text-slate-700', bg:'bg-white' },
-                { label:'Total Amount',   value: `Rs. ${fmtNum(ohvList.reduce((s,v)=>s+(v.totalAmount||0),0))}`, color:'text-amber-700', bg:'bg-amber-50' },
-                { label:'Cash Payments',  value: `Rs. ${fmtNum(ohvList.filter(v=>v.paymentMode==='Cash').reduce((s,v)=>s+(v.totalAmount||0),0))}`, color:'text-green-700', bg:'bg-green-50' },
-                { label:'Bank Payments',  value: `Rs. ${fmtNum(ohvList.filter(v=>v.paymentMode==='Bank').reduce((s,v)=>s+(v.totalAmount||0),0))}`, color:'text-blue-700', bg:'bg-blue-50' },
+                { label:'Total Amount',     value: `Rs. ${fmtNum(ohvList.reduce((s,v)=>s+(v.totalAmount||0),0))}`,                                            color:'text-amber-700',  bg:'bg-amber-50'  },
+                { label:'💵 Cash',          value: `Rs. ${fmtNum(ohvList.filter(v=>v.paymentMode==='Cash').reduce((s,v)=>s+(v.totalAmount||0),0))}`,           color:'text-green-700',  bg:'bg-green-50'  },
+                { label:'🏦 Bank',          value: `Rs. ${fmtNum(ohvList.filter(v=>v.paymentMode==='Bank').reduce((s,v)=>s+(v.totalAmount||0),0))}`,           color:'text-blue-700',   bg:'bg-blue-50'   },
+                { label:'📋 Accrued',       value: `Rs. ${fmtNum(ohvList.filter(v=>v.paymentMode==='Accrued').reduce((s,v)=>s+(v.totalAmount||0),0))}`,        color:'text-purple-700', bg:'bg-purple-50' },
               ].map(s => (
                 <div key={s.label} className={`${s.bg} rounded-xl p-4 shadow-sm border border-slate-100`}>
                   <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">{s.label}</div>
@@ -240,10 +243,10 @@ const ProductManagementDashboard = () => {
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm" />
               </div>
               <div className="flex gap-2">
-                {['All','Cash','Bank'].map(m => (
+                {['All','Cash','Bank','Accrued'].map(m => (
                   <button key={m} onClick={() => setOhvMode(m)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${ohvMode===m ? (m==='Cash'?'bg-green-500 text-white':m==='Bank'?'bg-blue-500 text-white':'bg-amber-500 text-white') : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                    {m==='Cash'?'💵':m==='Bank'?'🏦':'📋'} {m}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${ohvMode===m ? (m==='Cash'?'bg-green-500 text-white':m==='Bank'?'bg-blue-500 text-white':m==='Accrued'?'bg-purple-500 text-white':'bg-amber-500 text-white') : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    {m==='Cash'?'💵':m==='Bank'?'🏦':m==='Accrued'?'📋':'📊'} {m}
                   </button>
                 ))}
               </div>
@@ -273,7 +276,7 @@ const ProductManagementDashboard = () => {
                         </div>
                         <div className="flex flex-col gap-1 items-end">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${BADGE[v.paymentMode]||'bg-gray-100 text-gray-700'}`}>
-                            {v.paymentMode==='Cash'?'💵':'🏦'} {v.paymentMode}
+                            {v.paymentMode==='Cash'?'💵':v.paymentMode==='Accrued'?'📋':'🏦'} {v.paymentMode}
                           </span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${BADGE[v.status]||'bg-gray-100 text-gray-700'}`}>
                             {v.status}
@@ -306,7 +309,7 @@ const ProductManagementDashboard = () => {
                               </div>
                               {line.note && (
                                 <div className="mt-1 flex items-center gap-1">
-                                  <span className="text-xs text-slate-400">Lot No:</span>
+                                  <span className="text-xs text-slate-400">Lod No:</span>
                                   <span className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{line.note}</span>
                                 </div>
                               )}
@@ -490,11 +493,17 @@ const ProductManagementDashboard = () => {
                                 View →
                               </button>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 gap-2 mb-2">
                               <div className="bg-white rounded-lg px-2 py-1.5 text-center shadow-sm border border-amber-100">
                                 <div className="text-xs text-slate-400 mb-0.5">Vouchers</div>
                                 <div className="text-sm font-bold text-slate-700">{ohvSummary.count}</div>
                               </div>
+                              <div className="bg-white rounded-lg px-2 py-1.5 text-center shadow-sm border border-amber-100">
+                                <div className="text-xs text-slate-400 mb-0.5">Total</div>
+                                <div className="text-xs font-bold text-amber-700">Rs.{fmtNum(ohvSummary.total)}</div>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
                               <div className="bg-white rounded-lg px-2 py-1.5 text-center shadow-sm border border-green-100">
                                 <div className="text-xs text-slate-400 mb-0.5">💵 Cash</div>
                                 <div className="text-xs font-bold text-green-700">Rs.{fmtNum(ohvSummary.cash)}</div>
@@ -503,11 +512,15 @@ const ProductManagementDashboard = () => {
                                 <div className="text-xs text-slate-400 mb-0.5">🏦 Bank</div>
                                 <div className="text-xs font-bold text-blue-700">Rs.{fmtNum(ohvSummary.bank)}</div>
                               </div>
+                              <div className="bg-white rounded-lg px-2 py-1.5 text-center shadow-sm border border-purple-100">
+                                <div className="text-xs text-slate-400 mb-0.5">📋 Accrued</div>
+                                <div className="text-xs font-bold text-purple-700">Rs.{fmtNum(ohvSummary.accrued||0)}</div>
+                              </div>
                             </div>
                             {/* Lod Numbers from all voucher lines */}
                             {ohvSummary.lodNumbers?.length > 0 && (
                               <div className="mt-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-1.5 font-semibold">Lot No.</div>
+                                <div className="text-xs text-slate-500 mb-1.5 font-semibold">Lod No.</div>
                                 <div className="flex flex-wrap gap-1">
                                   {ohvSummary.lodNumbers.map((lod, li) => (
                                     <span key={li} className="text-xs font-bold text-amber-700 font-mono bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
