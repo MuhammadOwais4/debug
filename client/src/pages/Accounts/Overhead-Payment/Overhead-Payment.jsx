@@ -147,7 +147,7 @@ export default function OverheadVoucher() {
       try {
         const res = await http.get("/api/chart-of-accounts/liabilities");
         const list = res?.data ?? (Array.isArray(res) ? res : []);
-        const accrued = list.filter(l => l.type === "ACCRUED EXPENSE");
+        const accrued = list.filter(l => l.type === "ACCRUED-EXPENSE");
         setAccruedAccounts(accrued);
       } catch (_) { setAccruedAccounts([]); }
     })();
