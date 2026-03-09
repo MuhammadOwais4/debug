@@ -496,16 +496,50 @@ const getAccountLedger = async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc) {
       const overheadVouchers = await OverheadVoucher.find({
-        voucherDate: { $gte: from, $lte: to },
-        status:      { $in: ["SAVED", "POSTED"] },
+        $or: [
+          { voucherDate: { $gte: from, $lte: to } },
+          { createdAt:   { $gte: from, $lte: to } },
+        ],
+        status: { $in: ["SAVED", "POSTED"] },
       }).sort({ voucherDate: 1 }).lean()
 
       console.log(`✅ Found ${overheadVouchers.length} Overhead Vouchers in range`)
 
+      // ✅ Pre-build a map: for Accrued vouchers where accountCode is empty,
+      //    resolve the ObjectId to code+name from Liability collection
+      const accruedOHVs = overheadVouchers.filter(v => (v.paymentMode || "Cash") === "Accrued")
+      const resolveMap  = {}   // _id.toString() -> { code, name }
+
+      if (accruedOHVs.length > 0) {
+        // Collect all unique account values that look like ObjectIds (24 hex chars)
+        const objectIdValues = [...new Set(
+          accruedOHVs
+            .map(v => (v.account || "").toString().trim())
+            .filter(s => /^[a-f0-9]{24}$/i.test(s))
+        )]
+
+        if (objectIdValues.length > 0) {
+          try {
+            const liabs = await Liability.find({ _id: { $in: objectIdValues } })
+                                         .select("_id code name type").lean()
+            liabs.forEach(l => {
+              resolveMap[l._id.toString()] = { code: l.code || "", name: l.name || "" }
+            })
+            console.log(`📋 Resolved ${liabs.length} Accrued ObjectIds from Liability:`, liabs.map(l => l.name))
+          } catch (e) {
+            console.error("Liability resolve error:", e.message)
+          }
+        }
+      }
+
       overheadVouchers.forEach((ohv) => {
-        const crName  = ohv.accountName || ""
-        const crCode  = ohv.accountCode || ""
-        const crRaw   = (ohv.account || "").toString()   // raw value — could be ObjectId, code, or name
+        const raw     = (ohv.account || "").toString().trim()
+        const resolved = resolveMap[raw]   // if account was ObjectId, we now have { code, name }
+
+        // ✅ Use resolved values if available — otherwise use what was saved
+        const crName  = resolved?.name || ohv.accountName || ""
+        const crCode  = resolved?.code || ohv.accountCode || ""
+        const crRaw   = raw   // raw value — could be ObjectId, code, or name
         const mode    = ohv.paymentMode || "Cash"
         const vNo     = ohv.voucherNumber || "OHV"
         const amt     = parseFloat(ohv.totalAmount || 0)
@@ -574,9 +608,14 @@ const getAccountLedger = async (req, res) => {
         //    ohv.accountName against the queried accountCode/accountName
         //    Also handles case where account was saved as Liability _id
         if (mode === "Accrued") {
-          const accruedMatch = matchAccruedAccount(ohv, accountCode, accountName)
+          // ✅ Direct match using resolved crCode/crName (handles ObjectId case)
+          const directCodeMatch = crCode && accountCode && crCode.toLowerCase().trim() === accountCode.toLowerCase().trim()
+          const directNameMatch = crName && accountName && crName.toLowerCase().trim() === accountName.toLowerCase().trim()
+          const directRawMatch  = crRaw  && accountCode && crRaw.toLowerCase().trim()  === accountCode.toLowerCase().trim()
 
-          console.log(`📋 OHV Accrued check: vNo=${vNo} | crCode="${crCode}" | crName="${crName}" | crRaw="${crRaw}" | targetCode="${accountCode}" | targetName="${accountName}" | match=${accruedMatch}`)
+          const accruedMatch = directCodeMatch || directNameMatch || directRawMatch || matchAccruedAccount(ohv, accountCode, accountName)
+
+          console.log(`📋 OHV Accrued check: vNo=${vNo} | crCode="${crCode}" | crName="${crName}" | crRaw="${crRaw}" | targetCode="${accountCode}" | targetName="${accountName}" | directCode=${directCodeMatch} | directName=${directNameMatch} | match=${accruedMatch}`)
 
           if (accruedMatch) {
             runningBalance += normalBalance === "debit" ? -amt : amt
