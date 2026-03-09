@@ -26,10 +26,48 @@ function ProfitLoss() {
     try {
       setLoading(true)
       setError(null)
-      const res  = await fetch(`${API}/profit-loss?fromDate=${startDate}&toDate=${endDate}`)
-      const json = await res.json()
+
+      // ── 1. P&L + OHV + Products — parallel fetch ──────────────────────
+      const [plRes, ohvRes, prodRes] = await Promise.all([
+        fetch(`${API}/profit-loss?fromDate=${startDate}&toDate=${endDate}`),
+        fetch(`${API}/overhead-voucher`).catch(() => null),
+        fetch(`${API}/products`).catch(() => null),
+      ])
+
+      const json = await plRes.json()
       if (!json.success) throw new Error(json.message || "Failed")
-      setData(json.data)
+
+      // ── 2. Overhead total (date-filtered) ─────────────────────────────
+      let ohvTotal = 0
+      let ohvList  = []
+      if (ohvRes && ohvRes.ok) {
+        const ohvJson = await ohvRes.json()
+        ohvList = ohvJson?.data ?? (Array.isArray(ohvJson) ? ohvJson : [])
+        const from = new Date(startDate + "T00:00:00")
+        const to   = new Date(endDate   + "T23:59:59")
+        ohvList = ohvList.filter(v => {
+          const d = new Date(v.voucherDate || v.createdAt)
+          return d >= from && d <= to && (v.status === "SAVED" || v.status === "POSTED")
+        })
+        ohvTotal = ohvList.reduce((s, v) => s + (v.totalAmount || 0), 0)
+      }
+
+      // ── 3. Closing Stock = Balance Qty × Purchase Rate ─────────────────
+      let closingStockCalc = json.data.cogs.closingStock  // fallback: backend value
+      if (prodRes && prodRes.ok) {
+        const prodJson = await prodRes.json()
+        const products = prodJson?.data ?? (Array.isArray(prodJson) ? prodJson : [])
+        if (products.length > 0) {
+          const calc = products.reduce((sum, p) => {
+            const qty  = p.balanceQty   ?? p.balance_qty  ?? p.balance ?? p.qty   ?? 0
+            const rate = p.purchaseRate ?? p.purchase_rate ?? p.rate   ?? p.price  ?? 0
+            return sum + (Number(qty) * Number(rate))
+          }, 0)
+          if (calc > 0) closingStockCalc = calc
+        }
+      }
+
+      setData({ ...json.data, ohvTotal, ohvList, closingStockCalc })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -38,7 +76,7 @@ function ProfitLoss() {
   }
 
   const fmt = (v) => new Intl.NumberFormat("en-PK", {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(v || 0)
 
   const fmtRange = () => {
@@ -46,23 +84,23 @@ function ProfitLoss() {
     return `From ${new Date(startDate).toLocaleDateString("en-GB")} to ${new Date(endDate).toLocaleDateString("en-GB")}`
   }
 
-  // ─── Shared styles ─────────────────────────────────────
+  // ─── Shared styles ─────────────────────────────────────────────────────────
   const sectionHeader = {
     backgroundColor: "#3f64a8", color: "white", fontWeight: "bold",
-    padding: "10px 15px", fontSize: "16px", marginTop: "30px"
+    padding: "10px 15px", fontSize: "16px", marginTop: "30px",
   }
   const row = (indent) => ({
     display: "flex", justifyContent: "space-between",
     padding: "8px 0", alignItems: "center",
-    paddingLeft: indent ? "20px" : "0"
+    paddingLeft: indent ? "20px" : "0",
   })
-  const mono = { fontSize: "15px", color: "#000", fontFamily: "monospace", minWidth: "130px", textAlign: "right" }
+  const mono       = { fontSize: "15px", color: "#000", fontFamily: "monospace", minWidth: "130px", textAlign: "right" }
   const dividerRow = { borderBottom: "1px solid #000", paddingBottom: "12px" }
-  const boldRow = { fontSize: "16px", fontWeight: "bold", color: "#000" }
-  const totalRow = {
+  const boldRow    = { fontSize: "16px", fontWeight: "bold", color: "#000" }
+  const totalRow   = {
     display: "flex", justifyContent: "space-between",
     padding: "12px 0 8px 0", alignItems: "center",
-    marginTop: "8px", borderTop: "1px solid #000"
+    marginTop: "8px", borderTop: "1px solid #000",
   }
 
   if (loading) return (
@@ -114,188 +152,233 @@ function ProfitLoss() {
         <div style={{ textAlign: "center", padding: "40px", color: "#999" }}>
           Select dates and click Load Data
         </div>
-      ) : (
-        <>
-          {/* ═══ REVENUE ═══ */}
-          <div style={{ ...sectionHeader, marginTop: "0" }}>Revenue</div>
-          <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-            <div style={row(false)}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Sales</span>
-              <span style={mono}>{fmt(data.revenue.totalSales)}</span>
-            </div>
-            <div style={{ ...row(true) }}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Less: Sale Return</span>
-              <span style={mono}>{fmt(data.revenue.totalSaleReturns)}</span>
-            </div>
-            <div style={{ ...row(true), ...dividerRow }}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Less: Sales Discount</span>
-              <span style={mono}>{fmt(data.revenue.totalSaleDiscounts)}</span>
-            </div>
-            <div style={{ ...row(false), paddingTop: "12px" }}>
-              <span style={boldRow}>Total Revenues (Net)</span>
-              <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.revenue.netRevenue)}</span>
-            </div>
-          </div>
+      ) : (() => {
 
-          {/* ═══ COST OF GOODS SOLD ═══ */}
-          <div style={sectionHeader}>Cost of Goods Sold</div>
-          <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-            <div style={row(true)}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Opening Stock</span>
-              <span style={mono}>{fmt(data.cogs.openingStock)}</span>
-            </div>
-            <div style={row(false)}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Add: Purchases</span>
-              <span style={mono}>{fmt(data.cogs.totalPurchases)}</span>
-            </div>
+        // ── All derived numbers in one place ────────────────────────────
+        const ohvTotal      = data.ohvTotal        || 0
+        const closingStock  = data.closingStockCalc ?? data.cogs.closingStock ?? 0   // ✅ Balance Qty × Rate
+        const cogsAvailable = (data.cogs.cogsAvailableForSale || 0) + ohvTotal       // ✅ overhead included
+        const cogsTotal     = cogsAvailable - closingStock                             // ✅ correct COGS
+        const grossProfit   = (data.revenue.netRevenue || 0) - cogsTotal
+        const netProfit     = grossProfit - (data.expenses.totalExpenses || 0) + (data.otherIncome.totalOtherIncome || 0)
 
-            {/* Purchase breakdown */}
-            {data.cogs.purchaseBreakdown.length > 0 && data.cogs.purchaseBreakdown.map((p, i) => (
-              <div key={i} style={{ ...row(true), paddingLeft: "40px" }}>
-                <span style={{ fontSize: "13px", color: "#555" }}>{p.name || p.code}</span>
-                <span style={{ ...mono, fontSize: "13px", color: "#555" }}>{fmt(p.amount)}</span>
+        return (
+          <>
+            {/* ═══ REVENUE ═══ */}
+            <div style={{ ...sectionHeader, marginTop: "0" }}>Revenue</div>
+            <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
+              <div style={row(false)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Sales</span>
+                <span style={mono}>{fmt(data.revenue.totalSales)}</span>
               </div>
-            ))}
-
-            <div style={row(true)}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Return</span>
-              <span style={mono}>{fmt(data.cogs.totalPurchaseReturns)}</span>
-            </div>
-            <div style={{ ...row(true), ...dividerRow }}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Discount</span>
-              <span style={mono}>{fmt(data.cogs.totalPurchaseDiscounts)}</span>
-            </div>
-            <div style={{ ...row(true), paddingTop: "12px" }}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Cost of Goods Available for Sale</span>
-              <span style={mono}>{fmt(data.cogs.cogsAvailableForSale)}</span>
-            </div>
-            <div style={{ ...row(true), ...dividerRow }}>
-              <span style={{ fontSize: "15px", color: "#000" }}>Less: Closing Stock</span>
-              <span style={mono}>{fmt(data.cogs.closingStock)}</span>
-            </div>
-            <div style={{ ...row(false), paddingTop: "12px" }}>
-              <span style={boldRow}>Cost of Goods Sold</span>
-              <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.cogs.totalCOGS)}</span>
+              <div style={row(true)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Less: Sale Return</span>
+                <span style={mono}>{fmt(data.revenue.totalSaleReturns)}</span>
+              </div>
+              <div style={{ ...row(true), ...dividerRow }}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Less: Sales Discount</span>
+                <span style={mono}>{fmt(data.revenue.totalSaleDiscounts)}</span>
+              </div>
+              <div style={{ ...row(false), paddingTop: "12px" }}>
+                <span style={boldRow}>Total Revenues (Net)</span>
+                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.revenue.netRevenue)}</span>
+              </div>
             </div>
 
-            {/* Gross Profit */}
-            <div style={{
-              display: "flex", justifyContent: "space-between", padding: "12px 0 8px 0",
-              marginTop: "12px", borderTop: "2px solid #000", alignItems: "center",
-              backgroundColor: "#f0f0f0"
-            }}>
-              <span style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>Gross Profit (Loss)</span>
-              <span style={{ ...mono, fontWeight: "bold", color: data.summary.grossProfit >= 0 ? "#059669" : "#dc2626" }}>
-                {fmt(data.summary.grossProfit)}
-              </span>
-            </div>
-          </div>
+            {/* ═══ COST OF GOODS SOLD ═══ */}
+            <div style={sectionHeader}>Cost of Goods Sold</div>
+            <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
 
-          {/* ═══ EXPENSES ═══ */}
-          <div style={sectionHeader}>Operating Expenses</div>
-          <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-            {data.expenses.breakdown.length > 0 ? (
-              <>
-                {(() => {
-                  // Group by accountCode
-                  const grouped = {}
-                  data.expenses.breakdown.forEach(e => {
-                    const key = e.code || e.name
-                    if (!grouped[key]) grouped[key] = { ...e }
-                    else grouped[key].amount += e.amount
-                  })
-                  return Object.values(grouped).map((exp, i) => (
+              {/* Opening Stock */}
+              <div style={row(true)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Opening Stock</span>
+                <span style={mono}>{fmt(data.cogs.openingStock)}</span>
+              </div>
+
+              {/* Add: Purchases */}
+              <div style={row(false)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Add: Purchases</span>
+                <span style={mono}>{fmt(data.cogs.totalPurchases)}</span>
+              </div>
+
+              {/* Purchase breakdown (indented) */}
+              {data.cogs.purchaseBreakdown?.length > 0 && data.cogs.purchaseBreakdown.map((p, i) => (
+                <div key={i} style={{ ...row(true), paddingLeft: "40px" }}>
+                  <span style={{ fontSize: "13px", color: "#555" }}>{p.name || p.code}</span>
+                  <span style={{ ...mono, fontSize: "13px", color: "#555" }}>{fmt(p.amount)}</span>
+                </div>
+              ))}
+
+              {/* Less: Purchase Return */}
+              <div style={row(true)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Return</span>
+                <span style={mono}>{fmt(data.cogs.totalPurchaseReturns)}</span>
+              </div>
+
+              {/* Less: Purchase Discount */}
+              <div style={row(true)}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Discount</span>
+                <span style={mono}>{fmt(data.cogs.totalPurchaseDiscounts)}</span>
+              </div>
+
+              {/* ✅ Add: Overhead Expenses — same style as Purchase Discount line above */}
+              <div style={{ ...row(true), ...dividerRow }}>
+                <span style={{ fontSize: "15px", color: "#000", display: "flex", alignItems: "center", gap: "8px" }}>
+                  Add: Overhead Expenses
+                  {data.ohvList?.length > 0 && (
+                    <span style={{
+                      fontSize: "11px", color: "#7c3aed",
+                      padding: "1px 7px", backgroundColor: "#ede9fe",
+                      borderRadius: "3px", fontWeight: "600",
+                    }}>
+                      {data.ohvList.length} vouchers
+                    </span>
+                  )}
+                </span>
+                <span style={{ ...mono, color: "#7c3aed", fontWeight: "600" }}>{fmt(ohvTotal)}</span>
+              </div>
+
+              {/* Cost of Goods Available for Sale — overhead included */}
+              <div style={{ ...row(true), paddingTop: "12px" }}>
+                <span style={{ fontSize: "15px", color: "#000" }}>Cost of Goods Available for Sale</span>
+                <span style={mono}>{fmt(cogsAvailable)}</span>
+              </div>
+
+              {/* ✅ Less: Closing Stock = Balance Qty × Purchase Rate */}
+              <div style={{ ...row(true), ...dividerRow }}>
+                <span style={{ fontSize: "15px", color: "#000" }}>
+                  Less: Closing Stock
+                  <span style={{ fontSize: "11px", color: "#6b7280", marginLeft: "8px" }}>
+                    (Balance Qty × Purchase Rate)
+                  </span>
+                </span>
+                <span style={mono}>{fmt(closingStock)}</span>
+              </div>
+
+              {/* ✅ Cost of Goods Sold = cogsAvailable − closingStock */}
+              <div style={{ ...row(false), paddingTop: "12px" }}>
+                <span style={boldRow}>Cost of Goods Sold</span>
+                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(cogsTotal)}</span>
+              </div>
+
+              {/* ✅ Gross Profit uses corrected cogsTotal */}
+              <div style={{
+                display: "flex", justifyContent: "space-between", padding: "12px 0 8px 0",
+                marginTop: "12px", borderTop: "2px solid #000", alignItems: "center",
+                backgroundColor: "#f0f0f0",
+              }}>
+                <span style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>Gross Profit (Loss)</span>
+                <span style={{ ...mono, fontWeight: "bold", color: grossProfit >= 0 ? "#059669" : "#dc2626" }}>
+                  {fmt(grossProfit)}
+                </span>
+              </div>
+            </div>
+
+            {/* ═══ EXPENSES ═══ */}
+            <div style={sectionHeader}>Operating Expenses</div>
+            <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
+              {data.expenses.breakdown.length > 0 ? (
+                <>
+                  {(() => {
+                    const grouped = {}
+                    data.expenses.breakdown.forEach(e => {
+                      const key = e.code || e.name
+                      if (!grouped[key]) grouped[key] = { ...e }
+                      else grouped[key].amount += e.amount
+                    })
+                    return Object.values(grouped).map((exp, i) => (
+                      <div key={i} style={row(false)}>
+                        <span style={{ fontSize: "15px", color: "#000" }}>
+                          {exp.name || exp.code}
+                          {exp.count > 1 && (
+                            <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px", padding: "2px 6px", backgroundColor: "#e3f2fd", borderRadius: "3px" }}>
+                              {exp.count} entries
+                            </span>
+                          )}
+                        </span>
+                        <span style={mono}>{fmt(exp.amount)}</span>
+                      </div>
+                    ))
+                  })()}
+                  <div style={totalRow}>
+                    <span style={boldRow}>Total Expenses</span>
+                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.expenses.totalExpenses)}</span>
+                  </div>
+                </>
+              ) : (
+                <div style={totalRow}>
+                  <span style={boldRow}>Total Expenses</span>
+                  <span style={{ ...mono, fontWeight: "bold" }}>{fmt(0)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* ═══ OTHER INCOME ═══ */}
+            <div style={sectionHeader}>Income from Other Sources</div>
+            <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
+              {data.otherIncome.breakdown.length > 0 ? (
+                <>
+                  {data.otherIncome.breakdown.map((inc, i) => (
                     <div key={i} style={row(false)}>
                       <span style={{ fontSize: "15px", color: "#000" }}>
-                        {exp.name || exp.code}
-                        {exp.count > 1 && (
-                          <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px", padding: "2px 6px", backgroundColor: "#e3f2fd", borderRadius: "3px" }}>
-                            {exp.count} entries
+                        {inc.name || inc.code}
+                        {inc.count > 1 && (
+                          <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px", padding: "2px 6px", backgroundColor: "#d1f2eb", borderRadius: "3px" }}>
+                            {inc.count} entries
                           </span>
                         )}
                       </span>
-                      <span style={mono}>{fmt(exp.amount)}</span>
+                      <span style={mono}>{fmt(inc.amount)}</span>
                     </div>
-                  ))
-                })()}
-                <div style={totalRow}>
-                  <span style={boldRow}>Total Expenses</span>
-                  <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.expenses.totalExpenses)}</span>
-                </div>
-              </>
-            ) : (
-              <div style={totalRow}>
-                <span style={boldRow}>Total Expenses</span>
-                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(0)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* ═══ OTHER INCOME ═══ */}
-          <div style={sectionHeader}>Income from Other Sources</div>
-          <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-            {data.otherIncome.breakdown.length > 0 ? (
-              <>
-                {data.otherIncome.breakdown.map((inc, i) => (
-                  <div key={i} style={row(false)}>
-                    <span style={{ fontSize: "15px", color: "#000" }}>
-                      {inc.name || inc.code}
-                      {inc.count > 1 && (
-                        <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px", padding: "2px 6px", backgroundColor: "#d1f2eb", borderRadius: "3px" }}>
-                          {inc.count} entries
-                        </span>
-                      )}
-                    </span>
-                    <span style={mono}>{fmt(inc.amount)}</span>
+                  ))}
+                  <div style={totalRow}>
+                    <span style={boldRow}>Total Other Income</span>
+                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.otherIncome.totalOtherIncome)}</span>
                   </div>
-                ))}
+                </>
+              ) : (
                 <div style={totalRow}>
                   <span style={boldRow}>Total Other Income</span>
-                  <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.otherIncome.totalOtherIncome)}</span>
+                  <span style={{ ...mono, fontWeight: "bold" }}>{fmt(0)}</span>
                 </div>
-              </>
-            ) : (
-              <div style={totalRow}>
-                <span style={boldRow}>Total Other Income</span>
-                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(0)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* ═══ NET PROFIT / LOSS ═══ */}
-          <div style={{
-            backgroundColor: "#2c5ca9", color: "white", fontWeight: "bold",
-            padding: "15px 30px", marginTop: "30px", fontSize: "18px",
-            display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "6px"
-          }}>
-            <span>NET PROFIT / LOSS</span>
-            <span style={{ fontSize: "20px", fontFamily: "monospace", color: data.summary.netProfit >= 0 ? "#4ade80" : "#f87171" }}>
-              {fmt(data.summary.netProfit)}
-            </span>
-          </div>
-
-          {/* Summary Cards */}
-          <div style={{ marginTop: "30px", padding: "20px", backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #dee2e6" }}>
-            <h4 style={{ marginTop: 0, marginBottom: "20px", color: "#212529", fontSize: "16px", fontWeight: "700", borderBottom: "2px solid #e9ecef", paddingBottom: "10px" }}>
-              📈 Financial Summary — {fmtRange()}
-            </h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "15px" }}>
-              {[
-                { label: "💰 Gross Profit", value: data.summary.grossProfit, bg: "#d1e7dd", border: "#badbcc", txtColor: data.summary.grossProfit >= 0 ? "#198754" : "#dc3545", labelColor: "#0f5132", note: null },
-                { label: "💼 Total Expenses", value: data.expenses.totalExpenses, bg: "#fff3cd", border: "#ffecb5", txtColor: "#856404", labelColor: "#664d03", note: `${data.expenses.breakdown.length} accounts` },
-                { label: "📊 Other Income", value: data.otherIncome.totalOtherIncome, bg: "#cfe2ff", border: "#b6d4fe", txtColor: "#0d6efd", labelColor: "#084298", note: `${data.otherIncome.breakdown.length} accounts` },
-                { label: "🎯 Net Profit/Loss", value: data.summary.netProfit, bg: data.summary.netProfit >= 0 ? "#d1f2eb" : "#f8d7da", border: data.summary.netProfit >= 0 ? "#a3e4d7" : "#f5c2c7", txtColor: data.summary.netProfit >= 0 ? "#198754" : "#dc3545", labelColor: data.summary.netProfit >= 0 ? "#0a5034" : "#842029", note: data.summary.isProfitable ? "Profitable" : "Loss" },
-              ].map((card, i) => (
-                <div key={i} style={{ padding: "15px", backgroundColor: card.bg, borderRadius: "6px", border: `1px solid ${card.border}` }}>
-                  <div style={{ color: card.labelColor, fontWeight: "600", marginBottom: "8px", fontSize: "14px" }}>{card.label}</div>
-                  <div style={{ fontSize: "20px", fontWeight: "700", color: card.txtColor }}>PKR {fmt(card.value)}</div>
-                  {card.note && <div style={{ fontSize: "12px", color: card.labelColor, marginTop: "5px" }}>{card.note}</div>}
-                </div>
-              ))}
+              )}
             </div>
-          </div>
-        </>
-      )}
+
+            {/* ═══ NET PROFIT / LOSS ═══ */}
+            <div style={{
+              backgroundColor: "#2c5ca9", color: "white", fontWeight: "bold",
+              padding: "15px 30px", marginTop: "30px", fontSize: "18px",
+              display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "6px",
+            }}>
+              <span>NET PROFIT / LOSS</span>
+              <span style={{ fontSize: "20px", fontFamily: "monospace", color: netProfit >= 0 ? "#4ade80" : "#f87171" }}>
+                {fmt(netProfit)}
+              </span>
+            </div>
+
+            {/* Summary Cards */}
+            <div style={{ marginTop: "30px", padding: "20px", backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #dee2e6" }}>
+              <h4 style={{ marginTop: 0, marginBottom: "20px", color: "#212529", fontSize: "16px", fontWeight: "700", borderBottom: "2px solid #e9ecef", paddingBottom: "10px" }}>
+                📈 Financial Summary — {fmtRange()}
+              </h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "15px" }}>
+                {[
+                  { label: "💰 Gross Profit",   value: grossProfit, bg: "#d1e7dd", border: "#badbcc", txtColor: grossProfit >= 0 ? "#198754" : "#dc3545", labelColor: "#0f5132", note: null },
+                  { label: "📋 Overhead",        value: ohvTotal,    bg: "#ede9fe", border: "#c4b5fd", txtColor: "#7c3aed", labelColor: "#5b21b6", note: `${data.ohvList?.length || 0} vouchers` },
+                  { label: "💼 Total Expenses",  value: data.expenses.totalExpenses, bg: "#fff3cd", border: "#ffecb5", txtColor: "#856404", labelColor: "#664d03", note: `${data.expenses.breakdown.length} accounts` },
+                  { label: "🎯 Net Profit/Loss", value: netProfit,   bg: netProfit >= 0 ? "#d1f2eb" : "#f8d7da", border: netProfit >= 0 ? "#a3e4d7" : "#f5c2c7", txtColor: netProfit >= 0 ? "#198754" : "#dc3545", labelColor: netProfit >= 0 ? "#0a5034" : "#842029", note: netProfit >= 0 ? "Profitable ✅" : "Loss ❌" },
+                ].map((card, i) => (
+                  <div key={i} style={{ padding: "15px", backgroundColor: card.bg, borderRadius: "6px", border: `1px solid ${card.border}` }}>
+                    <div style={{ color: card.labelColor, fontWeight: "600", marginBottom: "8px", fontSize: "14px" }}>{card.label}</div>
+                    <div style={{ fontSize: "20px", fontWeight: "700", color: card.txtColor }}>PKR {fmt(card.value)}</div>
+                    {card.note && <div style={{ fontSize: "12px", color: card.labelColor, marginTop: "5px" }}>{card.note}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }
