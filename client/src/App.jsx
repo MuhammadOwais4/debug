@@ -1,451 +1,119 @@
-"use client";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./AuthContext/AuthContext";
+import Login from "./pages/Login/Login";
+import AdminDashboard from "./pages/Dashboard/Admin/Admindashboard";
+import DeveloperDashboard from "./pages/Dashboard/Developer/Developerdashboard";
+import UserDashboard from "./pages/Dashboard/User/Userdashboard";
 
-import { useState, useEffect, useRef } from "react";
-import StockManagement from "@/pages/stock-management/stock-management";
-import SalesTracking from "@/pages/sales-tracking/sales-tracking";
-import Reports from "@/pages/reports//Business-reports/Business-reports";
-import Notifications from "@/components/components/notifications";
-import BalanceSheet from "./pages/reports/Balance-sheet/Balance-sheet";
-import ProfitLoss from "@/pages/reports/Profit-Loss/Profit-Loss.jsx";
-
-// Chart of Accounts Pages
-import AssetsPage from "@/pages/chart-of-accounts/assets-page";
-import LiabilitiesPage from "@/pages/chart-of-accounts/liabilities-page";
-import EquityPage from "@/pages/chart-of-accounts/equity-page";
-import ExpensesPage from "@/pages/chart-of-accounts/expenses-page";
-import RevenuePage from "@/pages/chart-of-accounts/revenue-page";
-
-// Accounts Pages
-import CashPaymentVoucher from "@/pages/Accounts/Cash-Payment-Voucher/Cash-Payment-Voucher";
-import CashReceiptVoucher from "@/pages/Accounts/Cash-Receipt-Voucher/Cash-Receipt-Voucher";
-import JournalVoucher from "@/pages/Accounts/Journal-Voucher/Journal-Voucher";
-import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payment-Voucher";
-import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
-import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
-import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
-import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
-import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
-import SalesDiscountVouchers from "./pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
-import PurchaseDiscountVouchers from "./pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers";
-import ProductManagementDashboard from "./pages/Product Management/Product-Management";
-import SupplierPaymentVoucher from "./pages/Accounts/Supplier-Cash-payment-Voucher/Supplier-Cash-Payment -Voucher";
-import CustomerReceiptVoucher from "./pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
-import BarcodeScannerScreen from "./pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
-import OverheadPayment from "./pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
-import Icon from "./assets/icon.png";
-
-const initialProducts = [];
-const initialExpenses = [];
-const initialSales = [];
-
-export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [chartOfAccountsPage, setChartOfAccountsPage] = useState("assets");
-  const [products, setProducts] = useState(initialProducts);
-  const [expenses, setExpenses] = useState(initialExpenses);
-  const [sales, setSales] = useState(initialSales);
-  const [notifications, setNotifications] = useState([]);
-  const [accountsDropdownOpen, setAccountsDropdownOpen] = useState(false);
-  const [chartOfAccountsDropdownOpen, setChartOfAccountsDropdownOpen] = useState(false);
-  const [reportsDropdownOpen, setReportsDropdownOpen] = useState(false);
-
-  const accountsDropdownRef = useRef(null);
-  const chartDropdownRef = useRef(null);
-  const reportsDropdownRef = useRef(null);
-
-  // Low stock notifications
-  useEffect(() => {
-    const lowStockItems = products.filter((product) => product.quantity < 5);
-    if (lowStockItems.length > 0) {
-      const lowStockNotifications = lowStockItems.map((item) => ({
-        id: `lowStock-${item.id}`,
-        type: "lowStock",
-        message: `Low stock alert: ${item.name} (${item.quantity} remaining)`,
-        date: new Date().toISOString(),
-      }));
-      setNotifications(lowStockNotifications);
-    }
-  }, [products]);
-
-  // ✅ Single useEffect for all dropdowns outside click
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (accountsDropdownRef.current && !accountsDropdownRef.current.contains(event.target)) {
-        setAccountsDropdownOpen(false);
-      }
-      if (chartDropdownRef.current && !chartDropdownRef.current.contains(event.target)) {
-        setChartOfAccountsDropdownOpen(false);
-      }
-      if (reportsDropdownRef.current && !reportsDropdownRef.current.contains(event.target)) {
-        setReportsDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleStockUpdate = (updatedProducts) => setProducts(updatedProducts);
-  const handleExpenseUpdate = (updatedExpenses) => setExpenses(updatedExpenses);
-  const handleSaleUpdate = (updatedSales) => setSales(updatedSales);
-
-  const handleNotification = (notification) => {
-    const exists = notifications.some(
-      (n) => n.type === notification.type && n.id === notification.id
-    );
-    if (!exists) {
-      setNotifications((prev) => [notification, ...prev]);
-    }
-  };
-
-  const dismissNotification = (id) => {
-    setNotifications(notifications.filter((n) => n.id !== id));
-  };
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-  };
-
-  const handleChartOfAccountsPageChange = (page) => {
-    setChartOfAccountsPage(page);
-    setActiveTab("chart-of-accounts");
-    setChartOfAccountsDropdownOpen(false);
-  };
-
+// ── Loading Screen ───────────────────────────────────────────────────────
+function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-gray-100">
-   <header className="bg-white shadow">
-  <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex items-center justify-between">
-    
-    {/* Left Side Text */}
-    <h1 className="text-3xl font-bold text-gray-900">
-      Testing
-      <br />
-      Accounting Software
-    </h1>
-
-    {/* Right Side Image */}
-    <img
-      src={Icon}
-      alt="Icon"
-      className="w-32 h-auto"
-     
-    />
-
-  </div>
-</header>
-
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-        {/* Tabs */}
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-
-            {/* Dashboard */}
-            <button
-              className={`${
-                activeTab === "dashboard"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              onClick={() => handleTabChange("dashboard")}
-            >
-              Dashboard
-            </button>
-
-            {/* Goods Receipt Note */}
-            <button
-              className={`${
-                activeTab === "stock"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              onClick={() => handleTabChange("stock")}
-            >
-              Goods Receipt Note
-            </button>
-
-            {/* Sales Tracking */}
-            <button
-              className={`${
-                activeTab === "sales"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-              onClick={() => handleTabChange("sales")}
-            >
-              Sales Tracking
-            </button>
-
-            {/* ✅ Reports Dropdown */}
-            <div className="relative" ref={reportsDropdownRef}>
-              <button
-                className={`${
-                  ["General Ledger", "Trial Balance", "Balance Sheet", "ProfitLoss", "reports", "Product Management"].includes(activeTab)
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
-                onClick={() => setReportsDropdownOpen((prev) => !prev)}
-              >
-                <span>Reports</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {reportsDropdownOpen && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("General Ledger"); setReportsDropdownOpen(false); }}
-                  >
-                    General Ledger
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Trial Balance"); setReportsDropdownOpen(false); }}
-                  >
-                    Trial Balance
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Balance Sheet"); setReportsDropdownOpen(false); }}
-                  >
-                    Balance Sheet
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("ProfitLoss"); setReportsDropdownOpen(false); }}
-                  >
-                    Profit and Loss
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("reports"); setReportsDropdownOpen(false); }}
-                  >
-                    Business Reports
-                  </button>
-                  <button
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Product Management"); setReportsDropdownOpen(false); }}
-                  >
-                    Product Management
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Voucher Query"); setAccountsDropdownOpen(false); }}>
-                    Voucher Query
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Barcode Scanner"); setAccountsDropdownOpen(false); }}>
-                    Barcode Scanner
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* ✅ Chart of Accounts Dropdown */}
-            <div className="relative" ref={chartDropdownRef}>
-              <button
-                className={`${
-                  activeTab === "chart-of-accounts"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
-                onClick={() => setChartOfAccountsDropdownOpen((prev) => !prev)}
-              >
-                <span>Chart of Accounts</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {chartOfAccountsDropdownOpen && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
-                  <button
-                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "assets" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                    }`}
-                    onClick={() => handleChartOfAccountsPageChange("assets")}
-                  >
-                    Assets
-                  </button>
-                  <button
-                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "liabilities" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                    }`}
-                    onClick={() => handleChartOfAccountsPageChange("liabilities")}
-                  >
-                    Liabilities
-                  </button>
-                  <button
-                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "equity" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                    }`}
-                    onClick={() => handleChartOfAccountsPageChange("equity")}
-                  >
-                    Equity
-                  </button>
-                  <button
-                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "revenue" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                    }`}
-                    onClick={() => handleChartOfAccountsPageChange("revenue")}
-                  >
-                    Revenue
-                  </button>
-                  <button
-                    className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                      chartOfAccountsPage === "expenses" && activeTab === "chart-of-accounts" ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                    }`}
-                    onClick={() => handleChartOfAccountsPageChange("expenses")}
-                  >
-                    Expenses
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Accounts Dropdown */}
-            <div className="relative" ref={accountsDropdownRef}>
-              <button
-                className={`${
-                  ["Cash Payment Voucher", "Cash Receipt Voucher", "Journal Voucher", "Bank Payment Voucher", "Bank Receipt Voucher", "purchase discoiunt Voucher", "Supplier Payment Voucher", "Customer Receipt Voucher", "sales discount Voucher", "Voucher Query"].includes(activeTab)
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1`}
-                onClick={() => setAccountsDropdownOpen((prev) => !prev)}
-              >
-                <span>Accounts</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {accountsDropdownOpen && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Cash Payment Voucher"); setAccountsDropdownOpen(false); }}>
-                    Cash Payment Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Cash Receipt Voucher"); setAccountsDropdownOpen(false); }}>
-                    Cash Receipt Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Journal Voucher"); setAccountsDropdownOpen(false); }}>
-                    Journal Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Bank Payment Voucher"); setAccountsDropdownOpen(false); }}>
-                    Bank Payment Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Bank Receipt Voucher"); setAccountsDropdownOpen(false); }}>
-                    Bank Receipt Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("purchase discoiunt Voucher"); setAccountsDropdownOpen(false); }}>
-                    Purchase Discount Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Supplier Payment Voucher"); setAccountsDropdownOpen(false); }}>
-                    Supplier Payment Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Customer Receipt Voucher"); setAccountsDropdownOpen(false); }}>
-                    Customer Receipt Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("sales discount Voucher"); setAccountsDropdownOpen(false); }}>
-                    Sales Discount Voucher
-                  </button>
-                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => { handleTabChange("Overhead Payment"); setAccountsDropdownOpen(false); }}>
-                    Overhead Payment
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Notifications */}
-            <button
-              className={`${
-                activeTab === "notifications"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm relative`}
-              onClick={() => handleTabChange("notifications")}
-            >
-              Notifications
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {notifications.length}
-                </span>
-              )}
-            </button>
-
-          </nav>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === "dashboard" && (
-          <Dashboard
-            products={products || []}
-            expenses={expenses || []}
-            sales={sales || []}
-            notifications={notifications || []}
-            onTabChange={handleTabChange}
-          />
-        )}
-        {activeTab === "stock" && (
-          <StockManagement
-            onStockUpdate={handleStockUpdate}
-            onNotification={handleNotification}
-          />
-        )}
-        {activeTab === "expenses" && (
-          <ExpenseTracking
-            onExpenseUpdate={handleExpenseUpdate}
-            onNotification={handleNotification}
-          />
-        )}
-        {activeTab === "sales" && (
-          <SalesTracking
-            products={products}
-            onSaleComplete={handleSaleUpdate}
-            onNotification={handleNotification}
-          />
-        )}
-        {activeTab === "reports" && (
-          <Reports products={products} expenses={expenses} sales={sales} />
-        )}
-        {activeTab === "chart-of-accounts" && (
-          <>
-            {chartOfAccountsPage === "assets" && <AssetsPage />}
-            {chartOfAccountsPage === "liabilities" && <LiabilitiesPage />}
-            {chartOfAccountsPage === "equity" && <EquityPage />}
-            {chartOfAccountsPage === "expenses" && <ExpensesPage />}
-            {chartOfAccountsPage === "revenue" && <RevenuePage />}
-          </>
-        )}
-        {activeTab === "Cash Payment Voucher" && <CashPaymentVoucher />}
-        {activeTab === "Cash Receipt Voucher" && <CashReceiptVoucher />}
-        {activeTab === "Journal Voucher" && <JournalVoucher />}
-        {activeTab === "Bank Payment Voucher" && <BankPaymentVoucher />}
-        {activeTab === "Bank Receipt Voucher" && <BankReceiptVoucher />}
-        {activeTab === "General Ledger" && <GeneralLedger />}
-        {activeTab === "Trial Balance" && <TrialBalance />}
-        {activeTab === "Voucher Query" && <VoucherQuery />}
-        {activeTab === "Balance Sheet" && <BalanceSheet />}
-        {activeTab === "ProfitLoss" && <ProfitLoss />}
-        {activeTab === "sales discount Voucher" && <SalesDiscountVouchers />}
-        {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
-        {activeTab === "Product Management" && <ProductManagementDashboard />}
-        {activeTab === "Supplier Payment Voucher" && <SupplierPaymentVoucher />}
-        {activeTab === "Customer Receipt Voucher" && <CustomerReceiptVoucher />}
-        {activeTab === "Barcode Scanner" && <BarcodeScannerScreen />}
-        {activeTab === "Overhead Payment" && <OverheadPayment />}
-        {activeTab === "notifications" && (
-          <Notifications notifications={notifications} onDismiss={dismissNotification} />
-        )}
-
-      </main>
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "#06090f", gap: 16,
+    }}>
+      <div style={{
+        width: 44, height: 44,
+        border: "4px solid rgba(6,182,212,0.2)",
+        borderTopColor: "#06b6d4",
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }} />
+      <p style={{ color: "#475569", fontSize: 11, letterSpacing: 3, textTransform: "uppercase" }}>
+        Loading...
+      </p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
+  );
+}
+
+// ── ProtectedRoute ────────────────────────────────────────────────────────
+// allowedRoles: backend lowercase → 'user' | 'admin' | 'developer'
+function ProtectedRoute({ children, allowedRoles = [] }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+
+  // Not logged in
+  if (!user) return <Navigate to="/login" replace />;
+
+  // Wrong role → kick to their own dashboard
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    const roleMap = {
+      admin:     "/dashboard/admin",
+      developer: "/dashboard/developer",
+      user:      "/dashboard/user",
+    };
+    return <Navigate to={roleMap[user.role] || "/login"} replace />;
+  }
+
+  return children;
+}
+
+// ── RootRedirect ──────────────────────────────────────────────────────────
+// "/" → redirect based on role
+function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!user)   return <Navigate to="/login" replace />;
+
+  const roleMap = {
+    admin:     "/dashboard/admin",
+    developer: "/dashboard/developer",
+    user:      "/dashboard/user",
+  };
+  return <Navigate to={roleMap[user.role] || "/login"} replace />;
+}
+
+// ── App ───────────────────────────────────────────────────────────────────
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+
+          {/* Public Route */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Root → auto redirect based on role */}
+          <Route path="/" element={<RootRedirect />} />
+
+          {/* Admin Dashboard — only 'admin' role */}
+          <Route
+            path="/dashboard/admin/*"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Developer Dashboard — only 'developer' role */}
+          <Route
+            path="/dashboard/developer/*"
+            element={
+              <ProtectedRoute allowedRoles={["developer"]}>
+                <DeveloperDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* User Dashboard — only 'user' role */}
+          <Route
+            path="/dashboard/user/*"
+            element={
+              <ProtectedRoute allowedRoles={["user"]}>
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catch-all → login */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

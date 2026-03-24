@@ -8,8 +8,8 @@ const app = express()
 // Middleware
 app.use(
   cors({
-    // origin: ["http://localhost:5173"],
-origin: ["https://debug-henna.vercel.app"],
+    origin: ["http://localhost:5173"],
+// origin: ["https://debug-henna.vercel.app"],
 
 
     credentials: true,
@@ -43,6 +43,7 @@ app.use("/api/customer-receipt", require("./routes/customerReceiptRoutes"))
 app.use("/api/profit-loss",   require("./routes/Profitlossroutes "))
 app.use("/api/barcodes", require("./routes/Barcoderoutes"))  
 app.use("/api/overhead-voucher", require("./routes/Overheadvoucherroutes"))
+app.use('/api/auth', require('./routes/authRoutes'));
 
 
 app.use((err, req, res, next) => {
