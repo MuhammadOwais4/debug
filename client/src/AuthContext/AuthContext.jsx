@@ -15,18 +15,33 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (username, password) => {
-    const response = await fetch("https://debug-nxby.vercel.app/api/auth/login", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ username, password }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || "Login failed");
+    let response;
+    try {
+      response = await fetch("https://debug-nxby.vercel.app/api/auth/login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ username, password }),
+      });
+    } catch (networkErr) {
+      throw new Error("Network error — check your connection.");
     }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Server returned an unexpected response.");
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Invalid credentials. Please try again.");
+    }
+
     // Backend returns: { token, role, userId }
-    // role lowercase: 'user' | 'admin' | 'developer'
-    const data = await response.json();
+    if (!data.token || !data.role) {
+      throw new Error("Incomplete response from server.");
+    }
+
     localStorage.setItem("accessToken", data.token);
     localStorage.setItem("userRole",    data.role);
     localStorage.setItem("username",    username);

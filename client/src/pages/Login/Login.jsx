@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext/AuthContext";
 
-// Backend roles are lowercase: user | admin | developer
 const ROLE_REDIRECTS = {
   admin:     "/dashboard/admin",
   developer: "/dashboard/developer",
@@ -21,9 +20,15 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!username.trim() || !password.trim()) {
+      setError("Username and password are required.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const role     = await login(username, password);
+      const role     = await login(username.trim(), password);
       const redirect = ROLE_REDIRECTS[role] || "/dashboard/user";
       navigate(redirect, { replace: true });
     } catch (err) {
@@ -142,8 +147,6 @@ export default function Login() {
           vertical-align:middle; margin-right:8px;
         }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .lg-roles { margin-top:26px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.05); display:flex; flex-wrap:wrap; gap:7px; justify-content:center; }
-        .lg-badge { font-size:9px; letter-spacing:1.2px; text-transform:uppercase; padding:3px 12px; border-radius:20px; border:1px solid rgba(255,255,255,0.07); color:#304560; }
       `}</style>
 
       <div className="lg-root">
@@ -158,19 +161,38 @@ export default function Login() {
           <form onSubmit={handleSubmit}>
             <div className="lg-field">
               <label className="lg-label">Username</label>
-              <input className="lg-input" type="text" placeholder="Enter username"
-                value={username} onChange={e => setUsername(e.target.value)} required autoFocus />
+              <input
+                className="lg-input"
+                type="text"
+                placeholder="Enter username"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                required
+                autoFocus
+                autoComplete="username"
+              />
             </div>
             <div className="lg-field">
               <label className="lg-label">Password</label>
-              <input className="lg-input" type={showPass ? "text" : "password"}
-                placeholder="Enter password" value={password}
-                onChange={e => setPassword(e.target.value)} required style={{ paddingRight: 42 }} />
+              <input
+                className="lg-input"
+                type={showPass ? "text" : "password"}
+                placeholder="Enter password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                style={{ paddingRight: 42 }}
+                autoComplete="current-password"
+              />
               <button type="button" className="lg-eye" onClick={() => setShowPass(p => !p)}>
                 {showPass ? "🙈" : "👁️"}
               </button>
             </div>
-            {error && <div className="lg-error"><span>⚠️</span>{error}</div>}
+            {error && (
+              <div className="lg-error" key={error}>
+                <span>⚠️</span>{error}
+              </div>
+            )}
             <button className="lg-btn" type="submit" disabled={loading}>
               {loading ? <><span className="lg-spin" />Signing in...</> : "Sign In →"}
             </button>
