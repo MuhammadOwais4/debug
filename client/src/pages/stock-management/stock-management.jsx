@@ -17,10 +17,216 @@ import {
   Package,
   Printer,
   RotateCcw,
+  Barcode,
 } from "lucide-react"
 
 const productCategories = ["Garments","Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Accessories", "Food", "Garments", "Other"]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BARCODE GENERATOR UTILITY
+// Generates a unique barcode: category prefix + timestamp + random
+// ─────────────────────────────────────────────────────────────────────────────
+const generateBarcode = (category = "OTH") => {
+  const categoryPrefixes = {
+    Garments: "GRM", Electronics: "ELC", Furniture: "FRN",
+    Stationery: "STN", Kitchenware: "KTW", Clothing: "CLT",
+    Accessories: "ACC", Food: "FDD", Other: "OTH",
+  }
+  const prefix = categoryPrefixes[category] || "OTH"
+  const timestamp = Date.now().toString().slice(-7)
+  const random = Math.floor(Math.random() * 9000 + 1000)
+  return `${prefix}${timestamp}${random}`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BARCODE DISPLAY COMPONENT (SVG-based Code128-style visual bars)
+// ─────────────────────────────────────────────────────────────────────────────
+const BarcodeDisplay = ({ code, width = 260, height = 70, showText = true }) => {
+  if (!code) return null
+
+  // Simple visual barcode — alternating bar widths based on char codes
+  const bars = []
+  const chars = code.split("")
+  let x = 8
+
+  // Start guard bars
+  bars.push({ x, w: 2, dark: true }); x += 3
+  bars.push({ x, w: 1, dark: false }); x += 2
+  bars.push({ x, w: 2, dark: true }); x += 3
+
+  chars.forEach((ch) => {
+    const code = ch.charCodeAt(0)
+    const pattern = [
+      (code >> 5) & 1, (code >> 4) & 1, (code >> 3) & 1,
+      (code >> 2) & 1, (code >> 1) & 1, code & 1,
+    ]
+    pattern.forEach((bit, i) => {
+      const w = i % 2 === 0 ? 2 : 1
+      bars.push({ x, w, dark: bit === 1 })
+      x += w + 1
+    })
+    x += 1
+  })
+
+  // End guard bars
+  bars.push({ x, w: 2, dark: true }); x += 3
+  bars.push({ x, w: 1, dark: false }); x += 2
+  bars.push({ x, w: 2, dark: true })
+
+  const totalWidth = x + 10
+  const scale = (width - 16) / totalWidth
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: "block" }}
+    >
+      <rect width={width} height={height} fill="white" />
+      {bars.map((bar, i) =>
+        bar.dark ? (
+          <rect
+            key={i}
+            x={8 + bar.x * scale}
+            y={4}
+            width={Math.max(1, bar.w * scale)}
+            height={showText ? height - 20 : height - 8}
+            fill="#111"
+          />
+        ) : null
+      )}
+      {showText && (
+        <text
+          x={width / 2}
+          y={height - 4}
+          textAnchor="middle"
+          fontSize="9"
+          fontFamily="monospace"
+          fill="#333"
+          letterSpacing="1"
+        >
+          {code}
+        </text>
+      )}
+    </svg>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BARCODE MODAL — print/download single barcode
+// ─────────────────────────────────────────────────────────────────────────────
+const BarcodePrintModal = ({ entry, onClose }) => {
+  const [copies, setCopies] = useState(1)
+
+  const handlePrint = () => {
+    const win = window.open("", "", "height=600,width=400")
+    const labels = Array.from({ length: copies }, (_, i) => `
+      <div class="label">
+        <div class="product-name">${entry.itemName}</div>
+        <div class="details">${entry.category} · ${entry.grn || "GRN"}</div>
+        <div class="barcode-wrap" id="bc_${i}"></div>
+        <div class="barcode-text">${entry.barcode}</div>
+        <div class="price">Sale: PKR ${entry.saleRate?.toLocaleString()}</div>
+      </div>
+    `).join("")
+
+    win.document.write(`
+      <html><head><title>Barcode Labels</title>
+      <style>
+        body { margin: 0; padding: 10px; font-family: monospace; background: #fff; }
+        .label { border: 1px dashed #ccc; padding: 10px 12px; margin-bottom: 10px; width: 260px; text-align: center; }
+        .product-name { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+        .details { font-size: 10px; color: #666; margin-bottom: 6px; }
+        .barcode-text { font-size: 10px; letter-spacing: 2px; margin-top: 2px; }
+        .price { font-size: 11px; font-weight: bold; margin-top: 4px; color: #1a56db; }
+        @media print { @page { margin: 8mm; } }
+      </style>
+      </head><body>${labels}
+      <script>window.onload=function(){window.print();window.close();}<\/script>
+      </body></html>
+    `)
+    win.document.close()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 flex justify-between items-center">
+          <h3 className="text-white font-bold flex items-center gap-2">
+            <Barcode className="h-5 w-5" /> Barcode Label
+          </h3>
+          <button onClick={onClose} className="text-white/80 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Product info */}
+          <div className="text-center">
+            <p className="font-bold text-gray-900 text-base">{entry.itemName}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{entry.category} · {entry.vendorName || "—"}</p>
+          </div>
+
+          {/* Barcode preview */}
+          <div className="flex justify-center bg-gray-50 rounded-xl p-4 border border-gray-100">
+            <BarcodeDisplay code={entry.barcode} width={260} height={72} showText={true} />
+          </div>
+
+          {/* Barcode code text */}
+          <div className="text-center bg-violet-50 rounded-lg py-2 px-3 border border-violet-100">
+            <p className="text-xs text-violet-500 font-medium mb-0.5">Barcode</p>
+            <p className="font-mono font-bold text-violet-800 text-sm tracking-widest">{entry.barcode}</p>
+          </div>
+
+          {/* Price info */}
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="bg-gray-50 rounded-lg p-2 border border-gray-100">
+              <p className="text-xs text-gray-500">Purchase Rate</p>
+              <p className="font-bold text-gray-800 text-sm">PKR {entry.purchaseRate?.toLocaleString()}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-2 border border-blue-100">
+              <p className="text-xs text-blue-500">Sale Rate</p>
+              <p className="font-bold text-blue-800 text-sm">PKR {entry.saleRate?.toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* Copies */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600 font-medium flex-shrink-0">Copies:</label>
+            <input
+              type="number" min="1" max="100" value={copies}
+              onChange={(e) => setCopies(Math.max(1, Math.min(100, Number(e.target.value))))}
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center font-bold focus:ring-2 focus:ring-violet-400"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handlePrint}
+              className="flex-1 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <Printer className="h-4 w-4" /> Print {copies > 1 ? `(${copies} copies)` : "Label"}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
     if (!date) return ""
@@ -45,6 +251,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const [purchasesAccounts, setPurchasesAccounts] = useState([])
   const [loadingVendors, setLoadingVendors] = useState(false)
   const [loadingPurchases, setLoadingPurchases] = useState(false)
+
+  // ── Barcode modal state ──
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false)
+  const [barcodeEntry, setBarcodeEntry] = useState(null)
 
   // Purchase Return State
   const [showReturnForm, setShowReturnForm] = useState(false)
@@ -146,22 +356,13 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             : purchasesAccounts.find((p) => p._id === product.purchaseType)
         const purchaseTypeStr = purchaseTypeObj?.name || ""
 
-        // ✅ FIX: purchaseQuantity = original qty stored at time of purchase
         const purchaseQuantity = product.purchaseQuantity || product.quantity || 0
         const purchaseRate = product.purchaseRate || 0
         const saleRate = product.saleRate || 0
-
-        // ✅ KEY FIX: Purchase Amount = Purchase Qty × Purchase Rate (always)
         const purchaseAmount = purchaseQuantity * purchaseRate
-
-        // Balance = current remaining stock
         const balanceQuantity = product.quantity || 0
-        // ✅ Balance Amount = Balance Qty × Purchase Rate
         const balanceAmount = balanceQuantity * purchaseRate
-
         const totalSoldQuantity = product.totalSoldQuantity || (purchaseQuantity - balanceQuantity) || 0
-
-        // Potential Profit = (Sale Rate - Purchase Rate) × Balance Qty
         const potentialProfit = (saleRate - purchaseRate) * balanceQuantity
 
         return {
@@ -172,9 +373,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           purchaseQuantity,
           purchaseRate,
           saleRate,
-          purchaseAmount,     // ✅ Qty × Rate
+          purchaseAmount,
           balanceQuantity,
-          balanceAmount,      // ✅ BalanceQty × Rate
+          balanceAmount,
           totalSoldQuantity,
           purchaseStockValue: purchaseAmount,
           saleStockValue: balanceQuantity * saleRate,
@@ -192,6 +393,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           expiryDate: product.expiryDate || "",
           voucherId: product.voucherId || "",
           purchaseType: purchaseTypeStr,
+          // ── Barcode field ──
+          barcode: product.barcode || "",
         }
       })
 
@@ -417,8 +620,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       if (!selectedVendor) { setError("Selected vendor not found"); return }
       if (!selectedPurchaseAccount) { setError("Selected purchase type not found"); return }
 
-      // ✅ Purchase Amount = qty × purchaseRate
       const totalPurchaseAmount = qty * purchaseRate
+
+      // ── AUTO-GENERATE barcode for new products ──
+      const autoBarcode = isEditing ? undefined : generateBarcode(formData.category)
 
       const productData = {
         name: formData.name.trim(),
@@ -426,7 +631,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         purchaseRate,
         saleRate,
         quantity: qty,
-        purchaseQuantity: qty, // ✅ Store original purchase qty
+        purchaseQuantity: qty,
         serialNumber: formData.serialNumber,
         vendorName: selectedVendor._id,
         vendorPhone: formData.vendorPhone,
@@ -434,6 +639,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         notes: formData.notes,
         expiryDate: formData.expiryDate,
         purchaseType: selectedPurchaseAccount._id,
+        // ── Attach barcode to product ──
+        ...(!isEditing && { barcode: autoBarcode }),
       }
 
       if (isEditing) {
@@ -467,9 +674,33 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           emitVoucherChangedEvent()
         }
         await createNotification("info", "Stock Entry Updated", `Stock entry for ${formData.name} updated`, "medium", editingId)
+        resetForm()
+        await fetchStockEntries()
       } else {
         const response = await ApiHandler.createProduct(productData)
         if (!response || !response._id) throw new Error("Failed to create product - no ID returned")
+
+        // ── Also register barcode in barcode registry ──
+        try {
+          await ApiHandler.post("/barcodes", {
+            barcode: autoBarcode,
+            productName: formData.name.trim(),
+            category: formData.category,
+            purchaseRate,
+            saleRate,
+            quantity: qty,
+            serialNumber: formData.serialNumber,
+            grnNo: formData.grn,
+            vendorBillNo: formData.vendorBillNumber,
+            linkedProductId: response._id,
+            importedFrom: "grn",
+            confirmedToGRN: true,
+          })
+        } catch (barcodeErr) {
+          // Non-fatal: barcode registry save failed
+          console.warn("[GRN] Barcode registry save failed:", barcodeErr.message)
+        }
+
         try {
           const voucherData = {
             voucherNo: `GRN-${Date.now()}`,
@@ -501,14 +732,40 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           if (!voucherResponse?.data?._id) throw new Error("Failed to create voucher")
           await ApiHandler.updateProduct(response._id, { ...productData, voucherId: voucherResponse.data._id })
           emitVoucherChangedEvent()
-          await createNotification("success", "Stock Entry & Voucher Created", `Purchase of ${formData.name} for ${formatCurrency(totalPurchaseAmount)} recorded`, "high", response._id)
+          await createNotification(
+            "success",
+            "Stock Entry & Barcode Created",
+            `Purchase of ${formData.name} recorded. Barcode: ${autoBarcode}`,
+            "high",
+            response._id,
+          )
         } catch (voucherErr) {
           console.error("[GRN] Error creating voucher:", voucherErr)
-          await createNotification("warning", "Stock Entry Created (Voucher Failed)", `Stock added but voucher failed: ${voucherErr.message}`, "high", response._id)
+          await createNotification(
+            "warning",
+            "Stock Entry Created (Voucher Failed)",
+            `Stock added but voucher failed: ${voucherErr.message}`,
+            "high",
+            response._id,
+          )
         }
+
+        resetForm()
+        await fetchStockEntries()
+
+        // ── Show barcode modal after successful add ──
+        const newEntry = {
+          itemName: formData.name.trim(),
+          category: formData.category,
+          barcode: autoBarcode,
+          purchaseRate,
+          saleRate,
+          grn: formData.grn,
+          vendorName: selectedVendor.name,
+        }
+        setBarcodeEntry(newEntry)
+        setShowBarcodeModal(true)
       }
-      resetForm()
-      await fetchStockEntries()
     } catch (err) {
       console.error("[GRN] Error:", err)
       if (err.message.includes("All fields are required")) {
@@ -597,13 +854,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
     printWindow.document.write("<h2>Stock Management Report</h2>")
     printWindow.document.write(`<div class="meta">Generated on: ${formatDateToDDMMYYYY(new Date())}</div>`)
     printWindow.document.write("<table><thead><tr>")
-    ;["Date","GRN No.","Product Name","Category","Vendor","Purchase Qty","Purchase Rate","Purchase Amount","Balance Qty","Balance Amount","Sale Rate","Profit"].forEach(h => {
+    ;["Date","GRN No.","Product Name","Category","Vendor","Barcode","Purchase Qty","Purchase Rate","Purchase Amount","Balance Qty","Balance Amount","Sale Rate","Profit"].forEach(h => {
       printWindow.document.write(`<th${["Purchase Qty","Purchase Rate","Purchase Amount","Balance Qty","Balance Amount","Sale Rate","Profit"].includes(h)?' class="text-right"':''}>${h}</th>`)
     })
     printWindow.document.write("</tr></thead><tbody>")
     filteredEntries.forEach((entry) => {
       printWindow.document.write("<tr>")
       printWindow.document.write(`<td>${entry.date}</td><td>${entry.grn||"-"}</td><td>${entry.itemName}</td><td>${entry.category}</td><td>${entry.vendorName||"-"}</td>`)
+      printWindow.document.write(`<td><code style="font-size:10px">${entry.barcode||"-"}</code></td>`)
       printWindow.document.write(`<td class="text-right">${entry.purchaseQuantity}</td>`)
       printWindow.document.write(`<td class="text-right">${formatCurrency(entry.purchaseRate)}</td>`)
       printWindow.document.write(`<td class="text-right">${formatCurrency(entry.purchaseAmount)}</td>`)
@@ -613,7 +871,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       printWindow.document.write(`<td class="text-right ${entry.profit>=0?"profit-positive":"profit-negative"}">${formatCurrency(entry.profit)}</td>`)
       printWindow.document.write("</tr>")
     })
-    printWindow.document.write(`<tr class="totals"><td colspan="5" class="text-right">Totals:</td>`)
+    printWindow.document.write(`<tr class="totals"><td colspan="6" class="text-right">Totals:</td>`)
     printWindow.document.write(`<td class="text-right">${subtotals.purchaseQuantity}</td>`)
     printWindow.document.write(`<td></td>`)
     printWindow.document.write(`<td class="text-right">${formatCurrency(subtotals.purchaseAmount)}</td>`)
@@ -630,9 +888,10 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
   const handleExport = () => {
     const csvContent = [
-      ["Date","GRN No.","Item Name","Category","Vendor","Purchase Qty","Purchase Rate","Purchase Amount","Balance Qty","Balance Amount","Sale Rate","Sold Qty","Potential Profit"],
+      ["Date","GRN No.","Item Name","Category","Vendor","Barcode","Purchase Qty","Purchase Rate","Purchase Amount","Balance Qty","Balance Amount","Sale Rate","Sold Qty","Potential Profit"],
       ...filteredEntries.map((entry) => [
         entry.date, entry.grn||"-", entry.itemName, entry.category, entry.vendorName||"-",
+        entry.barcode||"-",
         entry.purchaseQuantity, entry.purchaseRate, entry.purchaseAmount,
         entry.balanceQuantity, entry.balanceAmount, entry.saleRate,
         entry.totalSoldQuantity, entry.profit,
@@ -693,6 +952,15 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
+
+      {/* ── Barcode Print Modal ── */}
+      {showBarcodeModal && barcodeEntry && (
+        <BarcodePrintModal
+          entry={barcodeEntry}
+          onClose={() => { setShowBarcodeModal(false); setBarcodeEntry(null) }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
@@ -744,7 +1012,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       </div>
 
-      {/* ✅ Summary Cards — Purchase Amount = Qty × Rate */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
@@ -850,13 +1118,11 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               {["Date","GRN No.","Product Name","Category","Vendor"].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
               ))}
+              {/* ── Barcode column ── */}
+              <th className="px-4 py-3 text-left text-xs font-medium text-violet-600 uppercase tracking-wider bg-violet-50">Barcode</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
-              {/* ✅ KEY COLUMN: Purchase Amount = Qty × Rate */}
-              <th className="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase tracking-wider bg-blue-50">
-                Purchase Amount
-          
-              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase tracking-wider bg-blue-50">Purchase Amount</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Rate</th>
@@ -873,6 +1139,23 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{entry.itemName}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.category}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{entry.vendorName || "-"}</td>
+                  {/* ── Barcode cell with print button ── */}
+                  <td className="px-4 py-4 whitespace-nowrap bg-violet-50">
+                    {entry.barcode ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-violet-700 font-bold">{entry.barcode}</span>
+                        <button
+                          onClick={() => { setBarcodeEntry(entry); setShowBarcodeModal(true) }}
+                          className="text-violet-400 hover:text-violet-700 transition-colors"
+                          title="Print barcode label"
+                        >
+                          <Barcode className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{entry.purchaseQuantity}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(entry.purchaseRate)}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 text-right font-bold bg-blue-50">
@@ -904,7 +1187,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               ))
             ) : (
               <tr>
-                <td colSpan="13" className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan="14" className="px-4 py-8 text-center text-sm text-gray-500">
                   No products found. Add some products to get started.
                 </td>
               </tr>
@@ -913,10 +1196,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           {filteredEntries.length > 0 && (
             <tfoot className="bg-gray-100">
               <tr>
-                <td colSpan="5" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
+                <td colSpan="6" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.purchaseQuantity}</td>
                 <td className="px-4 py-4"></td>
-                {/* ✅ Total Purchase Amount in footer */}
                 <td className="px-4 py-4 text-sm font-bold text-blue-700 text-right bg-blue-50">{formatCurrency(subtotals.purchaseAmount)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.balanceQuantity}</td>
                 <td className="px-4 py-4 text-sm font-bold text-green-600 text-right">{formatCurrency(subtotals.balanceAmount)}</td>
@@ -1035,24 +1317,28 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <h2 className="text-xl font-semibold">{isEditing ? "Edit Product" : "Add New Purchase"}</h2>
               <button onClick={resetForm} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
             </div>
+
+            {/* Barcode info banner for new products */}
+            {!isEditing && (
+              <div className="mb-4 p-3 bg-violet-50 border border-violet-200 rounded-lg flex items-center gap-2">
+                <Barcode className="h-4 w-4 text-violet-600 flex-shrink-0" />
+                <p className="text-sm text-violet-700">
+                  <span className="font-semibold">Auto-barcode:</span> A unique barcode will be automatically generated and attached to this product when saved.
+                </p>
+              </div>
+            )}
+
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md"><p className="text-sm text-red-800">{error}</p></div>}
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* ✅ Date field */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
-                      <input
-                        type="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleChange}
-                        required
+                      <input type="date" name="date" value={formData.date} onChange={handleChange} required
                         max={new Date().toISOString().split("T")[0]}
-                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-                      />
+                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Item / Model Name <span className="text-red-500">*</span></label>
@@ -1139,7 +1425,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 </div>
               </div>
 
-              {/* ✅ Live Purchase Summary with correct formula */}
+              {/* Live Purchase Summary */}
               {formData.quantity && formData.purchaseRate && formData.saleRate && (
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
@@ -1166,13 +1452,22 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       </div>
                     </div>
                   </div>
-                  {/* Profit preview */}
                   <div className="mt-3 flex justify-between items-center bg-green-50 rounded-lg px-4 py-2 border border-green-200">
                     <span className="text-sm text-green-700 font-medium">Potential Profit (at sale rate)</span>
                     <span className="font-bold text-green-800">
                       {formatCurrency((Number(formData.saleRate) - Number(formData.purchaseRate)) * Number(formData.quantity))}
                     </span>
                   </div>
+                  {/* Auto-barcode preview */}
+                  {!isEditing && formData.category && (
+                    <div className="mt-3 flex items-center gap-2 bg-violet-50 rounded-lg px-4 py-2 border border-violet-200">
+                      <Barcode className="h-4 w-4 text-violet-600" />
+                      <span className="text-sm text-violet-700 font-medium">Auto Barcode:</span>
+                      <span className="font-mono text-sm font-bold text-violet-800">
+                        {generateBarcode(formData.category)} (preview)
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1260,6 +1555,34 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               <button onClick={() => setShowDetails(false)} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-6">
+
+              {/* ── Barcode section in details ── */}
+              {selectedEntry.barcode && (
+                <div className="bg-violet-50 border border-violet-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-violet-900 flex items-center gap-2">
+                      <Barcode className="h-5 w-5" /> Product Barcode
+                    </h3>
+                    <button
+                      onClick={() => { setBarcodeEntry(selectedEntry); setShowBarcodeModal(true) }}
+                      className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> Print Label
+                    </button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-5">
+                    <div className="bg-white rounded-xl p-3 border border-violet-100 shadow-sm">
+                      <BarcodeDisplay code={selectedEntry.barcode} width={220} height={60} showText={true} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-violet-500 font-medium mb-1">Barcode Number</p>
+                      <p className="font-mono font-black text-violet-800 text-lg tracking-widest">{selectedEntry.barcode}</p>
+                      <p className="text-xs text-violet-400 mt-1">Category: {selectedEntry.category}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border-2 border-blue-200">
                 <h3 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
                   <Package className="h-6 w-6" /> GRN Tracking Summary
