@@ -17,7 +17,11 @@ import {
   Package,
   Printer,
   RotateCcw,
+  Barcode,
 } from "lucide-react"
+
+
+import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen" 
 
 const productCategories = ["Garments","Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Accessories", "Food", "Garments", "Other"]
 
@@ -45,6 +49,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const [purchasesAccounts, setPurchasesAccounts] = useState([])
   const [loadingVendors, setLoadingVendors] = useState(false)
   const [loadingPurchases, setLoadingPurchases] = useState(false)
+
+  // ── NEW: Barcode Scanner Modal ─────────────────────────────────────────────
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
 
   // Purchase Return State
   const [showReturnForm, setShowReturnForm] = useState(false)
@@ -146,22 +153,13 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
             : purchasesAccounts.find((p) => p._id === product.purchaseType)
         const purchaseTypeStr = purchaseTypeObj?.name || ""
 
-        // ✅ FIX: purchaseQuantity = original qty stored at time of purchase
         const purchaseQuantity = product.purchaseQuantity || product.quantity || 0
         const purchaseRate = product.purchaseRate || 0
         const saleRate = product.saleRate || 0
-
-        // ✅ KEY FIX: Purchase Amount = Purchase Qty × Purchase Rate (always)
         const purchaseAmount = purchaseQuantity * purchaseRate
-
-        // Balance = current remaining stock
         const balanceQuantity = product.quantity || 0
-        // ✅ Balance Amount = Balance Qty × Purchase Rate
         const balanceAmount = balanceQuantity * purchaseRate
-
         const totalSoldQuantity = product.totalSoldQuantity || (purchaseQuantity - balanceQuantity) || 0
-
-        // Potential Profit = (Sale Rate - Purchase Rate) × Balance Qty
         const potentialProfit = (saleRate - purchaseRate) * balanceQuantity
 
         return {
@@ -172,9 +170,9 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           purchaseQuantity,
           purchaseRate,
           saleRate,
-          purchaseAmount,     // ✅ Qty × Rate
+          purchaseAmount,
           balanceQuantity,
-          balanceAmount,      // ✅ BalanceQty × Rate
+          balanceAmount,
           totalSoldQuantity,
           purchaseStockValue: purchaseAmount,
           saleStockValue: balanceQuantity * saleRate,
@@ -417,7 +415,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       if (!selectedVendor) { setError("Selected vendor not found"); return }
       if (!selectedPurchaseAccount) { setError("Selected purchase type not found"); return }
 
-      // ✅ Purchase Amount = qty × purchaseRate
       const totalPurchaseAmount = qty * purchaseRate
 
       const productData = {
@@ -426,7 +423,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         purchaseRate,
         saleRate,
         quantity: qty,
-        purchaseQuantity: qty, // ✅ Store original purchase qty
+        purchaseQuantity: qty,
         serialNumber: formData.serialNumber,
         vendorName: selectedVendor._id,
         vendorPhone: formData.vendorPhone,
@@ -703,6 +700,15 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
           <p className="text-sm text-gray-600">Manage product inventory and stock levels</p>
         </div>
         <div className="flex gap-2 flex-wrap mt-4 md:mt-0">
+          {/* ── NEW: Barcode Scanner Button ── */}
+          <button
+            className="bg-violet-600 text-white px-4 py-2 rounded-md hover:bg-violet-700 transition-colors flex items-center gap-2 shadow-sm"
+            onClick={() => setShowBarcodeScanner(true)}
+          >
+            <Barcode className="h-4 w-4" />
+            Barcode Scanner
+          </button>
+
           <button
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors flex items-center gap-2"
             onClick={() => setShowReturnHistory(true)}
@@ -744,7 +750,7 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
         </div>
       </div>
 
-      {/* ✅ Summary Cards — Purchase Amount = Qty × Rate */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between">
@@ -852,10 +858,8 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
               ))}
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Rate</th>
-              {/* ✅ KEY COLUMN: Purchase Amount = Qty × Rate */}
               <th className="px-4 py-3 text-right text-xs font-medium text-blue-600 uppercase tracking-wider bg-blue-50">
                 Purchase Amount
-          
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Amount</th>
@@ -916,7 +920,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <td colSpan="5" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.purchaseQuantity}</td>
                 <td className="px-4 py-4"></td>
-                {/* ✅ Total Purchase Amount in footer */}
                 <td className="px-4 py-4 text-sm font-bold text-blue-700 text-right bg-blue-50">{formatCurrency(subtotals.purchaseAmount)}</td>
                 <td className="px-4 py-4 text-sm font-bold text-gray-900 text-right">{subtotals.balanceQuantity}</td>
                 <td className="px-4 py-4 text-sm font-bold text-green-600 text-right">{formatCurrency(subtotals.balanceAmount)}</td>
@@ -956,6 +959,37 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
       <div className="mt-8 pt-4 border-t border-gray-200 text-center text-sm text-gray-500">
         Created by <span className="font-semibold text-blue-600">Soft-Technix</span>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          BARCODE SCANNER MODAL — Full screen overlay
+      ══════════════════════════════════════════════════════════════════════ */}
+      {showBarcodeScanner && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl w-full max-w-7xl max-h-[95vh] overflow-y-auto m-3 shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <Barcode className="h-5 w-5 text-violet-600" />
+                <span className="font-semibold text-gray-800">Barcode Scanner</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBarcodeScanner(false)
+                  // Refresh stock after scanner closes in case GRN was updated
+                  fetchStockEntries()
+                }}
+                className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Render the full BarcodeScannerScreen inside modal */}
+            <BarcodeScannerScreen />
+          </div>
+        </div>
+      )}
 
       {/* Purchase Return Modal */}
       {showReturnForm && selectedProductForReturn && (
@@ -1041,7 +1075,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* ✅ Date field */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
                       <input
@@ -1139,7 +1172,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                 </div>
               </div>
 
-              {/* ✅ Live Purchase Summary with correct formula */}
               {formData.quantity && formData.purchaseRate && formData.saleRate && (
                 <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-blue-900 mb-3">Purchase Summary</h4>
@@ -1166,7 +1198,6 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       </div>
                     </div>
                   </div>
-                  {/* Profit preview */}
                   <div className="mt-3 flex justify-between items-center bg-green-50 rounded-lg px-4 py-2 border border-green-200">
                     <span className="text-sm text-green-700 font-medium">Potential Profit (at sale rate)</span>
                     <span className="font-bold text-green-800">
