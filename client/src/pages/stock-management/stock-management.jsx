@@ -1178,6 +1178,14 @@ const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
                       <button onClick={() => handleEdit(entry)} className="text-indigo-600 hover:text-indigo-900" title="Edit">
                         <Edit className="h-4 w-4" />
                       </button>
+                      {/* ── Barcode Print Button ── */}
+                      <button
+                        onClick={() => { setBarcodeEntry(entry); setShowBarcodeModal(true) }}
+                        className="text-violet-600 hover:text-violet-900"
+                        title="Print barcode label"
+                      >
+                        <Barcode className="h-4 w-4" />
+                      </button>
                       <button onClick={() => handleDelete(entry.id)} className="text-red-600 hover:text-red-900" title="Delete">
                         <Trash2 className="h-4 w-4" />
                       </button>
