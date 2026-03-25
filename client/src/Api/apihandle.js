@@ -1821,7 +1821,75 @@ getAccountLedger: async ({ accountCode, accountName, fromDate, toDate }) => {
       throw new Error(error.response?.data?.message || error.message || "Failed to delete vendor payment voucher");
     }
   },
-
+ // ============ STOCK LEDGER ENDPOINTS ============
+ 
+  /**
+   * Get full FIFO stock ledger (all products, date-filtered)
+   *
+   * @param {Object} filters
+   * @param {string} [filters.startDate]  - "YYYY-MM-DD"
+   * @param {string} [filters.endDate]    - "YYYY-MM-DD"
+   * @param {string} [filters.productId]  - MongoDB ObjectId
+   * @param {string} [filters.category]   - product category string
+   * @param {string} [filters.type]       - "IN" | "OUT"
+   * @param {number} [filters.page]       - page number (default 1)
+   * @param {number} [filters.limit]      - items per page (default 50)
+   *
+   * @returns {Promise<{ success, data, summary, pagination }>}
+   */
+  getStockLedger: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      Object.keys(filters).forEach((key) => {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") {
+          params.append(key, filters[key])
+        }
+      })
+ 
+      const url = params.toString()
+        ? `/stock-ledger?${params.toString()}`
+        : "/stock-ledger"
+ 
+      const response = await apiClient.get(url)
+ 
+      if (response.data) {
+        return response.data
+      }
+      return { success: true, data: [], summary: {}, pagination: {} }
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.")
+      }
+      throw new Error(
+        error.response?.data?.message || error.message || "Failed to fetch stock ledger"
+      )
+    }
+  },
+ 
+  /**
+   * Get FIFO ledger for a single product (full history, no date filter)
+   *
+   * @param {string} productId - MongoDB ObjectId of the product
+   * @returns {Promise<{ success, product, data, summary }>}
+   */
+  getProductLedger: async (productId) => {
+    try {
+      const response = await apiClient.get(`/stock-ledger/product/${productId}`)
+ 
+      if (response.data) {
+        return response.data
+      }
+      return { success: true, product: null, data: [], summary: {} }
+    } catch (error) {
+      if (error.code === "ECONNREFUSED" || error.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to server. Please check if the server is running.")
+      }
+      throw new Error(
+        error.response?.data?.message || error.message || "Failed to fetch product ledger"
+      )
+    }
+  },
+ 
 
   // ============ END OF VENDOR PAYMENT VOUCHER ENDPOINTS ============
   // ============ UTILITY METHODS ============

@@ -44,6 +44,7 @@ app.use("/api/profit-loss",   require("./routes/Profitlossroutes "))
 app.use("/api/barcodes", require("./routes/Barcoderoutes"))  
 app.use("/api/overhead-voucher", require("./routes/Overheadvoucherroutes"))
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use("/api/stock-ledger", require("./routes/Stockledgerroutes"))
 
 
 app.use((err, req, res, next) => {

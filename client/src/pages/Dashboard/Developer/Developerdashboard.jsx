@@ -29,6 +29,7 @@ import SupplierPaymentVoucher from "@/pages/Accounts/Supplier-Cash-payment-Vouch
 import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
+import StockLedger from "@/pages/Stockledger/Stockledger";
 import Icon from "@/assets/icon.png";
 
 // Developer: Full access (same as Admin)
@@ -41,6 +42,7 @@ const REPORT_ITEMS = [
   { key: "Product Management", label: "Product Management" },
   { key: "Voucher Query",      label: "Voucher Query" },
   { key: "Barcode Scanner",    label: "Barcode Scanner" },
+  { key: "Stock Ledger",       label: "Stock Ledger" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -207,6 +209,7 @@ export default function DeveloperDashboard() {
         {activeTab === "Product Management" && <ProductManagementDashboard />}
         {activeTab === "Voucher Query"      && <VoucherQuery />}
         {activeTab === "Barcode Scanner"    && <BarcodeScannerScreen />}
+        {activeTab === "Stock Ledger"       && <StockLedger />}
         {activeTab === "chart-of-accounts"  && (
           <>
             {chartPage === "assets"      && <AssetsPage />}
