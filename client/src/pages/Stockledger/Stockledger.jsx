@@ -172,9 +172,31 @@ function buildFIFOLedger(products, sales) {
     })
   })
 
-  // 3. Sort entire ledger by date desc for default display
-  ledger.sort((a, b) => b.date - a.date)
-  return ledger
+  // 3. Group by product: for each product show all IN rows first (asc date),
+  //    then all OUT rows (asc date) immediately below — so Purchase is always
+  //    on top and its Sales appear underneath it.
+  //    Products themselves are ordered by their earliest IN date (oldest first).
+
+  // Collect unique productIds in order of first IN event
+  const productOrder = []
+  const seen = new Set()
+  // ledger rows are still in processing order (ascending per product), so
+  // we just walk them to find first appearance of each product
+  ledger.forEach((r) => {
+    const pid = String(r.productId)
+    if (!seen.has(pid)) { seen.add(pid); productOrder.push(pid) }
+  })
+
+  const grouped = []
+  productOrder.forEach((pid) => {
+    const inRows  = ledger.filter((r) => String(r.productId) === pid && r.type === "IN")
+                          .sort((a, b) => a.date - b.date)
+    const outRows = ledger.filter((r) => String(r.productId) === pid && r.type === "OUT")
+                          .sort((a, b) => a.date - b.date)
+    grouped.push(...inRows, ...outRows)
+  })
+
+  return grouped
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -247,7 +269,7 @@ const StockLedger = () => {
         row.invoice?.toLowerCase().includes(searchTerm.toLowerCase())
       const matchCat = !categoryFilter || row.category === categoryFilter
       const matchType = !typeFilter || row.type === typeFilter
-      const matchProduct = !productFilter || row.productId === productFilter
+      const matchProduct = !productFilter || String(row.productId) === productFilter
 
       // Date filter
       const rowDate = new Date(row.date)
@@ -520,8 +542,17 @@ const StockLedger = () => {
             {paginated.length > 0 ? paginated.map((row, i) => {
               const isIN = row.type === "IN"
               const isExpanded = expandedRow === `${row.productId}-${i}`
+              // Show a product-group separator when the product changes
+              const prevRow = paginated[i - 1]
+              const isNewProduct = i === 0 || String(prevRow?.productId) !== String(row.productId)
               return (
                 <>
+                  {/* ── Product group divider ── */}
+                  {isNewProduct && i > 0 && (
+                    <tr key={`sep-${i}`}>
+                      <td colSpan={15} className="h-2 bg-gray-100 border-t-2 border-b border-gray-300" />
+                    </tr>
+                  )}
                   <tr key={`${row.productId}-${i}`}
                     onClick={() => setExpandedRow(isExpanded ? null : `${row.productId}-${i}`)}
                     className={`cursor-pointer transition-colors ${isIN ? "hover:bg-green-50 bg-green-50/30" : "hover:bg-orange-50 bg-orange-50/30"}`}>
@@ -666,7 +697,7 @@ const StockLedger = () => {
 
       <div className="pt-4 border-t border-gray-100 text-center text-xs text-gray-400">
         Created by <span className="font-semibold text-indigo-500">Soft-Technix</span>
-        &nbsp;·&nbsp; FIFO (First In, First Out) valuation method
+        
       </div>
     </div>
   )
