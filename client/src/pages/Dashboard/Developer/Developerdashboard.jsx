@@ -30,6 +30,7 @@ import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Cus
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import StockLedger from "@/pages/Stockledger/Stockledger";
+import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
 import Icon from "@/assets/icon.png";
 
 // Developer: Full access (same as Admin)
@@ -56,6 +57,7 @@ const ACCOUNT_ITEMS = [
   { key: "Customer Receipt Voucher",   label: "Customer Receipt Voucher" },
   { key: "sales discount Voucher",     label: "Sales Discount Voucher" },
   { key: "Overhead Payment",           label: "Overhead Payment" },
+  { key: "Fabric Stock Sheet",         label: "Fabric Stock Sheet" }
 ];
 
 const CHART_PAGES = ["assets","liabilities","equity","revenue","expenses"];
@@ -229,6 +231,7 @@ export default function DeveloperDashboard() {
         {activeTab === "Customer Receipt Voucher"   && <CustomerReceiptVoucher />}
         {activeTab === "sales discount Voucher"     && <SalesDiscountVouchers />}
         {activeTab === "Overhead Payment"           && <OverheadPayment />}
+        {activeTab === "Fabric Stock Sheet"         && <FabricStockSheet />}
         {activeTab === "notifications"              && <Notifications notifications={notifications} onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))} />}
       </main>
     </div>
