@@ -1,5 +1,5 @@
-const FabricStock = require("../models/FabricStock")
-const Liability = require("../models/Liability") // Your existing Liability model
+const FabricStock = require("../models/Fabricstock")
+const Liability = require("../models/chart-of-accounts/Liabilitys") 
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  HELPER: Get next Sr. No.
