@@ -10,7 +10,7 @@ const {
   deleteFabricStock,
   getReportByMaster,
   getReportByVendor,
-} = require("./controllers/fabricStockController")
+} = require("./controllers/Fabricstockcontroller")
 
 // ── Vendor Dropdown ──────────────────────────────────────────────────────────
 // IMPORTANT: /vendors must come BEFORE /:id so it doesn't get caught as an ID
