@@ -46,7 +46,8 @@ app.use("/api/overhead-voucher", require("./routes/Overheadvoucherroutes"))
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use("/api/stock-ledger", require("./routes/Stockledgerroutes"))
 app.use("/api/fabric-stock", require("./routes/Fabricstockroutes"))
-
+app.use("/api/raw-materials",  require("./routes/rawMaterialRoutes"));
+app.use("/api/finished-goods", require("./routes/finishedGoodRoutes"));
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
