@@ -1,11 +1,11 @@
-const RawMaterial = require("../models/Rawmaterial");
+const RawMaterial = require("../models/RawMaterial");
 
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 exports.createRawMaterial = async (req, res) => {
   try {
-    const { fabricName, colour } = req.body;
+    const { fabricName, colour, barcode } = req.body;
 
-    const item = new RawMaterial({ fabricName, colour });
+    const item = new RawMaterial({ fabricName, colour, barcode });
     await item.save();
 
     res.status(201).json({ success: true, data: item });
@@ -61,10 +61,10 @@ exports.getRawMaterialById = async (req, res) => {
 // ─── UPDATE ────────────────────────────────────────────────────────────────────
 exports.updateRawMaterial = async (req, res) => {
   try {
-    const { fabricName, colour } = req.body;
+    const { fabricName, colour, barcode } = req.body;
     const item = await RawMaterial.findByIdAndUpdate(
       req.params.id,
-      { fabricName, colour },
+      { fabricName, colour, barcode },
       { new: true, runValidators: true }
     );
     if (!item) return res.status(404).json({ success: false, message: "Not found" });

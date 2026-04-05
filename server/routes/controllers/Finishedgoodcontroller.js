@@ -1,11 +1,11 @@
-const FinishedGood = require("../models/Finishedgood");
+const FinishedGood = require("../models/FinishedGood");
 
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 exports.createFinishedGood = async (req, res) => {
   try {
-    const { suitName, qty, size, colour } = req.body;
+    const { suitName, qty, size, colour, barcode } = req.body;
 
-    const item = new FinishedGood({ suitName, qty, size, colour });
+    const item = new FinishedGood({ suitName, qty, size, colour, barcode });
     await item.save();
 
     res.status(201).json({ success: true, data: item });
@@ -63,10 +63,10 @@ exports.getFinishedGoodById = async (req, res) => {
 // ─── UPDATE ────────────────────────────────────────────────────────────────────
 exports.updateFinishedGood = async (req, res) => {
   try {
-    const { suitName, qty, size, colour } = req.body;
+    const { suitName, qty, size, colour, barcode } = req.body;
     const item = await FinishedGood.findByIdAndUpdate(
       req.params.id,
-      { suitName, qty, size, colour },
+      { suitName, qty, size, colour, barcode },
       { new: true, runValidators: true }
     );
     if (!item) return res.status(404).json({ success: false, message: "Not found" });
