@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-const API = "/api/raw-materials";
+const API = "https://debug-nxby.vercel.app/api/raw-materials";
 
 const EMPTY_FORM = { fabricName: "", colour: "" };
 
