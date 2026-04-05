@@ -33,7 +33,7 @@ import StockLedger from "@/pages/Stockledger/Stockledger";
 import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
 
 // ── NEW: Master Profile pages ──────────────────────────────────────────────────
-import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial/Rawmaterial";
+import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
 import FinishedGoodPage from "@/pages/master-profile/Finishedgood/Finishedgood";
 
 import Icon from "@/assets/icon.png";

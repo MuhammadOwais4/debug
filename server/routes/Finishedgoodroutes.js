@@ -1,6 +1,6 @@
 const express = require("express");
 const router  = express.Router();
-const ctrl    = require("./controllers//Fabricstockcontroller");
+const ctrl    = require("./controllers/Fabricstockcontroller");
 
 // Search  →  GET /api/finished-goods/search?q=suit
 router.get("/search", ctrl.searchFinishedGoods);
