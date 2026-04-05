@@ -1,4 +1,4 @@
-const RawMaterial = require("../models/RawMaterial");
+const RawMaterial = require("../models/Rawmaterial");
 
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 exports.createRawMaterial = async (req, res) => {

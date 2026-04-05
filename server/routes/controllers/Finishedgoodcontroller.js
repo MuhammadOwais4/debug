@@ -1,4 +1,4 @@
-const FinishedGood = require("../models/FinishedGood");
+const FinishedGood = require("../models/Finishedgood");
 
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 exports.createFinishedGood = async (req, res) => {
