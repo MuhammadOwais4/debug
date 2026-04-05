@@ -3,7 +3,7 @@ import axios from "axios";
 
 const API = "https://debug-nxby.vercel.app/api/raw-materials";
 
-const EMPTY_FORM = { fabricName: "", colour: "" };
+const EMPTY_FORM = { fabricName: "", colour: "", barcode: "" };
 
 export default function RawMaterialPage() {
   const [records,    setRecords]    = useState([]);
@@ -75,7 +75,7 @@ export default function RawMaterialPage() {
   // ── edit ──────────────────────────────────────────────────────
   const startEdit = (item) => {
     setEditId(item._id);
-    setForm({ fabricName: item.fabricName, colour: item.colour });
+    setForm({ fabricName: item.fabricName, colour: item.colour, barcode: item.barcode });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -172,13 +172,15 @@ export default function RawMaterialPage() {
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 transition" />
             </div>
 
-            {/* Barcode – read only */}
+            {/* Barcode – manual */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Barcode <span className="text-violet-400 font-normal">(Auto)</span>
+                Barcode <span className="text-red-400">*</span>
               </label>
-              <input disabled value="Auto-generated"
-                className="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-200 bg-gray-50 text-gray-400 text-sm" />
+              <input required value={form.barcode}
+                onChange={e => setForm(p => ({ ...p, barcode: e.target.value }))}
+                placeholder="e.g. 1234567890"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 transition" />
             </div>
 
             {/* Buttons */}

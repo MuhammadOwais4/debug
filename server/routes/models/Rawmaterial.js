@@ -19,8 +19,9 @@ const rawMaterialSchema = new mongoose.Schema(
     },
     barcode: {
       type: String,
+      required: [true, "Barcode is required"],
       unique: true,
-      // Auto-generated if not provided
+      trim: true,
     },
   },
   { timestamps: true }
@@ -31,10 +32,6 @@ rawMaterialSchema.pre("save", async function (next) {
   if (!this.serialNo) {
     const count = await mongoose.model("RawMaterial").countDocuments();
     this.serialNo = `RM-${String(count + 1).padStart(5, "0")}`;
-  }
-  if (!this.barcode) {
-    // Simple barcode: timestamp + random 4 digits
-    this.barcode = `${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
   }
   next();
 });

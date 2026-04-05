@@ -14,8 +14,9 @@ const finishedGoodSchema = new mongoose.Schema(
     },
     barcode: {
       type: String,
+      required: [true, "Barcode is required"],
       unique: true,
-      // Auto-generated if not provided
+      trim: true,
     },
     qty: {
       type: Number,
@@ -42,9 +43,6 @@ finishedGoodSchema.pre("save", async function (next) {
   if (!this.serialArticle) {
     const count = await mongoose.model("FinishedGood").countDocuments();
     this.serialArticle = `FG-${String(count + 1).padStart(5, "0")}`;
-  }
-  if (!this.barcode) {
-    this.barcode = `${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
   }
   next();
 });

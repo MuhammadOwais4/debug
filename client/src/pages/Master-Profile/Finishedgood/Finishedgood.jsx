@@ -3,7 +3,7 @@ import axios from "axios";
 
 const API = "https://debug-nxby.vercel.app/api/finished-goods";
 
-const EMPTY_FORM = { suitName: "", qty: "", size: "", colour: "" };
+const EMPTY_FORM = { suitName: "", qty: "", size: "", colour: "", barcode: "" };
 
 const SIZE_OPTIONS = ["XS","S","M","L","XL","XXL","3XL","Custom"];
 
@@ -73,7 +73,7 @@ export default function FinishedGoodPage() {
 
   const startEdit = (item) => {
     setEditId(item._id);
-    setForm({ suitName: item.suitName, qty: item.qty, size: item.size, colour: item.colour });
+    setForm({ suitName: item.suitName, qty: item.qty, size: item.size, colour: item.colour, barcode: item.barcode });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -158,13 +158,15 @@ export default function FinishedGoodPage() {
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 transition" />
             </div>
 
-            {/* Barcode – auto */}
+            {/* Barcode – manual */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Barcode <span className="text-emerald-400 font-normal">(Auto)</span>
+                Barcode <span className="text-red-400">*</span>
               </label>
-              <input disabled value="Auto-generated"
-                className="w-full px-4 py-2.5 rounded-xl border border-dashed border-gray-200 bg-gray-50 text-gray-400 text-sm" />
+              <input required value={form.barcode}
+                onChange={e => setForm(p => ({ ...p, barcode: e.target.value }))}
+                placeholder="e.g. 1234567890"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 transition" />
             </div>
 
             {/* Quantity */}
