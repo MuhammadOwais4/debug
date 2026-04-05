@@ -204,13 +204,7 @@ export default function DeveloperDashboard() {
 
         {/* ── Tab bar ── */}
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
-          <nav className="-mb-px flex flex-wrap">
-
-            <NavBtn tab="dashboard" label="Dashboard" />
-            <NavBtn tab="stock"     label="Goods Receipt Note" />
-            <NavBtn tab="sales"     label="Sales Tracking" />
-
-            {/* ── Master Profile dropdown ── */}
+          {/* ── Master Profile dropdown ── */}
             <DropdownBtn
               label="Master Profile"
               isActive={isMasterActive}
@@ -220,7 +214,11 @@ export default function DeveloperDashboard() {
               items={MASTER_PROFILE_ITEMS}
               onSelect={key => setActiveTab(key)}
             />
+          <nav className="-mb-px flex flex-wrap">
 
+            <NavBtn tab="dashboard" label="Dashboard" />
+            <NavBtn tab="stock"     label="Goods Receipt Note" />
+            <NavBtn tab="sales"     label="Sales Tracking" />
             <DropdownBtn
               label="Reports"
               isActive={isReportActive}
