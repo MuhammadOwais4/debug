@@ -47,8 +47,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use("/api/stock-ledger", require("./routes/Stockledgerroutes"))
 app.use("/api/fabric-stock", require("./routes/Fabricstockroutes"))
 app.use("/api/raw-materials",  require("./routes/Rawmaterialroutes"));
-app.use("/api/finished-goods", require("./routes/finishedGoodRoutes.js"));
-
+app.use("/api/finished-goods", require("./routes/Finishedgoodroutes"))
 app.use((err, req, res, next) => {
   console.error(err.stack)
   res.status(500).json({ message: "Something went wrong!", error: err.message })
