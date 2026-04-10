@@ -23,7 +23,7 @@ import {
 
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen" 
 
-const productCategories = ["Garments","Electronics", "Furniture", "Stationery", "Kitchenware", "Clothing", "Accessories", "Food", "Garments", "Other"]
+const productCategories = ["Suits","Fabric",]
 
 const StockManagement = ({ onStockUpdate, onNotificationCreate }) => {
   const formatDateToDDMMYYYY = (date) => {
