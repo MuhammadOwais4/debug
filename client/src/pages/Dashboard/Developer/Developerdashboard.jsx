@@ -30,7 +30,7 @@ import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Cus
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import StockLedger from "@/pages/Stockledger/Stockledger";
-// import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
+import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
 
 // ── NEW: Master Profile pages ──────────────────────────────────────────────────
 import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
