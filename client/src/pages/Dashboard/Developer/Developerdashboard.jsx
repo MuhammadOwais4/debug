@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext/AuthContext";
+import { useHashTab } from "@/hooks/useHashTab";
 
 import StockManagement from "@/pages/stock-management/stock-management";
 import SalesTracking from "@/pages/sales-tracking/sales-tracking";
@@ -29,21 +30,7 @@ import SupplierPaymentVoucher from "@/pages/Accounts/Supplier-Cash-payment-Vouch
 import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
-import StockLedger from "@/pages/Stockledger/Stockledger";
-import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
-
-// ── NEW: Master Profile pages ──────────────────────────────────────────────────
-import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
-import FinishedGoodPage from "@/pages/Master-Profile/Finishedgood/Finishedgood";
-
 import Icon from "@/assets/icon.png";
-
-// ─── Nav config ───────────────────────────────────────────────────────────────
-
-const MASTER_PROFILE_ITEMS = [
-  { key: "Raw Material",   label: "Raw Material" },
-  { key: "Finished Good",  label: "Finished Good" },
-];
 
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
@@ -54,7 +41,6 @@ const REPORT_ITEMS = [
   { key: "Product Management", label: "Product Management" },
   { key: "Voucher Query",      label: "Voucher Query" },
   { key: "Barcode Scanner",    label: "Barcode Scanner" },
-  { key: "Stock Ledger",       label: "Stock Ledger" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -68,36 +54,28 @@ const ACCOUNT_ITEMS = [
   { key: "Customer Receipt Voucher",   label: "Customer Receipt Voucher" },
   { key: "sales discount Voucher",     label: "Sales Discount Voucher" },
   { key: "Overhead Payment",           label: "Overhead Payment" },
-  { key: "Fabric Stock Sheet",         label: "Fabric Stock Sheet" }
 ];
 
 const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-export default function DeveloperDashboard() {
+export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab,      setActiveTab]      = useState("dashboard");
-  const [chartPage,      setChartPage]      = useState("assets");
-  const [products,       setProducts]       = useState([]);
-  const [expenses,       setExpenses]       = useState([]);
-  const [sales,          setSales]          = useState([]);
-  const [notifications,  setNotifications]  = useState([]);
+  const [activeTab, setActiveTab] = useHashTab("dashboard");
+  const [chartPage,     setChartPage]     = useState("assets");
+  const [products,      setProducts]      = useState([]);
+  const [expenses,      setExpenses]      = useState([]);
+  const [sales,         setSales]         = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [reportsOpen,   setReportsOpen]   = useState(false);
+  const [accountsOpen,  setAccountsOpen]  = useState(false);
+  const [chartOpen,     setChartOpen]     = useState(false);
 
-  // dropdown open states
-  const [masterOpen,   setMasterOpen]   = useState(false);
-  const [reportsOpen,  setReportsOpen]  = useState(false);
-  const [accountsOpen, setAccountsOpen] = useState(false);
-  const [chartOpen,    setChartOpen]    = useState(false);
-
-  const masterRef   = useRef(null);
   const reportsRef  = useRef(null);
   const accountsRef = useRef(null);
   const chartRef    = useRef(null);
 
-  // low-stock notifications
   useEffect(() => {
     const lowStock = products.filter(p => p.quantity < 5);
     if (lowStock.length > 0) {
@@ -109,10 +87,8 @@ export default function DeveloperDashboard() {
     }
   }, [products]);
 
-  // close dropdowns on outside click
   useEffect(() => {
     function onOutside(e) {
-      if (masterRef.current   && !masterRef.current.contains(e.target))   setMasterOpen(false);
       if (reportsRef.current  && !reportsRef.current.contains(e.target))  setReportsOpen(false);
       if (accountsRef.current && !accountsRef.current.contains(e.target)) setAccountsOpen(false);
       if (chartRef.current    && !chartRef.current.contains(e.target))    setChartOpen(false);
@@ -121,17 +97,14 @@ export default function DeveloperDashboard() {
     return () => document.removeEventListener("mousedown", onOutside);
   }, []);
 
-  const isMasterActive  = MASTER_PROFILE_ITEMS.some(m => m.key === activeTab);
   const isReportActive  = REPORT_ITEMS.some(r => r.key === activeTab);
   const isAccountActive = ACCOUNT_ITEMS.some(a => a.key === activeTab);
-
-  // ── Reusable nav components ─────────────────────────────────────────────────
 
   const NavBtn = ({ tab, label }) => (
     <button
       className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
         activeTab === tab
-          ? "border-violet-500 text-violet-600"
+          ? "border-blue-500 text-blue-600"
           : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
       }`}
       onClick={() => setActiveTab(tab)}
@@ -145,23 +118,22 @@ export default function DeveloperDashboard() {
       <button
         className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
           isActive
-            ? "border-violet-500 text-violet-600"
+            ? "border-blue-500 text-blue-600"
             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
         }`}
         onClick={() => setOpen(p => !p)}
       >
         {label}
-        <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-
       {isOpen && (
         <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-1">
           {items.map(item => (
-            <button key={item.key}
-              className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 transition-colors"
+            <button
+              key={item.key}
+              className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
               onClick={() => { onSelect(item.key); setOpen(false); }}
             >
               {item.label}
@@ -172,23 +144,19 @@ export default function DeveloperDashboard() {
     </div>
   );
 
-  // ──────────────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-gray-50">
-
-      {/* ── Header ── */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={Icon} alt="Logo" className="w-10 h-auto" />
             <div>
               <h1 className="text-lg font-bold text-gray-900 leading-tight">Accounting Software</h1>
-              <p className="text-xs text-gray-500">Developer Dashboard</p>
+              <p className="text-xs text-gray-500">Admin Dashboard</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs bg-violet-100 text-violet-700 font-bold px-3 py-1 rounded-full">DEVELOPER</span>
+            <span className="text-xs bg-red-100 text-red-700 font-bold px-3 py-1 rounded-full">ADMIN</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
@@ -201,14 +169,12 @@ export default function DeveloperDashboard() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
-
-        {/* ── Tab bar ── */}
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
-
             <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="stock"     label="Goods Receipt Note" />
             <NavBtn tab="sales"     label="Sales Tracking" />
+
             <DropdownBtn
               label="Reports"
               isActive={isReportActive}
@@ -238,21 +204,11 @@ export default function DeveloperDashboard() {
               items={ACCOUNT_ITEMS}
               onSelect={key => setActiveTab(key)}
             />
-{/* ── Master Profile dropdown ── */}
-            <DropdownBtn
-              label="Master Profile"
-              isActive={isMasterActive}
-              isOpen={masterOpen}
-              setOpen={setMasterOpen}
-              refProp={masterRef}
-              items={MASTER_PROFILE_ITEMS}
-              onSelect={key => setActiveTab(key)}
-            />
-            {/* Notifications */}
+
             <button
               className={`relative whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "notifications"
-                  ? "border-violet-500 text-violet-600"
+                  ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => setActiveTab("notifications")}
@@ -267,18 +223,9 @@ export default function DeveloperDashboard() {
           </nav>
         </div>
 
-        {/* ── Page content ── */}
-
-        {/* Master Profile */}
-        {activeTab === "Raw Material"  && <RawMaterialPage />}
-        {activeTab === "Finished Good" && <FinishedGoodPage />}
-
-        {/* Core tabs */}
-        {activeTab === "dashboard" && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
-        {activeTab === "stock"     && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
-        {activeTab === "sales"     && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
-
-        {/* Reports */}
+        {activeTab === "dashboard"          && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
+        {activeTab === "stock"              && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
+        {activeTab === "sales"              && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
@@ -287,10 +234,7 @@ export default function DeveloperDashboard() {
         {activeTab === "Product Management" && <ProductManagementDashboard />}
         {activeTab === "Voucher Query"      && <VoucherQuery />}
         {activeTab === "Barcode Scanner"    && <BarcodeScannerScreen />}
-        {activeTab === "Stock Ledger"       && <StockLedger />}
-
-        {/* Chart of Accounts */}
-        {activeTab === "chart-of-accounts" && (
+        {activeTab === "chart-of-accounts"  && (
           <>
             {chartPage === "assets"      && <AssetsPage />}
             {chartPage === "liabilities" && <LiabilitiesPage />}
@@ -299,8 +243,6 @@ export default function DeveloperDashboard() {
             {chartPage === "revenue"     && <RevenuePage />}
           </>
         )}
-
-        {/* Accounts */}
         {activeTab === "Cash Payment Voucher"       && <CashPaymentVoucher />}
         {activeTab === "Cash Receipt Voucher"       && <CashReceiptVoucher />}
         {activeTab === "Journal Voucher"            && <JournalVoucher />}
@@ -311,9 +253,7 @@ export default function DeveloperDashboard() {
         {activeTab === "Customer Receipt Voucher"   && <CustomerReceiptVoucher />}
         {activeTab === "sales discount Voucher"     && <SalesDiscountVouchers />}
         {activeTab === "Overhead Payment"           && <OverheadPayment />}
-        {activeTab === "Fabric Stock Sheet"         && <FabricStockSheet />}
-
-        {activeTab === "notifications" && (
+        {activeTab === "notifications"              && (
           <Notifications
             notifications={notifications}
             onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}

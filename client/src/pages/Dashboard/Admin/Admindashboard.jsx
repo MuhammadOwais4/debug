@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext/AuthContext";
+import { useHashTab } from "@/hooks/useHashTab";
 
-// ── Import all your pages ─────────────────────────────────────────────
 import StockManagement from "@/pages/stock-management/stock-management";
 import SalesTracking from "@/pages/sales-tracking/sales-tracking";
 import Reports from "@/pages/reports/Business-reports/Business-reports";
@@ -32,7 +32,6 @@ import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import Icon from "@/assets/icon.png";
 
-// ADMIN: Full access to everything
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
@@ -57,21 +56,21 @@ const ACCOUNT_ITEMS = [
   { key: "Overhead Payment",           label: "Overhead Payment" },
 ];
 
-const CHART_PAGES = ["assets","liabilities","equity","revenue","expenses"];
+const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab,           setActiveTab]           = useState("dashboard");
-  const [chartPage,           setChartPage]           = useState("assets");
-  const [products,            setProducts]            = useState([]);
-  const [expenses,            setExpenses]            = useState([]);
-  const [sales,               setSales]               = useState([]);
-  const [notifications,       setNotifications]       = useState([]);
-  const [reportsOpen,         setReportsOpen]         = useState(false);
-  const [accountsOpen,        setAccountsOpen]        = useState(false);
-  const [chartOpen,           setChartOpen]           = useState(false);
+  const [activeTab, setActiveTab] = useHashTab("dashboard");
+  const [chartPage,     setChartPage]     = useState("assets");
+  const [products,      setProducts]      = useState([]);
+  const [expenses,      setExpenses]      = useState([]);
+  const [sales,         setSales]         = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [reportsOpen,   setReportsOpen]   = useState(false);
+  const [accountsOpen,  setAccountsOpen]  = useState(false);
+  const [chartOpen,     setChartOpen]     = useState(false);
 
   const reportsRef  = useRef(null);
   const accountsRef = useRef(null);
@@ -104,17 +103,23 @@ export default function AdminDashboard() {
   const NavBtn = ({ tab, label }) => (
     <button
       className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
-        activeTab === tab ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+        activeTab === tab
+          ? "border-blue-500 text-blue-600"
+          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
       }`}
       onClick={() => setActiveTab(tab)}
-    >{label}</button>
+    >
+      {label}
+    </button>
   );
 
-  const DropdownBtn = ({ label, isActive, isOpen, setOpen, refProp, items, onSelect, extraClass = "" }) => (
+  const DropdownBtn = ({ label, isActive, isOpen, setOpen, refProp, items, onSelect }) => (
     <div className="relative" ref={refProp}>
       <button
-        className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${extraClass} ${
-          isActive ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+        className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
+          isActive
+            ? "border-blue-500 text-blue-600"
+            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
         }`}
         onClick={() => setOpen(p => !p)}
       >
@@ -126,10 +131,13 @@ export default function AdminDashboard() {
       {isOpen && (
         <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-1">
           {items.map(item => (
-            <button key={item.key}
+            <button
+              key={item.key}
               className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
               onClick={() => { onSelect(item.key); setOpen(false); }}
-            >{item.label}</button>
+            >
+              {item.label}
+            </button>
           ))}
         </div>
       )}
@@ -138,7 +146,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -151,8 +158,10 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             <span className="text-xs bg-red-100 text-red-700 font-bold px-3 py-1 rounded-full">ADMIN</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
-            <button onClick={() => { logout(); navigate("/login", { replace: true }); }}
-              className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+            <button
+              onClick={() => { logout(); navigate("/login", { replace: true }); }}
+              className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
               Logout
             </button>
           </div>
@@ -160,30 +169,47 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
-        {/* Tabs */}
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
             <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="stock"     label="Goods Receipt Note" />
             <NavBtn tab="sales"     label="Sales Tracking" />
 
-            <DropdownBtn label="Reports" isActive={isReportActive} isOpen={reportsOpen}
-              setOpen={setReportsOpen} refProp={reportsRef} items={REPORT_ITEMS}
-              onSelect={key => setActiveTab(key)} />
+            <DropdownBtn
+              label="Reports"
+              isActive={isReportActive}
+              isOpen={reportsOpen}
+              setOpen={setReportsOpen}
+              refProp={reportsRef}
+              items={REPORT_ITEMS}
+              onSelect={key => setActiveTab(key)}
+            />
 
-            <DropdownBtn label="Chart of Accounts"
-              isActive={activeTab === "chart-of-accounts"} isOpen={chartOpen}
-              setOpen={setChartOpen} refProp={chartRef}
+            <DropdownBtn
+              label="Chart of Accounts"
+              isActive={activeTab === "chart-of-accounts"}
+              isOpen={chartOpen}
+              setOpen={setChartOpen}
+              refProp={chartRef}
               items={CHART_PAGES.map(p => ({ key: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))}
-              onSelect={page => { setChartPage(page); setActiveTab("chart-of-accounts"); }} />
+              onSelect={page => { setChartPage(page); setActiveTab("chart-of-accounts"); }}
+            />
 
-            <DropdownBtn label="Accounts" isActive={isAccountActive} isOpen={accountsOpen}
-              setOpen={setAccountsOpen} refProp={accountsRef} items={ACCOUNT_ITEMS}
-              onSelect={key => setActiveTab(key)} />
+            <DropdownBtn
+              label="Accounts"
+              isActive={isAccountActive}
+              isOpen={accountsOpen}
+              setOpen={setAccountsOpen}
+              refProp={accountsRef}
+              items={ACCOUNT_ITEMS}
+              onSelect={key => setActiveTab(key)}
+            />
 
             <button
               className={`relative whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "notifications" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                activeTab === "notifications"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => setActiveTab("notifications")}
             >
@@ -197,7 +223,6 @@ export default function AdminDashboard() {
           </nav>
         </div>
 
-        {/* Page Content */}
         {activeTab === "dashboard"          && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
         {activeTab === "stock"              && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "sales"              && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
@@ -228,7 +253,12 @@ export default function AdminDashboard() {
         {activeTab === "Customer Receipt Voucher"   && <CustomerReceiptVoucher />}
         {activeTab === "sales discount Voucher"     && <SalesDiscountVouchers />}
         {activeTab === "Overhead Payment"           && <OverheadPayment />}
-        {activeTab === "notifications"              && <Notifications notifications={notifications} onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))} />}
+        {activeTab === "notifications"              && (
+          <Notifications
+            notifications={notifications}
+            onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}
+          />
+        )}
       </main>
     </div>
   );

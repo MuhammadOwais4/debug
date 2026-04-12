@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext/AuthContext";
+import { useHashTab } from "@/hooks/useHashTab";
 
 import StockManagement from "@/pages/stock-management/stock-management";
 import SalesTracking from "@/pages/sales-tracking/sales-tracking";
@@ -17,7 +18,6 @@ import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Recei
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import Icon from "@/assets/icon.png";
 
-// USER: Limited access — no reports, only 4 vouchers, no journal/overhead
 const ACCOUNT_ITEMS = [
   { key: "Cash Payment Voucher", label: "Cash Payment Voucher" },
   { key: "Cash Receipt Voucher", label: "Cash Receipt Voucher" },
@@ -25,13 +25,13 @@ const ACCOUNT_ITEMS = [
   { key: "Bank Receipt Voucher", label: "Bank Receipt Voucher" },
 ];
 
-const CHART_PAGES = ["assets","liabilities","equity","revenue","expenses"];
+const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
 
 export default function UserDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab,     setActiveTab]     = useState("dashboard");
+  const [activeTab, setActiveTab] = useHashTab("dashboard");
   const [chartPage,     setChartPage]     = useState("assets");
   const [products,      setProducts]      = useState([]);
   const [sales,         setSales]         = useState([]);
@@ -67,15 +67,18 @@ export default function UserDashboard() {
   const NavBtn = ({ tab, label }) => (
     <button
       className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
-        activeTab === tab ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+        activeTab === tab
+          ? "border-emerald-500 text-emerald-600"
+          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
       }`}
       onClick={() => setActiveTab(tab)}
-    >{label}</button>
+    >
+      {label}
+    </button>
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -88,8 +91,10 @@ export default function UserDashboard() {
           <div className="flex items-center gap-3">
             <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-3 py-1 rounded-full">USER</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
-            <button onClick={() => { logout(); navigate("/login", { replace: true }); }}
-              className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+            <button
+              onClick={() => { logout(); navigate("/login", { replace: true }); }}
+              className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
               Logout
             </button>
           </div>
@@ -97,7 +102,6 @@ export default function UserDashboard() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
-        {/* Tabs */}
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
             <NavBtn tab="dashboard" label="Dashboard" />
@@ -108,7 +112,9 @@ export default function UserDashboard() {
             <div className="relative" ref={chartRef}>
               <button
                 className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
-                  activeTab === "chart-of-accounts" ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                  activeTab === "chart-of-accounts"
+                    ? "border-emerald-500 text-emerald-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
                 onClick={() => setChartOpen(p => !p)}
               >
@@ -120,20 +126,25 @@ export default function UserDashboard() {
               {chartOpen && (
                 <div className="absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-1">
                   {CHART_PAGES.map(page => (
-                    <button key={page}
+                    <button
+                      key={page}
                       className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                       onClick={() => { setChartPage(page); setActiveTab("chart-of-accounts"); setChartOpen(false); }}
-                    >{page.charAt(0).toUpperCase() + page.slice(1)}</button>
+                    >
+                      {page.charAt(0).toUpperCase() + page.slice(1)}
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Accounts — limited */}
+            {/* Accounts */}
             <div className="relative" ref={accountsRef}>
               <button
                 className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
-                  isAccountActive ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                  isAccountActive
+                    ? "border-emerald-500 text-emerald-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
                 onClick={() => setAccountsOpen(p => !p)}
               >
@@ -145,10 +156,13 @@ export default function UserDashboard() {
               {accountsOpen && (
                 <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-1">
                   {ACCOUNT_ITEMS.map(item => (
-                    <button key={item.key}
+                    <button
+                      key={item.key}
                       className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                       onClick={() => { setActiveTab(item.key); setAccountsOpen(false); }}
-                    >{item.label}</button>
+                    >
+                      {item.label}
+                    </button>
                   ))}
                 </div>
               )}
@@ -157,7 +171,9 @@ export default function UserDashboard() {
             {/* Notifications */}
             <button
               className={`relative whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "notifications" ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                activeTab === "notifications"
+                  ? "border-emerald-500 text-emerald-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => setActiveTab("notifications")}
             >
@@ -187,7 +203,12 @@ export default function UserDashboard() {
         {activeTab === "Cash Receipt Voucher" && <CashReceiptVoucher />}
         {activeTab === "Bank Payment Voucher" && <BankPaymentVoucher />}
         {activeTab === "Bank Receipt Voucher" && <BankReceiptVoucher />}
-        {activeTab === "notifications"        && <Notifications notifications={notifications} onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))} />}
+        {activeTab === "notifications"        && (
+          <Notifications
+            notifications={notifications}
+            onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}
+          />
+        )}
       </main>
     </div>
   );

@@ -5,7 +5,6 @@ import AdminDashboard from "./pages/Dashboard/Admin/Admindashboard";
 import DeveloperDashboard from "./pages/Dashboard/Developer/Developerdashboard";
 import UserDashboard from "./pages/Dashboard/User/Userdashboard";
 
-// ── Loading Screen ───────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
     <div style={{
@@ -28,17 +27,10 @@ function LoadingScreen() {
   );
 }
 
-// ── ProtectedRoute ────────────────────────────────────────────────────────
-// allowedRoles: backend lowercase → 'user' | 'admin' | 'developer'
 function ProtectedRoute({ children, allowedRoles = [] }) {
   const { user, loading } = useAuth();
-
   if (loading) return <LoadingScreen />;
-
-  // Not logged in
   if (!user) return <Navigate to="/login" replace />;
-
-  // Wrong role → kick to their own dashboard
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     const roleMap = {
       admin:     "/dashboard/admin",
@@ -47,17 +39,13 @@ function ProtectedRoute({ children, allowedRoles = [] }) {
     };
     return <Navigate to={roleMap[user.role] || "/login"} replace />;
   }
-
   return children;
 }
 
-// ── RootRedirect ──────────────────────────────────────────────────────────
-// "/" → redirect based on role
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (!user)   return <Navigate to="/login" replace />;
-
+  if (!user) return <Navigate to="/login" replace />;
   const roleMap = {
     admin:     "/dashboard/admin",
     developer: "/dashboard/developer",
@@ -66,20 +54,13 @@ function RootRedirect() {
   return <Navigate to={roleMap[user.role] || "/login"} replace />;
 }
 
-// ── App ───────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-
-          {/* Public Route */}
           <Route path="/login" element={<Login />} />
-
-          {/* Root → auto redirect based on role */}
           <Route path="/" element={<RootRedirect />} />
-
-          {/* Admin Dashboard — only 'admin' role */}
           <Route
             path="/dashboard/admin/*"
             element={
@@ -88,8 +69,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Developer Dashboard — only 'developer' role */}
           <Route
             path="/dashboard/developer/*"
             element={
@@ -98,8 +77,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* User Dashboard — only 'user' role */}
           <Route
             path="/dashboard/user/*"
             element={
@@ -108,10 +85,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Catch-all → login */}
           <Route path="*" element={<Navigate to="/login" replace />} />
-
         </Routes>
       </BrowserRouter>
     </AuthProvider>
