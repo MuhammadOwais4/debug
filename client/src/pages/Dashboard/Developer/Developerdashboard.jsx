@@ -30,7 +30,16 @@ import SupplierPaymentVoucher from "@/pages/Accounts/Supplier-Cash-payment-Vouch
 import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
+import StockLedger from "@/pages/Stockledger/Stockledger";
+import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
+import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
+import FinishedGoodPage from "@/pages/Master-Profile/Finishedgood/Finishedgood";
 import Icon from "@/assets/icon.png";
+
+const MASTER_PROFILE_ITEMS = [
+  { key: "Raw Material",  label: "Raw Material" },
+  { key: "Finished Good", label: "Finished Good" },
+];
 
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
@@ -41,6 +50,7 @@ const REPORT_ITEMS = [
   { key: "Product Management", label: "Product Management" },
   { key: "Voucher Query",      label: "Voucher Query" },
   { key: "Barcode Scanner",    label: "Barcode Scanner" },
+  { key: "Stock Ledger",       label: "Stock Ledger" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -54,11 +64,12 @@ const ACCOUNT_ITEMS = [
   { key: "Customer Receipt Voucher",   label: "Customer Receipt Voucher" },
   { key: "sales discount Voucher",     label: "Sales Discount Voucher" },
   { key: "Overhead Payment",           label: "Overhead Payment" },
+  { key: "Fabric Stock Sheet",         label: "Fabric Stock Sheet" },
 ];
 
 const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
 
-export default function AdminDashboard() {
+export default function DeveloperDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -68,10 +79,12 @@ export default function AdminDashboard() {
   const [expenses,      setExpenses]      = useState([]);
   const [sales,         setSales]         = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [masterOpen,    setMasterOpen]    = useState(false);
   const [reportsOpen,   setReportsOpen]   = useState(false);
   const [accountsOpen,  setAccountsOpen]  = useState(false);
   const [chartOpen,     setChartOpen]     = useState(false);
 
+  const masterRef   = useRef(null);
   const reportsRef  = useRef(null);
   const accountsRef = useRef(null);
   const chartRef    = useRef(null);
@@ -89,6 +102,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     function onOutside(e) {
+      if (masterRef.current   && !masterRef.current.contains(e.target))   setMasterOpen(false);
       if (reportsRef.current  && !reportsRef.current.contains(e.target))  setReportsOpen(false);
       if (accountsRef.current && !accountsRef.current.contains(e.target)) setAccountsOpen(false);
       if (chartRef.current    && !chartRef.current.contains(e.target))    setChartOpen(false);
@@ -97,6 +111,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener("mousedown", onOutside);
   }, []);
 
+  const isMasterActive  = MASTER_PROFILE_ITEMS.some(m => m.key === activeTab);
   const isReportActive  = REPORT_ITEMS.some(r => r.key === activeTab);
   const isAccountActive = ACCOUNT_ITEMS.some(a => a.key === activeTab);
 
@@ -104,7 +119,7 @@ export default function AdminDashboard() {
     <button
       className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
         activeTab === tab
-          ? "border-blue-500 text-blue-600"
+          ? "border-violet-500 text-violet-600"
           : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
       }`}
       onClick={() => setActiveTab(tab)}
@@ -118,7 +133,7 @@ export default function AdminDashboard() {
       <button
         className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
           isActive
-            ? "border-blue-500 text-blue-600"
+            ? "border-violet-500 text-violet-600"
             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
         }`}
         onClick={() => setOpen(p => !p)}
@@ -133,7 +148,7 @@ export default function AdminDashboard() {
           {items.map(item => (
             <button
               key={item.key}
-              className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 transition-colors"
               onClick={() => { onSelect(item.key); setOpen(false); }}
             >
               {item.label}
@@ -152,11 +167,11 @@ export default function AdminDashboard() {
             <img src={Icon} alt="Logo" className="w-10 h-auto" />
             <div>
               <h1 className="text-lg font-bold text-gray-900 leading-tight">Accounting Software</h1>
-              <p className="text-xs text-gray-500">Admin Dashboard</p>
+              <p className="text-xs text-gray-500">Developer Dashboard</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs bg-red-100 text-red-700 font-bold px-3 py-1 rounded-full">ADMIN</span>
+            <span className="text-xs bg-violet-100 text-violet-700 font-bold px-3 py-1 rounded-full">DEVELOPER</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
@@ -205,10 +220,20 @@ export default function AdminDashboard() {
               onSelect={key => setActiveTab(key)}
             />
 
+            <DropdownBtn
+              label="Master Profile"
+              isActive={isMasterActive}
+              isOpen={masterOpen}
+              setOpen={setMasterOpen}
+              refProp={masterRef}
+              items={MASTER_PROFILE_ITEMS}
+              onSelect={key => setActiveTab(key)}
+            />
+
             <button
               className={`relative whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "notifications"
-                  ? "border-blue-500 text-blue-600"
+                  ? "border-violet-500 text-violet-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
               onClick={() => setActiveTab("notifications")}
@@ -223,9 +248,13 @@ export default function AdminDashboard() {
           </nav>
         </div>
 
-        {activeTab === "dashboard"          && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
-        {activeTab === "stock"              && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
-        {activeTab === "sales"              && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
+        {activeTab === "Raw Material"  && <RawMaterialPage />}
+        {activeTab === "Finished Good" && <FinishedGoodPage />}
+
+        {activeTab === "dashboard" && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
+        {activeTab === "stock"     && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
+        {activeTab === "sales"     && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
+
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
@@ -234,7 +263,9 @@ export default function AdminDashboard() {
         {activeTab === "Product Management" && <ProductManagementDashboard />}
         {activeTab === "Voucher Query"      && <VoucherQuery />}
         {activeTab === "Barcode Scanner"    && <BarcodeScannerScreen />}
-        {activeTab === "chart-of-accounts"  && (
+        {activeTab === "Stock Ledger"       && <StockLedger />}
+
+        {activeTab === "chart-of-accounts" && (
           <>
             {chartPage === "assets"      && <AssetsPage />}
             {chartPage === "liabilities" && <LiabilitiesPage />}
@@ -243,6 +274,7 @@ export default function AdminDashboard() {
             {chartPage === "revenue"     && <RevenuePage />}
           </>
         )}
+
         {activeTab === "Cash Payment Voucher"       && <CashPaymentVoucher />}
         {activeTab === "Cash Receipt Voucher"       && <CashReceiptVoucher />}
         {activeTab === "Journal Voucher"            && <JournalVoucher />}
@@ -253,7 +285,9 @@ export default function AdminDashboard() {
         {activeTab === "Customer Receipt Voucher"   && <CustomerReceiptVoucher />}
         {activeTab === "sales discount Voucher"     && <SalesDiscountVouchers />}
         {activeTab === "Overhead Payment"           && <OverheadPayment />}
-        {activeTab === "notifications"              && (
+        {activeTab === "Fabric Stock Sheet"         && <FabricStockSheet />}
+
+        {activeTab === "notifications" && (
           <Notifications
             notifications={notifications}
             onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}
