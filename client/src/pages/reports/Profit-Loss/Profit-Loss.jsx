@@ -27,17 +27,67 @@ function ProfitLoss() {
       setLoading(true)
       setError(null)
 
-      // ── 1. P&L + OHV + Products — parallel fetch ──────────────────────
-      const [plRes, ohvRes, prodRes] = await Promise.all([
-        fetch(`${API}/profit-loss?fromDate=${startDate}&toDate=${endDate}`),
-        fetch(`${API}/overhead-voucher`).catch(() => null),
+      // ── 1. Parallel fetch ──────────────────────────────────────────────
+      // P&L API ko dono formats mein bhejo (fromDate/toDate AND startDate/endDate)
+      const plUrl = `${API}/profit-loss?fromDate=${startDate}&toDate=${endDate}&startDate=${startDate}&endDate=${endDate}`
+
+      const [plRes, ohvRes, prodRes, salesRes, salesReturnRes] = await Promise.all([
+        fetch(plUrl),
+        fetch(`${API}/overhead-vouchers`)
+          .catch(() => fetch(`${API}/overhead-voucher`).catch(() => null)),
         fetch(`${API}/products`).catch(() => null),
+        // ✅ FIX: Sales directly fetch with correct params
+        fetch(`${API}/sales?startDate=${startDate}&endDate=${endDate}`).catch(() => null),
+        fetch(`${API}/sales/return?startDate=${startDate}&endDate=${endDate}`).catch(() => null),
       ])
 
+      if (!plRes.ok) throw new Error(`P&L API failed: ${plRes.status}`)
       const json = await plRes.json()
-      if (!json.success) throw new Error(json.message || "Failed")
+      if (!json.success) throw new Error(json.message || "P&L API returned error")
 
-      // ── 2. Overhead total (date-filtered) ─────────────────────────────
+      // ── 2. Sales — directly calculate karo with client-side date filter ─
+      let salesTotal        = json.data?.revenue?.totalSales        || 0
+      let saleReturnsTotal  = json.data?.revenue?.totalSaleReturns  || 0
+      let saleDiscountTotal = json.data?.revenue?.totalSaleDiscounts || 0
+
+      if (salesRes && salesRes.ok) {
+        const salesJson = await salesRes.json()
+        const salesList = salesJson?.data ?? (Array.isArray(salesJson) ? salesJson : [])
+        if (salesList.length > 0) {
+          const from = new Date(startDate + "T00:00:00")
+          const to   = new Date(endDate   + "T23:59:59")
+          const filtered = salesList.filter(s => {
+            const d = new Date(s.date || s.saleDate || s.createdAt)
+            return d >= from && d <= to
+          })
+          if (filtered.length > 0) {
+            const calcTotal = filtered.reduce((sum, s) =>
+              sum + (s.totalAmount || (s.saleQuantity || s.quantity || 0) * (s.saleRate || s.salePrice || 0)), 0)
+            // Agar backend ne 0 diya hai aur hamare paas data hai — override karo
+            if (calcTotal > salesTotal) salesTotal = calcTotal
+          }
+        }
+      }
+
+      // Sale returns
+      if (salesReturnRes && salesReturnRes.ok) {
+        const retJson = await salesReturnRes.json()
+        const retList = retJson?.data ?? (Array.isArray(retJson) ? retJson : [])
+        if (retList.length > 0) {
+          const from = new Date(startDate + "T00:00:00")
+          const to   = new Date(endDate   + "T23:59:59")
+          const filtered = retList.filter(r => {
+            const d = new Date(r.date || r.createdAt)
+            return d >= from && d <= to
+          })
+          const calcReturns = filtered.reduce((sum, r) => sum + (r.refundAmount || 0), 0)
+          if (calcReturns > saleReturnsTotal) saleReturnsTotal = calcReturns
+        }
+      }
+
+      const netRevenue = salesTotal - saleReturnsTotal - saleDiscountTotal
+
+      // ── 3. Overhead (date-filtered) ────────────────────────────────────
       let ohvTotal = 0
       let ohvList  = []
       if (ohvRes && ohvRes.ok) {
@@ -47,27 +97,47 @@ function ProfitLoss() {
         const to   = new Date(endDate   + "T23:59:59")
         ohvList = ohvList.filter(v => {
           const d = new Date(v.voucherDate || v.createdAt)
-          return d >= from && d <= to && (v.status === "SAVED" || v.status === "POSTED")
+          return d >= from && d <= to &&
+            (!v.status || v.status === "SAVED" || v.status === "POSTED")
         })
         ohvTotal = ohvList.reduce((s, v) => s + (v.totalAmount || 0), 0)
       }
 
-      // ── 3. Closing Stock = Balance Qty × Purchase Rate ─────────────────
-      let closingStockCalc = json.data.cogs.closingStock  // fallback: backend value
+      // ── 4. Closing Stock from products ─────────────────────────────────
+      // ✅ GRN se: Total Balance Amount = 29,161,117.16 (Balance Qty x Purchase Rate)
+      let closingStockCalc = json.data?.cogs?.closingStock || 0
+
       if (prodRes && prodRes.ok) {
         const prodJson = await prodRes.json()
         const products = prodJson?.data ?? (Array.isArray(prodJson) ? prodJson : [])
         if (products.length > 0) {
           const calc = products.reduce((sum, p) => {
-            const qty  = p.balanceQty   ?? p.balance_qty  ?? p.balance ?? p.qty   ?? 0
-            const rate = p.purchaseRate ?? p.purchase_rate ?? p.rate   ?? p.price  ?? 0
+            // ✅ FIX: balanceQty use karo — yeh GRN ke "Balance Qty" se match karta hai
+            const qty  = p.balanceQty ?? p.balance_qty ?? p.balanceQuantity ?? 0
+            const rate = p.purchaseRate ?? p.purchase_rate ?? p.costPrice ?? p.price ?? 0
             return sum + (Number(qty) * Number(rate))
           }, 0)
           if (calc > 0) closingStockCalc = calc
         }
       }
 
-      setData({ ...json.data, ohvTotal, ohvList, closingStockCalc })
+      // ── 5. Merge corrected values ──────────────────────────────────────
+      const mergedRevenue = {
+        ...json.data.revenue,
+        totalSales:         salesTotal,
+        totalSaleReturns:   saleReturnsTotal,
+        totalSaleDiscounts: saleDiscountTotal,
+        netRevenue:         netRevenue,
+      }
+
+      setData({
+        ...json.data,
+        revenue:          mergedRevenue,
+        ohvTotal,
+        ohvList,
+        closingStockCalc,
+      })
+
     } catch (err) {
       setError(err.message)
     } finally {
@@ -84,7 +154,6 @@ function ProfitLoss() {
     return `From ${new Date(startDate).toLocaleDateString("en-GB")} to ${new Date(endDate).toLocaleDateString("en-GB")}`
   }
 
-  // ─── Shared styles ─────────────────────────────────────────────────────────
   const sectionHeader = {
     backgroundColor: "#3f64a8", color: "white", fontWeight: "bold",
     padding: "10px 15px", fontSize: "16px", marginTop: "30px",
@@ -140,9 +209,8 @@ function ProfitLoss() {
         </div>
       )}
 
-      {/* Title */}
       <h2 style={{ color: "#2c5ca9", textAlign: "center", marginBottom: "8px", fontSize: "28px", fontWeight: "bold" }}>
-        testing<br />Income Statement
+        Denim Locker<br />Income Statement
       </h2>
       <p style={{ textAlign: "center", fontWeight: "500", fontSize: "14px", color: "#6c757d", marginBottom: "40px" }}>
         {fmtRange() || "Please select date range"}
@@ -154,116 +222,88 @@ function ProfitLoss() {
         </div>
       ) : (() => {
 
-        // ── All derived numbers in one place ────────────────────────────
-        const ohvTotal      = data.ohvTotal        || 0
-        const closingStock  = data.closingStockCalc ?? data.cogs.closingStock ?? 0   // ✅ Balance Qty × Rate
-        const cogsAvailable = (data.cogs.cogsAvailableForSale || 0) + ohvTotal       // ✅ overhead included
-        const cogsTotal     = cogsAvailable - closingStock                             // ✅ correct COGS
-        const grossProfit   = (data.revenue.netRevenue || 0) - cogsTotal
-        const netProfit     = grossProfit - (data.expenses.totalExpenses || 0) + (data.otherIncome.totalOtherIncome || 0)
+        const ohvTotal     = data.ohvTotal || 0
+        const closingStock = data.closingStockCalc ?? data.cogs?.closingStock ?? 0
+        const cogsAvailable = (data.cogs?.cogsAvailableForSale || 0) + ohvTotal
+        const cogsTotal     = cogsAvailable - closingStock
+        const netRevenue    = data.revenue?.netRevenue || 0
+        const grossProfit   = netRevenue - cogsTotal
+        const netProfit     = grossProfit
+          - (data.expenses?.totalExpenses || 0)
+          + (data.otherIncome?.totalOtherIncome || 0)
 
         return (
           <>
-            {/* ═══ REVENUE ═══ */}
+            {/* REVENUE */}
             <div style={{ ...sectionHeader, marginTop: "0" }}>Revenue</div>
             <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
               <div style={row(false)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Sales</span>
-                <span style={mono}>{fmt(data.revenue.totalSales)}</span>
+                <span style={mono}>{fmt(data.revenue?.totalSales)}</span>
               </div>
               <div style={row(true)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Less: Sale Return</span>
-                <span style={mono}>{fmt(data.revenue.totalSaleReturns)}</span>
+                <span style={mono}>{fmt(data.revenue?.totalSaleReturns)}</span>
               </div>
               <div style={{ ...row(true), ...dividerRow }}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Less: Sales Discount</span>
-                <span style={mono}>{fmt(data.revenue.totalSaleDiscounts)}</span>
+                <span style={mono}>{fmt(data.revenue?.totalSaleDiscounts)}</span>
               </div>
               <div style={{ ...row(false), paddingTop: "12px" }}>
                 <span style={boldRow}>Total Revenues (Net)</span>
-                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.revenue.netRevenue)}</span>
+                <span style={{ ...mono, fontWeight: "bold" }}>{fmt(netRevenue)}</span>
               </div>
             </div>
 
-            {/* ═══ COST OF GOODS SOLD ═══ */}
+            {/* COST OF GOODS SOLD */}
             <div style={sectionHeader}>Cost of Goods Sold</div>
             <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-
-              {/* Opening Stock */}
               <div style={row(true)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Opening Stock</span>
-                <span style={mono}>{fmt(data.cogs.openingStock)}</span>
+                <span style={mono}>{fmt(data.cogs?.openingStock)}</span>
               </div>
-
-              {/* Add: Purchases */}
               <div style={row(false)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Add: Purchases</span>
-                <span style={mono}>{fmt(data.cogs.totalPurchases)}</span>
+                <span style={mono}>{fmt(data.cogs?.totalPurchases)}</span>
               </div>
-
-              {/* Purchase breakdown (indented) */}
-              {data.cogs.purchaseBreakdown?.length > 0 && data.cogs.purchaseBreakdown.map((p, i) => (
+              {data.cogs?.purchaseBreakdown?.length > 0 && data.cogs.purchaseBreakdown.map((p, i) => (
                 <div key={i} style={{ ...row(true), paddingLeft: "40px" }}>
                   <span style={{ fontSize: "13px", color: "#555" }}>{p.name || p.code}</span>
                   <span style={{ ...mono, fontSize: "13px", color: "#555" }}>{fmt(p.amount)}</span>
                 </div>
               ))}
-
-              {/* Less: Purchase Return */}
               <div style={row(true)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Return</span>
-                <span style={mono}>{fmt(data.cogs.totalPurchaseReturns)}</span>
+                <span style={mono}>{fmt(data.cogs?.totalPurchaseReturns)}</span>
               </div>
-
-              {/* Less: Purchase Discount */}
               <div style={row(true)}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Less: Purchase Discount</span>
-                <span style={mono}>{fmt(data.cogs.totalPurchaseDiscounts)}</span>
+                <span style={mono}>{fmt(data.cogs?.totalPurchaseDiscounts)}</span>
               </div>
-
-              {/* ✅ Add: Overhead Expenses — same style as Purchase Discount line above */}
               <div style={{ ...row(true), ...dividerRow }}>
                 <span style={{ fontSize: "15px", color: "#000", display: "flex", alignItems: "center", gap: "8px" }}>
                   Add: Overhead Expenses
                   {data.ohvList?.length > 0 && (
-                    <span style={{
-                      fontSize: "11px", color: "#7c3aed",
-                      padding: "1px 7px", backgroundColor: "#ede9fe",
-                      borderRadius: "3px", fontWeight: "600",
-                    }}>
+                    <span style={{ fontSize: "11px", color: "#7c3aed", padding: "1px 7px", backgroundColor: "#ede9fe", borderRadius: "3px", fontWeight: "600" }}>
                       {data.ohvList.length} vouchers
                     </span>
                   )}
                 </span>
                 <span style={{ ...mono, color: "#7c3aed", fontWeight: "600" }}>{fmt(ohvTotal)}</span>
               </div>
-
-              {/* Cost of Goods Available for Sale — overhead included */}
               <div style={{ ...row(true), paddingTop: "12px" }}>
                 <span style={{ fontSize: "15px", color: "#000" }}>Cost of Goods Available for Sale</span>
                 <span style={mono}>{fmt(cogsAvailable)}</span>
               </div>
-
-              {/* ✅ Less: Closing Stock = Balance Qty × Purchase Rate */}
               <div style={{ ...row(true), ...dividerRow }}>
-                <span style={{ fontSize: "15px", color: "#000" }}>
-                  Less: Closing Stock
-                </span>
+                <span style={{ fontSize: "15px", color: "#000" }}>Less: Closing Stock</span>
                 <span style={mono}>{fmt(closingStock)}</span>
               </div>
-
-              {/* ✅ Cost of Goods Sold = cogsAvailable − closingStock */}
               <div style={{ ...row(false), paddingTop: "12px" }}>
                 <span style={boldRow}>Cost of Goods Sold</span>
                 <span style={{ ...mono, fontWeight: "bold" }}>{fmt(cogsTotal)}</span>
               </div>
-
-              {/* ✅ Gross Profit uses corrected cogsTotal */}
-              <div style={{
-                display: "flex", justifyContent: "space-between", padding: "12px 0 8px 0",
-                marginTop: "12px", borderTop: "2px solid #000", alignItems: "center",
-                backgroundColor: "#f0f0f0",
-              }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0 8px 0", marginTop: "12px", borderTop: "2px solid #000", alignItems: "center", backgroundColor: "#f0f0f0" }}>
                 <span style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>Gross Profit (Loss)</span>
                 <span style={{ ...mono, fontWeight: "bold", color: grossProfit >= 0 ? "#059669" : "#dc2626" }}>
                   {fmt(grossProfit)}
@@ -271,10 +311,10 @@ function ProfitLoss() {
               </div>
             </div>
 
-            {/* ═══ EXPENSES ═══ */}
+            {/* EXPENSES */}
             <div style={sectionHeader}>Operating Expenses</div>
             <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-              {data.expenses.breakdown.length > 0 ? (
+              {(data.expenses?.breakdown?.length || 0) > 0 ? (
                 <>
                   {(() => {
                     const grouped = {}
@@ -299,7 +339,7 @@ function ProfitLoss() {
                   })()}
                   <div style={totalRow}>
                     <span style={boldRow}>Total Expenses</span>
-                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.expenses.totalExpenses)}</span>
+                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.expenses?.totalExpenses)}</span>
                   </div>
                 </>
               ) : (
@@ -310,10 +350,10 @@ function ProfitLoss() {
               )}
             </div>
 
-            {/* ═══ OTHER INCOME ═══ */}
+            {/* OTHER INCOME */}
             <div style={sectionHeader}>Income from Other Sources</div>
             <div style={{ backgroundColor: "#fff", padding: "20px 30px" }}>
-              {data.otherIncome.breakdown.length > 0 ? (
+              {(data.otherIncome?.breakdown?.length || 0) > 0 ? (
                 <>
                   {data.otherIncome.breakdown.map((inc, i) => (
                     <div key={i} style={row(false)}>
@@ -330,7 +370,7 @@ function ProfitLoss() {
                   ))}
                   <div style={totalRow}>
                     <span style={boldRow}>Total Other Income</span>
-                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.otherIncome.totalOtherIncome)}</span>
+                    <span style={{ ...mono, fontWeight: "bold" }}>{fmt(data.otherIncome?.totalOtherIncome)}</span>
                   </div>
                 </>
               ) : (
@@ -341,12 +381,8 @@ function ProfitLoss() {
               )}
             </div>
 
-            {/* ═══ NET PROFIT / LOSS ═══ */}
-            <div style={{
-              backgroundColor: "#2c5ca9", color: "white", fontWeight: "bold",
-              padding: "15px 30px", marginTop: "30px", fontSize: "18px",
-              display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "6px",
-            }}>
+            {/* NET PROFIT / LOSS */}
+            <div style={{ backgroundColor: "#2c5ca9", color: "white", fontWeight: "bold", padding: "15px 30px", marginTop: "30px", fontSize: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "6px" }}>
               <span>NET PROFIT / LOSS</span>
               <span style={{ fontSize: "20px", fontFamily: "monospace", color: netProfit >= 0 ? "#4ade80" : "#f87171" }}>
                 {fmt(netProfit)}
@@ -360,10 +396,19 @@ function ProfitLoss() {
               </h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "15px" }}>
                 {[
-                  { label: "💰 Gross Profit",   value: grossProfit, bg: "#d1e7dd", border: "#badbcc", txtColor: grossProfit >= 0 ? "#198754" : "#dc3545", labelColor: "#0f5132", note: null },
-                  { label: "📋 Overhead",        value: ohvTotal,    bg: "#ede9fe", border: "#c4b5fd", txtColor: "#7c3aed", labelColor: "#5b21b6", note: `${data.ohvList?.length || 0} vouchers` },
-                  { label: "💼 Total Expenses",  value: data.expenses.totalExpenses, bg: "#fff3cd", border: "#ffecb5", txtColor: "#856404", labelColor: "#664d03", note: `${data.expenses.breakdown.length} accounts` },
-                  { label: "🎯 Net Profit/Loss", value: netProfit,   bg: netProfit >= 0 ? "#d1f2eb" : "#f8d7da", border: netProfit >= 0 ? "#a3e4d7" : "#f5c2c7", txtColor: netProfit >= 0 ? "#198754" : "#dc3545", labelColor: netProfit >= 0 ? "#0a5034" : "#842029", note: netProfit >= 0 ? "Profitable ✅" : "Loss ❌" },
+                  { label: "💰 Gross Profit", value: grossProfit,
+                    bg: grossProfit >= 0 ? "#d1e7dd" : "#f8d7da",
+                    border: grossProfit >= 0 ? "#badbcc" : "#f5c2c7",
+                    txtColor: grossProfit >= 0 ? "#198754" : "#dc3545",
+                    labelColor: grossProfit >= 0 ? "#0f5132" : "#842029", note: null },
+                  { label: "📋 Overhead", value: ohvTotal, bg: "#ede9fe", border: "#c4b5fd", txtColor: "#7c3aed", labelColor: "#5b21b6", note: `${data.ohvList?.length || 0} vouchers` },
+                  { label: "💼 Total Expenses", value: data.expenses?.totalExpenses || 0, bg: "#fff3cd", border: "#ffecb5", txtColor: "#856404", labelColor: "#664d03", note: `${data.expenses?.breakdown?.length || 0} accounts` },
+                  { label: "🎯 Net Profit/Loss", value: netProfit,
+                    bg: netProfit >= 0 ? "#d1f2eb" : "#f8d7da",
+                    border: netProfit >= 0 ? "#a3e4d7" : "#f5c2c7",
+                    txtColor: netProfit >= 0 ? "#198754" : "#dc3545",
+                    labelColor: netProfit >= 0 ? "#0a5034" : "#842029",
+                    note: netProfit >= 0 ? "Profitable ✅" : "Loss ❌" },
                 ].map((card, i) => (
                   <div key={i} style={{ padding: "15px", backgroundColor: card.bg, borderRadius: "6px", border: `1px solid ${card.border}` }}>
                     <div style={{ color: card.labelColor, fontWeight: "600", marginBottom: "8px", fontSize: "14px" }}>{card.label}</div>
