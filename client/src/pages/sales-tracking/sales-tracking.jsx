@@ -71,12 +71,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [startDate, setStartDate] = useState(getFirstDayOfMonth())
+  const [startDate, setStartDate] = useState(() => {
+  return new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0]
+})
   const [endDate, setEndDate] = useState(getCurrentDate())
+  // ✅ productFilter ab string ID store karega — "" means "All Products"
   const [productFilter, setProductFilter] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortBy, setSortBy] = useState("date")
-  const [sortOrder, setSortOrder] = useState("desc")
+  const [sortBy, setSortBy] = useState("invoice")
+  const [sortOrder, setSortOrder] = useState("asc")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [isLoading, setIsLoading] = useState(true)
@@ -100,6 +103,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const [returns, setReturns] = useState([])
   const [showReturns, setShowReturns] = useState(false)
 
+  // ─── Data Fetching ────────────────────────────────────────────────────────────
+
   const fetchProducts = async () => {
     try {
       const response = await ApiHandler.getProducts()
@@ -110,8 +115,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         productsData = response.data
       } else if (Array.isArray(response)) {
         productsData = response
-      } else {
-        productsData = []
       }
       setProducts(productsData)
       return productsData
@@ -151,9 +154,9 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       setLoadingCustomer(true)
       const response = await ApiHandler.getAssets()
       const liabilities = response.data || []
-      const vendorList = liabilities.filter((liability) => liability.type === "RECEIVABLES")
+      const vendorList = liabilities.filter((l) => l.type === "RECEIVABLES")
       setCustomer(vendorList)
-    } catch (err) {
+    } catch {
       setCustomer([])
     } finally {
       setLoadingCustomer(false)
@@ -165,9 +168,9 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       setLoadingSaleTypes(true)
       const response = await ApiHandler.getRevenue()
       const liabilities = response.data || []
-      const vendorList = liabilities.filter((liability) => liability.type === "SALE ACCOUNT")
+      const vendorList = liabilities.filter((l) => l.type === "SALE ACCOUNT")
       setSaleTypes(vendorList)
-    } catch (err) {
+    } catch {
       setSaleTypes([])
     } finally {
       setLoadingSaleTypes(false)
@@ -187,24 +190,18 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         returnsData = response
       }
       setReturns(returnsData)
-    } catch (error) {
+    } catch {
       setReturns([])
     }
   }
 
-  useEffect(() => {
-    loadCustomer()
-    loadSaleTypes()
-    fetchReturns()
-  }, [])
-
   const fetchSales = async () => {
     try {
       setError(null)
+      // ✅ API ko sirf date filters bhejo — product filtering client-side hogi
       const filters = {}
       if (startDate) filters.startDate = startDate
       if (endDate) filters.endDate = endDate
-      if (productFilter) filters.productId = productFilter
 
       let salesData = []
       let statsData = { totalSales: 0, totalRevenue: 0, totalProfit: 0, profitMargin: 0, averageSaleValue: 0 }
@@ -216,7 +213,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         } else if (Array.isArray(salesResponse)) {
           salesData = salesResponse
         }
-      } catch (salesError) {
+      } catch {
         salesData = []
       }
 
@@ -227,7 +224,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         } else if (statsResponse) {
           statsData = statsResponse
         }
-      } catch (statsError) {}
+      } catch {}
 
       setSales(salesData)
       setSalesStats(statsData)
@@ -237,6 +234,35 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       setSalesStats({ totalSales: 0, totalRevenue: 0, totalProfit: 0, profitMargin: 0, averageSaleValue: 0 })
     }
   }
+
+  useEffect(() => {
+    loadCustomer()
+    loadSaleTypes()
+    fetchReturns()
+  }, [])
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true)
+      await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries(), fetchReturns()])
+      setIsLoading(false)
+    }
+    loadData()
+  }, [startDate, endDate, sortBy, sortOrder])
+  // ✅ productFilter ko yahan se hataya — ab client-side filter hoga, page reset karega
+
+  // ✅ Jab productFilter change ho to page 1 par reset karo
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [productFilter, searchTerm])
+
+  useEffect(() => {
+    if (onSaleComplete && !isLoading) {
+      onSaleComplete(sales)
+    }
+  }, [sales, onSaleComplete, isLoading])
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   const getStockEntryForSale = (sale) => {
     const saleDate = new Date(sale.date).toISOString().split("T")[0]
@@ -250,20 +276,110 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     return relevantEntries[0] || null
   }
 
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      await Promise.all([fetchProducts(), fetchSales(), fetchStockEntries(), fetchReturns()])
-      setIsLoading(false)
-    }
-    loadData()
-  }, [startDate, endDate, productFilter, sortBy, sortOrder])
+  const formatCurrency = (value) =>
+    new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 2 }).format(value)
 
-  useEffect(() => {
-    if (onSaleComplete && !isLoading) {
-      onSaleComplete(sales)
+  // ─── Filtering Logic ─────────────────────────────────────────────────────────
+
+  /**
+   * ✅ MAIN FIX: filteredSales
+   * - Date range check
+   * - Product filter: sale ke product ID ko productFilter se match karo
+   * - Search: invoice, product name, customer name
+   */
+  const filteredSales = (Array.isArray(sales) ? sales : []).filter((sale) => {
+    // 1. Date range
+    const saleDate = new Date(sale.date)
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+    if (saleDate < start || saleDate > end) return false
+
+    // 2. ✅ Product filter — multiple ID fields handle karo
+    if (productFilter !== "") {
+      const saleProductId =
+        sale.product?._id ||
+        sale.product?.id ||
+        sale.productId ||
+        (typeof sale.product === "string" ? sale.product : "")
+      if (String(saleProductId) !== String(productFilter)) return false
     }
-  }, [sales, onSaleComplete, isLoading])
+
+    // 3. Search term
+    if (searchTerm !== "") {
+      const productName = (sale.product?.name || sale.productName || "").toLowerCase()
+      const customerName = (sale.customerName || "").toLowerCase()
+      const invoice = (sale.invoice || "").toLowerCase()
+      const q = searchTerm.toLowerCase()
+      if (!productName.includes(q) && !customerName.includes(q) && !invoice.includes(q)) return false
+    }
+
+    return true
+  })
+
+  // ✅ Selected product name for display
+  const selectedProductName = productFilter
+    ? products.find((p) => String(p._id || p.id) === String(productFilter))?.name || "Unknown"
+    : ""
+
+  // ─── Sorting & Pagination ─────────────────────────────────────────────────────
+
+  const sortedSales = [...filteredSales].sort((a, b) => {
+  let aVal = a[sortBy]
+  let bVal = b[sortBy]
+  if (sortBy === "date") {
+    aVal = new Date(aVal); bVal = new Date(bVal)
+  } else if (sortBy === "productName") {
+    aVal = a.product?.name || a.productName || ""
+    bVal = b.product?.name || b.productName || ""
+  } else if (sortBy === "invoice") {
+    // ✅ FIX: INV-0001 se number nikaalo aur numerically compare karo
+    const aNum = parseInt((a.invoice || "").replace(/\D/g, "")) || 0
+    const bNum = parseInt((b.invoice || "").replace(/\D/g, "")) || 0
+    return sortOrder === "asc" ? aNum - bNum : bNum - aNum
+  }
+  return sortOrder === "asc" ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
+})
+
+  const totalPages = Math.ceil(sortedSales.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const paginatedSales = sortedSales.slice(startIndex, startIndex + itemsPerPage)
+
+  // ─── Chart Data ───────────────────────────────────────────────────────────────
+
+  // ✅ Chart data bhi filteredSales se — product filter apply hoga
+  const salesByProduct = {}
+  filteredSales.forEach((sale) => {
+    const productName = sale.product?.name || sale.productName || "Unknown"
+    if (!salesByProduct[productName]) salesByProduct[productName] = 0
+    salesByProduct[productName] +=
+      sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)
+  })
+  const salesChartData = Object.entries(salesByProduct)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+
+  const salesByDate = {}
+  filteredSales.forEach((sale) => {
+    const dateKey = new Date(sale.date).toISOString().split("T")[0]
+    if (!salesByDate[dateKey]) salesByDate[dateKey] = 0
+    salesByDate[dateKey] +=
+      sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)
+  })
+  const salesTimeChartData = Object.keys(salesByDate)
+    .map((date) => ({ date, amount: salesByDate[date] }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  // ─── Summary Stats ────────────────────────────────────────────────────────────
+
+  const totalSales = filteredSales.reduce(
+    (sum, sale) => sum + (sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)),
+    0
+  )
+  const totalProfit = filteredSales.reduce((sum, sale) => sum + (sale.profit || 0), 0)
+  const averageSaleValue = filteredSales.length > 0 ? totalSales / filteredSales.length : 0
+
+  // ─── Form Handlers ────────────────────────────────────────────────────────────
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -290,8 +406,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       [name]: name === "quantity" || name === "salePrice" ? Number(value) || "" : processedValue,
     })
 
-    // ✅ FIX: Product select hone par maxQuantity set karo
-    // Edit mode mein: current product stock + sale ki purani qty (taake user apni qty change kar sake)
     if (name === "productId") {
       const product = products.find((p) => (p._id || p.id) === value)
       if (product) {
@@ -300,13 +414,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           productId: value,
           salePrice: product.saleRate || product.price || 0,
         }))
-
         if (isEditing) {
-          // ✅ Edit mode: current stock + old sale qty = available for editing
           const currentSale = sales.find((s) => (s._id || s.id) === formData.id)
           const oldQty = currentSale?.saleQuantity || currentSale?.quantity || 0
-          const sameProduct =
-            (currentSale?.product?._id || currentSale?.product) === value
+          const sameProduct = (currentSale?.product?._id || currentSale?.product) === value
           setMaxQuantity(product.quantity + (sameProduct ? oldQty : 0))
         } else {
           setMaxQuantity(product.quantity || 0)
@@ -339,16 +450,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
 
       const availableStock = product.quantity || 0
 
-      // ✅ FIX: Edit mode mein stock check: current product stock + purani qty
       if (isEditing) {
         const currentSale = sales.find((s) => (s._id || s.id) === formData.id)
         const oldQty = currentSale?.saleQuantity || currentSale?.quantity || 0
-        const sameProduct =
-          (currentSale?.product?._id || String(currentSale?.product)) === formData.productId
+        const sameProduct = (currentSale?.product?._id || String(currentSale?.product)) === formData.productId
         const effectiveAvailable = availableStock + (sameProduct ? oldQty : 0)
-
         if (effectiveAvailable < formData.quantity) {
-          throw new Error(`Only ${effectiveAvailable} units available (${availableStock} in stock + ${sameProduct ? oldQty : 0} from this sale)`)
+          throw new Error(
+            `Only ${effectiveAvailable} units available (${availableStock} in stock + ${sameProduct ? oldQty : 0} from this sale)`
+          )
         }
       } else {
         if (availableStock <= 0) throw new Error("Product is out of stock!")
@@ -374,15 +484,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       if (isEditing) {
         result = await ApiHandler.updateSale(formData.id, saleData)
         const updatedSale = result.data
-        setSales((prevSales) =>
-          Array.isArray(prevSales)
-            ? prevSales.map((sale) => ((sale._id || sale.id) === formData.id ? updatedSale : sale))
-            : [updatedSale],
+        setSales((prev) =>
+          Array.isArray(prev)
+            ? prev.map((s) => ((s._id || s.id) === formData.id ? updatedSale : s))
+            : [updatedSale]
         )
       } else {
         result = await ApiHandler.createSale(saleData)
         const newSale = result.data
-        setSales((prevSales) => (Array.isArray(prevSales) ? [...prevSales, newSale] : [newSale]))
+        setSales((prev) => (Array.isArray(prev) ? [...prev, newSale] : [newSale]))
         if (newSale.invoice && onNotification) {
           onNotification({
             id: Date.now(),
@@ -427,39 +537,30 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     setMaxQuantity(1)
   }
 
-  // ✅ FIX: handleEdit mein sahi fields aur maxQuantity set ho rahi hain
   const handleEdit = (sale) => {
-    // ✅ saleQuantity use karo (sale.quantity fallback ke sath)
-    const saleQty   = sale.saleQuantity || sale.quantity || 0
-    // ✅ saleRate use karo (salePrice fallback ke sath)
-    const saleRate  = sale.saleRate || sale.salePrice || 0
-    // ✅ productId nikaalo
-    const productId = sale.product?._id || sale.product?.id || sale.productId || String(sale.product || "")
-    // ✅ date ko ISO split karo taake input[type=date] mein show ho
-    const saleDate  = sale.date
+    const saleQty = sale.saleQuantity || sale.quantity || 0
+    const saleRate = sale.saleRate || sale.salePrice || 0
+    const productId =
+      sale.product?._id || sale.product?.id || sale.productId || String(sale.product || "")
+    const saleDate = sale.date
       ? new Date(sale.date).toISOString().split("T")[0]
       : getCurrentDate()
 
     setFormData({
-      id:            sale._id || sale.id,
-      date:          saleDate,
-      productId:     productId,
-      quantity:      saleQty,        // ✅ saleQuantity set ho rahi hai
-      salePrice:     saleRate,       // ✅ saleRate set ho rahi hai
-      customerName:  sale.customerName  || "",
+      id: sale._id || sale.id,
+      date: saleDate,
+      productId,
+      quantity: saleQty,
+      salePrice: saleRate,
+      customerName: sale.customerName || "",
       customerPhone: sale.customerPhone || "",
-      saleType:      sale.saleType   || "",
-      saleAccount:   sale.saleAccount || "",
-      notes:         sale.notes      || "",
+      saleType: sale.saleType || "",
+      saleAccount: sale.saleAccount || "",
+      notes: sale.notes || "",
     })
 
-    // ✅ maxQuantity = product current stock + is sale ki qty (same product ke liye)
     const product = products.find((p) => (p._id || p.id) === productId)
-    if (product) {
-      setMaxQuantity((product.quantity || 0) + saleQty)
-    } else {
-      setMaxQuantity(saleQty) // product na mile to sirf sale ki qty
-    }
+    setMaxQuantity(product ? (product.quantity || 0) + saleQty : saleQty)
 
     setIsEditing(true)
     setShowForm(true)
@@ -475,8 +576,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     if (window.confirm("Are you sure you want to delete this sale?")) {
       try {
         await ApiHandler.deleteSale(id)
-        setSales((prevSales) =>
-          Array.isArray(prevSales) ? prevSales.filter((sale) => (sale._id || sale.id) !== id) : [],
+        setSales((prev) =>
+          Array.isArray(prev) ? prev.filter((s) => (s._id || s.id) !== id) : []
         )
         await Promise.all([fetchProducts(), fetchStockEntries()])
       } catch (error) {
@@ -491,6 +592,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     setIsLoading(false)
   }
 
+  // ─── Return Handlers ──────────────────────────────────────────────────────────
+
   const handleReturnChange = (e) => {
     const { name, value } = e.target
     setReturnFormData({
@@ -500,7 +603,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     if (name === "saleId") {
       const sale = sales.find((s) => (s._id || s.id) === value)
       if (sale) {
-        const maxRefund = sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate)
+        const maxRefund =
+          sale.totalAmount || sale.quantity * (sale.salePrice || sale.saleRate)
         setReturnFormData((prev) => ({ ...prev, saleId: value, refundAmount: maxRefund }))
       }
     }
@@ -513,7 +617,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     try {
       const sale = sales.find((s) => (s._id || s.id) === returnFormData.saleId)
       if (!sale) throw new Error("Please select a valid sale")
-      if (returnFormData.returnQuantity > sale.quantity) throw new Error(`Cannot return more than ${sale.quantity} units`)
+      if (returnFormData.returnQuantity > sale.quantity)
+        throw new Error(`Cannot return more than ${sale.quantity} units`)
 
       const returnData = {
         sale: returnFormData.saleId,
@@ -551,6 +656,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     setError(null)
   }
 
+  // ─── Export / Print ───────────────────────────────────────────────────────────
+
   const handleExport = () => {
     const csvContent = [
       ["Invoice", "Date", "Product", "Customer", "Sale Qty", "Sale Rate", "Total", "Profit"],
@@ -580,15 +687,25 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const handlePrint = () => {
     try {
       const escapeHtml = (str = "") =>
-        String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;")
-      const getProductNameById = (id) => products.find((p) => (p._id || p.id) === id)?.name || ""
-      const fmt = (v) => new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 2 }).format(Number(v || 0))
-      const productFilterName = productFilter ? getProductNameById(productFilter) || "Unknown" : "All Products"
+        String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;")
+      const fmt = (v) =>
+        new Intl.NumberFormat("en-PK", {
+          style: "currency",
+          currency: "PKR",
+          minimumFractionDigits: 2,
+        }).format(Number(v || 0))
+      const productFilterName = selectedProductName || "All Products"
 
       const rowsHtml = (Array.isArray(filteredSales) ? filteredSales : [])
         .map((sale) => {
           const dateStr = new Date(sale.date).toLocaleDateString()
-          const productName = sale.product?.name || sale.productName || getProductNameById(sale.productId) || "Unknown"
+          const productName =
+            sale.product?.name || sale.productName || "Unknown"
           const qty = sale.saleQuantity || sale.quantity || 0
           const unit = sale.saleRate || sale.salePrice || 0
           const total = sale.totalAmount || qty * unit
@@ -606,10 +723,11 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         })
         .join("")
 
-      const marginPct = (totalSales || 0) > 0 ? (((totalProfit || 0) / (totalSales || 1)) * 100).toFixed(2) : "0.00"
+      const marginPct =
+        (totalSales || 0) > 0 ? (((totalProfit || 0) / (totalSales || 1)) * 100).toFixed(2) : "0.00"
 
       const styles = `
-        :root { --text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--bg:#ffffff;--pos:#059669;--neg:#dc2626; }
+        :root{--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--bg:#ffffff;--pos:#059669;--neg:#dc2626;}
         *{box-sizing:border-box;}
         body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg);margin:24px;}
         header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px;}
@@ -638,18 +756,18 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <div><strong>Date Range:</strong> ${escapeHtml(startDate)} → ${escapeHtml(endDate)}</div>
             <div><strong>Product:</strong> ${escapeHtml(productFilterName)}</div>
             <div><strong>Search:</strong> ${searchTerm ? escapeHtml(searchTerm) : "—"}</div>
-            <div><strong>Records:</strong> ${Array.isArray(filteredSales) ? filteredSales.length : 0}</div>
+            <div><strong>Records:</strong> ${filteredSales.length}</div>
           </section>
           <section class="summary">
-            <div class="card"><div class="label">Total Sales</div><div class="value">${fmt(totalSales || 0)}</div></div>
-            <div class="card"><div class="label">Total Profit</div><div class="value">${fmt(totalProfit || 0)}</div></div>
+            <div class="card"><div class="label">Total Sales</div><div class="value">${fmt(totalSales)}</div></div>
+            <div class="card"><div class="label">Total Profit</div><div class="value">${fmt(totalProfit)}</div></div>
             <div class="card"><div class="label">Profit Margin</div><div class="value">${marginPct}%</div></div>
-            <div class="card"><div class="label">Average Sale</div><div class="value">${fmt(Array.isArray(filteredSales) && filteredSales.length > 0 ? (totalSales || 0) / filteredSales.length : 0)}</div></div>
+            <div class="card"><div class="label">Average Sale</div><div class="value">${fmt(filteredSales.length > 0 ? totalSales / filteredSales.length : 0)}</div></div>
           </section>
           <table>
             <thead><tr><th>Invoice</th><th>Date</th><th>Product</th><th>Customer</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Total</th><th class="num">Profit</th></tr></thead>
             <tbody>${rowsHtml || '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:12px;">No data available</td></tr>'}</tbody>
-            <tfoot><tr><td colspan="6" class="num">Totals:</td><td class="num">${fmt(totalSales || 0)}</td><td class="num ${(totalProfit || 0) >= 0 ? "pos" : "neg"}">${fmt(totalProfit || 0)}</td></tr></tfoot>
+            <tfoot><tr><td colspan="6" class="num">Totals:</td><td class="num">${fmt(totalSales)}</td><td class="num ${totalProfit >= 0 ? "pos" : "neg"}">${fmt(totalProfit)}</td></tr></tfoot>
           </table>
           <footer>Created by Soft-Technix</footer>
         </body></html>`
@@ -661,68 +779,21 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       printWindow.document.close()
       printWindow.focus()
       printWindow.onload = () => { printWindow.print(); printWindow.close() }
-    } catch (err) {
+    } catch {
       setError("Failed to open print preview")
     }
   }
 
-  // Filter sales
-  const filteredSales = (Array.isArray(sales) ? sales : []).filter((sale) => {
-    const saleDate = new Date(sale.date)
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    end.setHours(23, 59, 59)
-    const inDateRange = saleDate >= start && saleDate <= end
-    const matchesProduct = productFilter === "" || (sale.product?._id || sale.product?.id || sale.productId) === productFilter
-    const productName = sale.product?.name || sale.productName || ""
-    const customerName = sale.customerName || ""
-    const invoice = sale.invoice || ""
-    const matchesSearch =
-      productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.toLowerCase().includes(searchTerm.toLowerCase())
-    return inDateRange && matchesProduct && (searchTerm === "" || matchesSearch)
-  })
-
-  const sortedSales = [...filteredSales].sort((a, b) => {
-    let aValue = a[sortBy]
-    let bValue = b[sortBy]
-    if (sortBy === "date") { aValue = new Date(aValue); bValue = new Date(bValue) }
-    else if (sortBy === "productName") { aValue = a.product?.name || a.productName || ""; bValue = b.product?.name || b.productName || "" }
-    else if (sortBy === "invoice") { aValue = a.invoice || ""; bValue = b.invoice || "" }
-    return sortOrder === "asc" ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1)
-  })
-
-  const totalPages = Math.ceil(sortedSales.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedSales = sortedSales.slice(startIndex, startIndex + itemsPerPage)
-
-  const salesByProduct = {}
-  filteredSales.forEach((sale) => {
-    const productName = sale.product?.name || sale.productName || "Unknown"
-    if (!salesByProduct[productName]) salesByProduct[productName] = 0
-    salesByProduct[productName] += sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)
-  })
-  const salesChartData = Object.entries(salesByProduct).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
-
-  const salesByDate = {}
-  filteredSales.forEach((sale) => {
-    if (!salesByDate[sale.date]) salesByDate[sale.date] = 0
-    salesByDate[sale.date] += sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)
-  })
-  const salesTimeChartData = Object.keys(salesByDate).map((date) => ({ date, amount: salesByDate[date] })).sort((a, b) => new Date(a.date) - new Date(b.date))
-
-  const totalSales = filteredSales.reduce((sum, sale) => sum + (sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice)), 0)
-  const totalProfit = filteredSales.reduce((sum, sale) => sum + (sale.profit || 0), 0)
-  const averageSaleValue = filteredSales.length > 0 ? totalSales / filteredSales.length : 0
-
-  const formatCurrency = (value) => new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 2 }).format(value)
+  // ─── Chart Renderer ───────────────────────────────────────────────────────────
 
   const renderChart = () => {
     if (salesChartData.length === 0) {
       return (
         <div className="flex items-center justify-center h-full text-gray-500">
-          <div className="text-center"><ShoppingCart className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No sales data available</p></div>
+          <div className="text-center">
+            <ShoppingCart className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p>No sales data available{productFilter ? ` for "${selectedProductName}"` : ""}</p>
+          </div>
         </div>
       )
     }
@@ -732,7 +803,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={salesTimeChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" /><YAxis />
+              <XAxis dataKey="date" />
+              <YAxis />
               <Tooltip formatter={(value) => formatCurrency(value)} />
               <Line type="monotone" dataKey="amount" stroke="#82ca9d" activeDot={{ r: 8 }} />
             </LineChart>
@@ -742,14 +814,21 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         return (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={salesChartData.slice(0, 6)} cx="50%" cy="50%" labelLine={false}
+              <Pie
+                data={salesChartData.slice(0, 6)}
+                cx="50%" cy="50%"
+                labelLine={false}
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80} fill="#8884d8" dataKey="value">
-                {salesChartData.slice(0, 6).map((entry, index) => (
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {salesChartData.slice(0, 6).map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => formatCurrency(value)} /><Legend />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Legend />
             </PieChart>
           </ResponsiveContainer>
         )
@@ -758,10 +837,13 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={salesChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" /><YAxis />
+              <XAxis dataKey="name" />
+              <YAxis />
               <Tooltip formatter={(value) => formatCurrency(value)} />
               <Bar dataKey="value" fill="#8884d8">
-                {salesChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                {salesChartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -769,17 +851,19 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     }
   }
 
-  const availableProducts = products.filter((product) => product && (product.quantity || 0) > 0)
+  // ─── Product Lists ────────────────────────────────────────────────────────────
 
-  // ✅ FIX: Edit mode mein saare products dikhao (including current sale ka product even if stock 0)
+  const availableProducts = products.filter((p) => p && (p.quantity || 0) > 0)
+
   const editableProducts = isEditing
-    ? products.filter((product) => {
-        if (!product) return false
-        if ((product.quantity || 0) > 0) return true
-        // Current sale ka product always dikhao
-        return (product._id || product.id) === formData.productId
+    ? products.filter((p) => {
+        if (!p) return false
+        if ((p.quantity || 0) > 0) return true
+        return (p._id || p.id) === formData.productId
       })
     : availableProducts
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
@@ -787,10 +871,33 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h2 className="text-xl font-semibold mb-4 md:mb-0 flex items-center gap-2">
           Sales Invoices
+          {/* ✅ Active product filter badge */}
+          {productFilter && (
+            <span className="ml-2 px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full flex items-center gap-1">
+              {selectedProductName}
+              <button
+                onClick={() => setProductFilter("")}
+                className="ml-1 text-blue-500 hover:text-blue-800"
+                title="Clear product filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
         </h2>
         <div className="flex flex-wrap gap-2">
-          <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center gap-2 disabled:opacity-50" onClick={() => setShowFilters(!showFilters)} disabled={isLoading}>
+          <button
+            className={`px-4 py-2 rounded-md flex items-center gap-2 disabled:opacity-50 ${showFilters ? "bg-blue-600 text-white" : "bg-gray-600 text-white hover:bg-gray-700"}`}
+            onClick={() => setShowFilters(!showFilters)}
+            disabled={isLoading}
+          >
             <Filter className="h-4 w-4" />Filters
+            {/* ✅ Active filter indicator */}
+            {(productFilter || searchTerm) && (
+              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                {[productFilter, searchTerm].filter(Boolean).length}
+              </span>
+            )}
           </button>
           <button className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 flex items-center gap-2 disabled:opacity-50" onClick={() => setShowReturns(!showReturns)} disabled={isLoading}>
             <Package className="h-4 w-4" />{showReturns ? "Hide" : "Show"} Returns ({returns.length})
@@ -807,9 +914,12 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center gap-2 disabled:opacity-50" onClick={handleRefresh} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />Refresh
           </button>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => setShowForm(true)} disabled={isLoading || availableProducts.length === 0}
-            title={availableProducts.length === 0 ? "No products available in stock" : "Record New Sale"}>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowForm(true)}
+            disabled={isLoading || availableProducts.length === 0}
+            title={availableProducts.length === 0 ? "No products available in stock" : "Record New Sale"}
+          >
             <Plus className="h-4 w-4" />Record New Sale
           </button>
         </div>
@@ -837,8 +947,21 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         </div>
       )}
 
+      {/* Filters Panel */}
       {showFilters && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
+            {/* ✅ Clear All Filters button */}
+            {(productFilter || searchTerm) && (
+              <button
+                onClick={() => { setProductFilter(""); setSearchTerm("") }}
+                className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+              >
+                <X className="h-3 w-3" />Clear All Filters
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -849,18 +972,40 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               <input type="date" className="w-full p-2 border rounded-md" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={isLoading} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-              <select className="w-full p-2 border rounded-md" value={productFilter} onChange={(e) => setProductFilter(e.target.value)} disabled={isLoading}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Product
+                {productFilter && (
+                  <span className="ml-2 text-xs text-blue-600 font-normal">
+                    ({filteredSales.length} results)
+                  </span>
+                )}
+              </label>
+              {/* ✅ Product select — onChange se filteredSales live update hogi */}
+              <select
+                className={`w-full p-2 border rounded-md ${productFilter ? "border-blue-400 bg-blue-50" : ""}`}
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                disabled={isLoading}
+              >
                 <option value="">All Products</option>
                 {products.map((product) => (
-                  <option key={product._id || product.id} value={product._id || product.id}>{product.name}</option>
+                  <option key={product._id || product.id} value={product._id || product.id}>
+                    {product.name}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
               <div className="relative">
-                <input type="text" placeholder="Search invoice, product, or customer..." className="w-full p-2 pl-8 border rounded-md" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={isLoading} />
+                <input
+                  type="text"
+                  placeholder="Search invoice, product, or customer..."
+                  className={`w-full p-2 pl-8 border rounded-md ${searchTerm ? "border-blue-400 bg-blue-50" : ""}`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  disabled={isLoading}
+                />
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
               </div>
             </div>
@@ -887,16 +1032,40 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Items Per Page</label>
               <select className="w-full p-2 border rounded-md" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1) }} disabled={isLoading}>
-                <option value={5}>5</option><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+                <option value={5}>5</option><option value={10}>10</option><option value={25}>25</option>
+                <option value={50}>50</option><option value={100}>100</option>
               </select>
             </div>
           </div>
+          {/* ✅ Active filter summary */}
+          {(productFilter || searchTerm) && (
+            <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex flex-wrap gap-2">
+              <span className="font-medium">Active Filters:</span>
+              {productFilter && (
+                <span className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded">
+                  Product: <strong>{selectedProductName}</strong>
+                  <button onClick={() => setProductFilter("")} className="ml-1 hover:text-blue-900">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {searchTerm && (
+                <span className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded">
+                  Search: <strong>{searchTerm}</strong>
+                  <button onClick={() => setSearchTerm("")} className="ml-1 hover:text-blue-900">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              <span className="ml-auto text-blue-600">{filteredSales.length} result{filteredSales.length !== 1 ? "s" : ""} found</span>
+            </div>
+          )}
         </div>
       )}
 
       {!isLoading && (
         <>
-          {/* Stats Cards */}
+          {/* Stats Cards — ✅ sab kuch filteredSales se calculate hoga */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-blue-600">Total Sales</p>
@@ -904,25 +1073,39 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <div className="flex items-center justify-between">
-                <div><p className="text-sm font-medium text-green-600">Total Profit</p><p className="text-2xl font-bold text-green-900">{formatCurrency(totalProfit)}</p></div>
+                <div>
+                  <p className="text-sm font-medium text-green-600">Total Profit</p>
+                  <p className="text-2xl font-bold text-green-900">{formatCurrency(totalProfit)}</p>
+                </div>
                 <TrendingUp className="h-8 w-8 text-green-600" />
               </div>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <div className="flex items-center justify-between">
-                <div><p className="text-sm font-medium text-purple-600">Profit Margin</p><p className="text-2xl font-bold text-purple-900">{totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(2) : "0.00"}%</p></div>
+                <div>
+                  <p className="text-sm font-medium text-purple-600">Profit Margin</p>
+                  <p className="text-2xl font-bold text-purple-900">
+                    {totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(2) : "0.00"}%
+                  </p>
+                </div>
                 <Package className="h-8 w-8 text-purple-600" />
               </div>
             </div>
             <div className="bg-orange-50 p-4 rounded-lg">
               <div className="flex items-center justify-between">
-                <div><p className="text-sm font-medium text-orange-600">Total Orders</p><p className="text-2xl font-bold text-orange-900">{filteredSales.length}</p></div>
+                <div>
+                  <p className="text-sm font-medium text-orange-600">Total Orders</p>
+                  <p className="text-2xl font-bold text-orange-900">{filteredSales.length}</p>
+                </div>
                 <Calendar className="h-8 w-8 text-orange-600" />
               </div>
             </div>
             <div className="bg-indigo-50 p-4 rounded-lg">
               <div className="flex items-center justify-between">
-                <div><p className="text-sm font-medium text-indigo-600">Invoices</p><p className="text-2xl font-bold text-indigo-900">{filteredSales.length}</p></div>
+                <div>
+                  <p className="text-sm font-medium text-indigo-600">Avg Sale Value</p>
+                  <p className="text-2xl font-bold text-indigo-900">{formatCurrency(averageSaleValue)}</p>
+                </div>
                 <FileText className="h-8 w-8 text-indigo-600" />
               </div>
             </div>
@@ -931,7 +1114,12 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           {/* Chart */}
           <div className="bg-white p-4 rounded-lg border mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">Sales Analytics</h3>
+              <h3 className="text-lg font-medium">
+                Sales Analytics
+                {productFilter && (
+                  <span className="ml-2 text-sm font-normal text-blue-600">— {selectedProductName}</span>
+                )}
+              </h3>
               <div className="flex gap-2">
                 <button className={`p-2 rounded ${chartType === "bar" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`} onClick={() => setChartType("bar")}><BarChart3 className="h-4 w-4" /></button>
                 <button className={`p-2 rounded ${chartType === "line" ? "bg-blue-100 text-blue-600" : "bg-gray-100"}`} onClick={() => setChartType("line")}><TrendingUp className="h-4 w-4" /></button>
@@ -988,6 +1176,18 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </div>
           )}
 
+          {/* ✅ Sales Table heading with filter info */}
+          {productFilter && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
+              <span className="text-sm text-blue-700">
+                Showing <strong>{filteredSales.length}</strong> sale{filteredSales.length !== 1 ? "s" : ""} for product: <strong>{selectedProductName}</strong>
+              </span>
+              <button onClick={() => setProductFilter("")} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <X className="h-3 w-3" />Clear Filter
+              </button>
+            </div>
+          )}
+
           {/* Sales Table */}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1014,16 +1214,19 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{sale.product?.name || sale.productName || "Unknown"}</td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{sale.customerName || "N/A"}</td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{sale.saleType || "—"}</td>
-                      {/* ✅ FIX: saleQuantity dikhao (sale.quantity fallback ke sath) */}
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-medium">
                         {sale.saleQuantity ?? sale.quantity ?? sale.netQuantity}
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{formatCurrency(sale.saleRate || sale.salePrice)}</td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                        {formatCurrency(sale.saleRate || sale.salePrice)}
+                      </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-semibold">
                         {formatCurrency(sale.totalAmount || (sale.saleQuantity || sale.quantity) * (sale.saleRate || sale.salePrice))}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-right">
-                        <span className={(sale.profit || 0) >= 0 ? "text-green-600" : "text-red-600"}>{formatCurrency(sale.profit || 0)}</span>
+                        <span className={(sale.profit || 0) >= 0 ? "text-green-600" : "text-red-600"}>
+                          {formatCurrency(sale.profit || 0)}
+                        </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
@@ -1036,8 +1239,12 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="10" className="px-6 py-4 text-center text-sm text-gray-500">
-                      {availableProducts.length === 0 ? "No products available in stock. Add products to start recording sales." : "No sales found for the selected period."}
+                    <td colSpan="10" className="px-6 py-8 text-center text-sm text-gray-500">
+                      {productFilter
+                        ? `No sales found for "${selectedProductName}" in the selected date range.`
+                        : availableProducts.length === 0
+                        ? "No products available in stock. Add products to start recording sales."
+                        : "No sales found for the selected period."}
                     </td>
                   </tr>
                 )}
@@ -1047,7 +1254,9 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   <tr>
                     <td colSpan="7" className="px-4 py-4 text-sm font-medium text-gray-900 text-right">Totals:</td>
                     <td className="px-4 py-4 text-sm font-medium text-gray-900 text-right">{formatCurrency(totalSales)}</td>
-                    <td className="px-4 py-4 text-sm font-medium text-right"><span className={totalProfit >= 0 ? "text-green-600" : "text-red-600"}>{formatCurrency(totalProfit)}</span></td>
+                    <td className="px-4 py-4 text-sm font-medium text-right">
+                      <span className={totalProfit >= 0 ? "text-green-600" : "text-red-600"}>{formatCurrency(totalProfit)}</span>
+                    </td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -1058,7 +1267,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
-              <div className="text-sm text-gray-700">Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, sortedSales.length)} of {sortedSales.length} results</div>
+              <div className="text-sm text-gray-700">
+                Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, sortedSales.length)} of {sortedSales.length} results
+                {productFilter && <span className="text-blue-600"> (filtered: {selectedProductName})</span>}
+              </div>
               <div className="flex space-x-2">
                 <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded disabled:opacity-50">Previous</button>
                 {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
@@ -1129,7 +1341,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                     })()}
                   </label>
                   <input type="number" name="returnQuantity" value={returnFormData.returnQuantity} onChange={handleReturnChange} className="w-full p-2 border rounded-md"
-                    min="1" max={returnFormData.saleId ? (sales.find((s) => (s._id || s.id) === returnFormData.saleId)?.saleQuantity || sales.find((s) => (s._id || s.id) === returnFormData.saleId)?.quantity) : undefined}
+                    min="1"
+                    max={returnFormData.saleId ? (sales.find((s) => (s._id || s.id) === returnFormData.saleId)?.saleQuantity || sales.find((s) => (s._id || s.id) === returnFormData.saleId)?.quantity) : undefined}
                     required disabled={isSubmitting || !returnFormData.saleId} />
                 </div>
 
@@ -1156,8 +1369,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
 
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={resetReturnForm} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={isSubmitting}>Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-                  disabled={isSubmitting || !returnFormData.saleId || !returnFormData.returnQuantity || !returnFormData.refundAmount}>
+                <button type="submit"
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                  disabled={isSubmitting || !returnFormData.saleId || !returnFormData.returnQuantity || !returnFormData.refundAmount}
+                >
                   {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                   Process Return
                 </button>
@@ -1180,7 +1395,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 <AlertCircle className="h-4 w-4 text-red-500" /><span className="text-red-700 text-sm">{error}</span>
               </div>
             )}
-            {/* ✅ Edit mode banner */}
             {isEditing && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
                 ✏️ <strong>Edit Mode</strong> — Aap existing sale edit kar rahe hain. Max quantity mein is sale ki purani quantity bhi shamil hai.
@@ -1192,10 +1406,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full p-2 border rounded-md" required disabled={isSubmitting} />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                  {/* ✅ Edit mode mein editableProducts use karo */}
                   <select name="productId" value={formData.productId} onChange={handleChange} className="w-full p-2 border rounded-md" required disabled={isSubmitting}>
                     <option value="">Select Product</option>
                     {(isEditing ? editableProducts : availableProducts).map((product) => (
@@ -1205,25 +1417,19 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                     ))}
                   </select>
                 </div>
-
                 <div>
-                  {/* ✅ maxQuantity ab sahi dikhega — current stock + sale qty */}
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity{" "}
                     {maxQuantity > 0 && (
-                      <span className="text-gray-500">
-                        (Max: {maxQuantity}{isEditing ? " — stock + sale qty" : ""})
-                      </span>
+                      <span className="text-gray-500">(Max: {maxQuantity}{isEditing ? " — stock + sale qty" : ""})</span>
                     )}
                   </label>
                   <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} className="w-full p-2 border rounded-md" min="1" max={maxQuantity} required disabled={isSubmitting} />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sale Price (PKR)</label>
                   <input type="number" name="salePrice" value={formData.salePrice} onChange={handleChange} className="w-full p-2 border rounded-md" min="0" step="0.01" required disabled={isSubmitting} />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
                   <select name="customerName" value={formData.customerName} onChange={handleChange} className="w-full p-2 border rounded-md" disabled={isSubmitting || loadingCustomer}>
@@ -1233,15 +1439,12 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone</label>
                   <input type="tel" name="customerPhone" value={formData.customerPhone} onChange={handleChange} className="w-full p-2 border rounded-md"
-                    placeholder="+92-321-1234567 or 03211234567" required
-                    pattern="^(\+92|92)?[0-9]{10,11}$"
-                    title="Please enter a valid phone number (e.g., +92-321-1234567 or 03211234567)" disabled={isSubmitting} />
+  placeholder="+92-321-1234567 or 03211234567 (optional)"
+  disabled={isSubmitting} />
                 </div>
-
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sale Type</label>
                   <select name="saleType" value={formData.saleAccount || ""} onChange={handleChange} className="w-full p-2 border rounded-md" disabled={isSubmitting || loadingSaleTypes}>
@@ -1251,12 +1454,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                     ))}
                   </select>
                 </div>
-
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                   <textarea name="notes" value={formData.notes} onChange={handleChange} className="w-full p-2 border rounded-md" rows="3" placeholder="Additional notes about the sale" disabled={isSubmitting} />
                 </div>
-
                 {formData.quantity && formData.salePrice && (
                   <div className="md:col-span-2 p-3 bg-gray-50 rounded-md">
                     <h4 className="font-medium text-gray-700 mb-2">Sale Summary</h4>
@@ -1268,11 +1469,12 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                   </div>
                 )}
               </div>
-
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={isSubmitting}>Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                  disabled={isSubmitting || !formData.productId || !formData.quantity || !formData.salePrice || !formData.customerPhone}>
+                <button type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                 disabled={isSubmitting || !formData.productId || !formData.quantity || !formData.salePrice}
+                >
                   {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                   {isEditing ? "Update" : "Record"} Sale
                 </button>
@@ -1300,7 +1502,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-sm font-medium text-gray-700">Date</label><p className="text-sm text-gray-900">{new Date(selectedSale.date).toLocaleDateString()}</p></div>
                 <div><label className="block text-sm font-medium text-gray-700">Product</label><p className="text-sm text-gray-900">{selectedSale.product?.name || selectedSale.productName || "Unknown"}</p></div>
-                {/* ✅ saleQuantity dikhao */}
                 <div><label className="block text-sm font-medium text-gray-700">Sale Quantity</label><p className="text-sm text-gray-900 font-medium">{selectedSale.saleQuantity || selectedSale.quantity}</p></div>
                 <div><label className="block text-sm font-medium text-gray-700">Sale Rate</label><p className="text-sm text-gray-900">{formatCurrency(selectedSale.saleRate || selectedSale.salePrice)}</p></div>
               </div>
