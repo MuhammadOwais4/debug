@@ -71,11 +71,19 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [startDate, setStartDate] = useState(() => {
-  return new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0]
-})
-  const [endDate, setEndDate] = useState(getCurrentDate())
-  // ✅ productFilter ab string ID store karega — "" means "All Products"
+
+  // ── DATE STATE ──────────────────────────────────────────────────────────────
+  // inputStartDate/inputEndDate: sirf input field ke liye — koi API call nahi
+  // startDate/endDate: Apply dabane pe set hote hain — yahi API trigger karta hai
+  const initialStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0]
+  const initialEnd = getCurrentDate()
+
+  const [inputStartDate, setInputStartDate] = useState(initialStart)
+  const [inputEndDate, setInputEndDate]     = useState(initialEnd)
+  const [startDate, setStartDate]           = useState(initialStart)  // API trigger
+  const [endDate, setEndDate]               = useState(initialEnd)    // API trigger
+  // ───────────────────────────────────────────────────────────────────────────
+
   const [productFilter, setProductFilter] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [sortBy, setSortBy] = useState("invoice")
@@ -198,7 +206,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const fetchSales = async () => {
     try {
       setError(null)
-      // ✅ API ko sirf date filters bhejo — product filtering client-side hogi
       const filters = {}
       if (startDate) filters.startDate = startDate
       if (endDate) filters.endDate = endDate
@@ -241,6 +248,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     fetchReturns()
   }, [])
 
+  // ✅ Sirf startDate/endDate (applied) pe trigger hoga — inputStartDate/inputEndDate pe nahi
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
@@ -249,9 +257,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     }
     loadData()
   }, [startDate, endDate, sortBy, sortOrder])
-  // ✅ productFilter ko yahan se hataya — ab client-side filter hoga, page reset karega
 
-  // ✅ Jab productFilter change ho to page 1 par reset karo
   useEffect(() => {
     setCurrentPage(1)
   }, [productFilter, searchTerm])
@@ -261,6 +267,16 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       onSaleComplete(sales)
     }
   }, [sales, onSaleComplete, isLoading])
+
+  // ── Apply Date Handler ──────────────────────────────────────────────────────
+  const handleApplyDates = () => {
+    setStartDate(inputStartDate)
+    setEndDate(inputEndDate)
+    setCurrentPage(1)
+  }
+
+  // dates changed check — Apply button highlight karne ke liye
+  const datesChanged = inputStartDate !== startDate || inputEndDate !== endDate
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -279,23 +295,15 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   const formatCurrency = (value) =>
     new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 2 }).format(value)
 
-  // ─── Filtering Logic ─────────────────────────────────────────────────────────
+  // ─── Filtering Logic ──────────────────────────────────────────────────────────
 
-  /**
-   * ✅ MAIN FIX: filteredSales
-   * - Date range check
-   * - Product filter: sale ke product ID ko productFilter se match karo
-   * - Search: invoice, product name, customer name
-   */
   const filteredSales = (Array.isArray(sales) ? sales : []).filter((sale) => {
-    // 1. Date range
     const saleDate = new Date(sale.date)
     const start = new Date(startDate)
     const end = new Date(endDate)
     end.setHours(23, 59, 59, 999)
     if (saleDate < start || saleDate > end) return false
 
-    // 2. ✅ Product filter — multiple ID fields handle karo
     if (productFilter !== "") {
       const saleProductId =
         sale.product?._id ||
@@ -305,7 +313,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       if (String(saleProductId) !== String(productFilter)) return false
     }
 
-    // 3. Search term
     if (searchTerm !== "") {
       const productName = (sale.product?.name || sale.productName || "").toLowerCase()
       const customerName = (sale.customerName || "").toLowerCase()
@@ -317,7 +324,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
     return true
   })
 
-  // ✅ Selected product name for display
   const selectedProductName = productFilter
     ? products.find((p) => String(p._id || p.id) === String(productFilter))?.name || "Unknown"
     : ""
@@ -325,21 +331,20 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
   // ─── Sorting & Pagination ─────────────────────────────────────────────────────
 
   const sortedSales = [...filteredSales].sort((a, b) => {
-  let aVal = a[sortBy]
-  let bVal = b[sortBy]
-  if (sortBy === "date") {
-    aVal = new Date(aVal); bVal = new Date(bVal)
-  } else if (sortBy === "productName") {
-    aVal = a.product?.name || a.productName || ""
-    bVal = b.product?.name || b.productName || ""
-  } else if (sortBy === "invoice") {
-    // ✅ FIX: INV-0001 se number nikaalo aur numerically compare karo
-    const aNum = parseInt((a.invoice || "").replace(/\D/g, "")) || 0
-    const bNum = parseInt((b.invoice || "").replace(/\D/g, "")) || 0
-    return sortOrder === "asc" ? aNum - bNum : bNum - aNum
-  }
-  return sortOrder === "asc" ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
-})
+    let aVal = a[sortBy]
+    let bVal = b[sortBy]
+    if (sortBy === "date") {
+      aVal = new Date(aVal); bVal = new Date(bVal)
+    } else if (sortBy === "productName") {
+      aVal = a.product?.name || a.productName || ""
+      bVal = b.product?.name || b.productName || ""
+    } else if (sortBy === "invoice") {
+      const aNum = parseInt((a.invoice || "").replace(/\D/g, "")) || 0
+      const bNum = parseInt((b.invoice || "").replace(/\D/g, "")) || 0
+      return sortOrder === "asc" ? aNum - bNum : bNum - aNum
+    }
+    return sortOrder === "asc" ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
+  })
 
   const totalPages = Math.ceil(sortedSales.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -347,7 +352,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
 
   // ─── Chart Data ───────────────────────────────────────────────────────────────
 
-  // ✅ Chart data bhi filteredSales se — product filter apply hoga
   const salesByProduct = {}
   filteredSales.forEach((sale) => {
     const productName = sale.product?.name || sale.productName || "Unknown"
@@ -704,8 +708,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       const rowsHtml = (Array.isArray(filteredSales) ? filteredSales : [])
         .map((sale) => {
           const dateStr = new Date(sale.date).toLocaleDateString()
-          const productName =
-            sale.product?.name || sale.productName || "Unknown"
+          const productName = sale.product?.name || sale.productName || "Unknown"
           const qty = sale.saleQuantity || sale.quantity || 0
           const unit = sale.saleRate || sale.salePrice || 0
           const total = sale.totalAmount || qty * unit
@@ -871,15 +874,10 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <h2 className="text-xl font-semibold mb-4 md:mb-0 flex items-center gap-2">
           Sales Invoices
-          {/* ✅ Active product filter badge */}
           {productFilter && (
             <span className="ml-2 px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full flex items-center gap-1">
               {selectedProductName}
-              <button
-                onClick={() => setProductFilter("")}
-                className="ml-1 text-blue-500 hover:text-blue-800"
-                title="Clear product filter"
-              >
+              <button onClick={() => setProductFilter("")} className="ml-1 text-blue-500 hover:text-blue-800" title="Clear product filter">
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -892,7 +890,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             disabled={isLoading}
           >
             <Filter className="h-4 w-4" />Filters
-            {/* ✅ Active filter indicator */}
             {(productFilter || searchTerm) && (
               <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
                 {[productFilter, searchTerm].filter(Boolean).length}
@@ -952,7 +949,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
         <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
-            {/* ✅ Clear All Filters button */}
             {(productFilter || searchTerm) && (
               <button
                 onClick={() => { setProductFilter(""); setSearchTerm("") }}
@@ -962,25 +958,39 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
+            {/* ✅ Start Date — sirf inputStartDate update karta hai, API nahi chalti */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <input type="date" className="w-full p-2 border rounded-md" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={isLoading} />
+              <input
+                type="date"
+                className="w-full p-2 border rounded-md"
+                value={inputStartDate}
+                onChange={(e) => setInputStartDate(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
+
+            {/* ✅ End Date — sirf inputEndDate update karta hai, API nahi chalti */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-              <input type="date" className="w-full p-2 border rounded-md" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={isLoading} />
+              <input
+                type="date"
+                className="w-full p-2 border rounded-md"
+                value={inputEndDate}
+                onChange={(e) => setInputEndDate(e.target.value)}
+                disabled={isLoading}
+              />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Product
                 {productFilter && (
-                  <span className="ml-2 text-xs text-blue-600 font-normal">
-                    ({filteredSales.length} results)
-                  </span>
+                  <span className="ml-2 text-xs text-blue-600 font-normal">({filteredSales.length} results)</span>
                 )}
               </label>
-              {/* ✅ Product select — onChange se filteredSales live update hogi */}
               <select
                 className={`w-full p-2 border rounded-md ${productFilter ? "border-blue-400 bg-blue-50" : ""}`}
                 value={productFilter}
@@ -995,6 +1005,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
               <div className="relative">
@@ -1010,6 +1021,36 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               </div>
             </div>
           </div>
+
+          {/* ✅ Apply Dates Button — yahan dabane pe hi API call hogi */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={handleApplyDates}
+              disabled={isLoading || !datesChanged}
+              className={`px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-all
+                ${datesChanged
+                  ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
+            >
+              <Calendar className="h-4 w-4" />
+              Apply Dates
+              {datesChanged && (
+                <span className="ml-1 px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">!</span>
+              )}
+            </button>
+            {datesChanged && (
+              <span className="text-xs text-amber-600 font-medium">
+                📅 Date changed: {inputStartDate} → {inputEndDate} &nbsp;(Apply dabao)
+              </span>
+            )}
+            {!datesChanged && (
+              <span className="text-xs text-gray-400">
+                Applied: {startDate} → {endDate}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
@@ -1037,24 +1078,20 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
               </select>
             </div>
           </div>
-          {/* ✅ Active filter summary */}
+
           {(productFilter || searchTerm) && (
             <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex flex-wrap gap-2">
               <span className="font-medium">Active Filters:</span>
               {productFilter && (
                 <span className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded">
                   Product: <strong>{selectedProductName}</strong>
-                  <button onClick={() => setProductFilter("")} className="ml-1 hover:text-blue-900">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <button onClick={() => setProductFilter("")} className="ml-1 hover:text-blue-900"><X className="h-3 w-3" /></button>
                 </span>
               )}
               {searchTerm && (
                 <span className="flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded">
                   Search: <strong>{searchTerm}</strong>
-                  <button onClick={() => setSearchTerm("")} className="ml-1 hover:text-blue-900">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <button onClick={() => setSearchTerm("")} className="ml-1 hover:text-blue-900"><X className="h-3 w-3" /></button>
                 </span>
               )}
               <span className="ml-auto text-blue-600">{filteredSales.length} result{filteredSales.length !== 1 ? "s" : ""} found</span>
@@ -1065,7 +1102,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
 
       {!isLoading && (
         <>
-          {/* Stats Cards — ✅ sab kuch filteredSales se calculate hoga */}
+          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-blue-600">Total Sales</p>
@@ -1176,7 +1213,6 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
             </div>
           )}
 
-          {/* ✅ Sales Table heading with filter info */}
           {productFilter && (
             <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">
               <span className="text-sm text-blue-700">
@@ -1442,8 +1478,8 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone</label>
                   <input type="tel" name="customerPhone" value={formData.customerPhone} onChange={handleChange} className="w-full p-2 border rounded-md"
-  placeholder="+92-321-1234567 or 03211234567 (optional)"
-  disabled={isSubmitting} />
+                    placeholder="+92-321-1234567 or 03211234567 (optional)"
+                    disabled={isSubmitting} />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sale Type</label>
@@ -1473,7 +1509,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={isSubmitting}>Cancel</button>
                 <button type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                 disabled={isSubmitting || !formData.productId || !formData.quantity || !formData.salePrice}
+                  disabled={isSubmitting || !formData.productId || !formData.quantity || !formData.salePrice}
                 >
                   {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                   {isEditing ? "Update" : "Record"} Sale
