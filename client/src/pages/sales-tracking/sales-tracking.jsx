@@ -1034,7 +1034,7 @@ const SalesTracking = ({ onSaleComplete, onNotification }) => {
                 }`}
             >
               <Calendar className="h-4 w-4" />
-              Apply Dates
+              Apply Date
               {datesChanged && (
                 <span className="ml-1 px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">!</span>
               )}
