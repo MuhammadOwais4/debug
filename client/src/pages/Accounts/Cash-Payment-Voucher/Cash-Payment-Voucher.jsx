@@ -83,8 +83,9 @@ export default function CashPaymentVoucher() {
       ])
 
       const allAccounts = [
-        ...(assetsRes.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
+        ...(assetsRes.data || [])
+  .filter((account) => account.type === "CASH ACCOUNT")
+  .map((account) => ({          value: `${account.code} - ${account.name}`,
           label: `${account.code} - ${account.name} (Asset)`,
           category: "Assets",
           ...account,
