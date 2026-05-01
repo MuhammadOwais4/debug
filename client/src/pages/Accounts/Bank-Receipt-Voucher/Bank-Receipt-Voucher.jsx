@@ -83,9 +83,7 @@ export default function BankReceiptVoucher() {
       ])
 
       const allAccounts = [
-        ...(assetsRes.data || [])
-  .filter((account) => account.type === "BANK ACCOUNT")
-  .map((account) => ({
+        ...(assetsRes.data || []).map((account) => ({
           value: `${account.code} - ${account.name}`,
           label: `${account.code} - ${account.name} (Asset)`,
           category: "Assets",
