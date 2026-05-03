@@ -82,12 +82,6 @@ export default function BankReceiptVoucher() {
         ApiHandler.getRevenue().catch(() => ({ data: [] })),
       ])
 
-
-
-      const bankAccounts = accountOptions.filter(
-  (account) => account.type === "BANK ACCOUNT"
-)
-
       const allAccounts = [
         ...(assetsRes.data || []).map((account) => ({
           value: `${account.code} - ${account.name}`,
@@ -120,6 +114,13 @@ export default function BankReceiptVoucher() {
           ...account,
         })),
       ]
+
+
+const bankAccounts = accountOptions.filter(
+  (account) => account.type === "BANK ACCOUNT"
+)
+
+
 
       allAccounts.sort((a, b) => a.code.localeCompare(b.code))
       setAccountOptions(allAccounts)
