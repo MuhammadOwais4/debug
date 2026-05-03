@@ -138,7 +138,7 @@ export default function CashPaymentVoucher() {
       setLoadingVouchers(false)
     }
   }
-const bankAccounts = accountOptions.filter(
+const CashAccounts = accountOptions.filter(
   (account) => account.type === "CASH ACCOUNT"
 )
   const loadVoucherForEdit = (voucher) => {
@@ -878,13 +878,20 @@ const bankAccounts = accountOptions.filter(
                               >
                                 <SelectValue placeholder="Select debit account" />
                               </SelectTrigger>
-                               <SelectContent>
-  {bankAccounts.map((account) => (
-    <SelectItem key={account.value} value={account.value} className="text-base pl-4">
-      {account.name}
-    </SelectItem>
-  ))}
-</SelectContent>
+                              <SelectContent>
+                                {Object.entries(groupedAccounts).map(([category, accounts]) => (
+                                  <div key={category}>
+                                    <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
+                                      {category}
+                                    </div>
+                                    {accounts.map((account) => (
+                                      <SelectItem key={account.value} value={account.value} className="text-base pl-4">
+                                        {account.name}
+                                      </SelectItem>
+                                    ))}
+                                  </div>
+                                ))}
+                              </SelectContent>
                             </Select>
                             <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
                               (DR)
@@ -950,20 +957,13 @@ const bankAccounts = accountOptions.filter(
                               >
                                 <SelectValue placeholder="Select credit account" />
                               </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                  <div key={category}>
-                                    <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
-                                      {category}
-                                    </div>
-                                    {accounts.map((account) => (
-                                      <SelectItem key={account.value} value={account.value} className="text-base pl-4">
-                                        {account.name}
-                                      </SelectItem>
-                                    ))}
-                                  </div>
-                                ))}
-                              </SelectContent>
+                               <SelectContent>
+  {CashAccounts.map((account) => (
+    <SelectItem key={account.value} value={account.value} className="text-base pl-4">
+      {account.name}
+    </SelectItem>
+  ))}
+</SelectContent>
                             </Select>
                             <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
                               (CR)

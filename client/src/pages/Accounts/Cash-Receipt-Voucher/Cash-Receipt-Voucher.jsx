@@ -139,7 +139,9 @@ export default function CashPaymentVoucher() {
       setLoadingVouchers(false)
     }
   }
-
+const CashAccounts = accountOptions.filter(
+  (account) => account.type === "CASH ACCOUNT"
+)
   const loadVoucherForEdit = (voucher) => {
     setIsEditMode(true)
     setEditingVoucherId(voucher._id)
@@ -1032,19 +1034,12 @@ export default function CashPaymentVoucher() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                  <div key={category}>
-                                    <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100">
-                                      {category}
-                                    </div>
-                                    {accounts.map((account) => (
-                                      <SelectItem key={account.value} value={account.value} className="text-base pl-4">
-                                        {account.label}
-                                      </SelectItem>
-                                    ))}
-                                  </div>
-                                ))}
-                              </SelectContent>
+  {CashAccounts.map((account) => (
+    <SelectItem key={account.value} value={account.value} className="text-base pl-4">
+      {account.name}
+    </SelectItem>
+  ))}
+</SelectContent>
                             </Select>
                             <Input
                               value={editingEntry.description}
