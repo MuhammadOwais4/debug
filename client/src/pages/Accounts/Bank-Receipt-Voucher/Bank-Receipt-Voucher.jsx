@@ -84,7 +84,7 @@ export default function BankReceiptVoucher() {
 
 
 
- const bankAccounts = accountOptions.filter(
+      const bankAccounts = accountOptions.filter(
   (account) => account.type === "BANK ACCOUNT"
 )
 
@@ -882,12 +882,19 @@ export default function BankReceiptVoucher() {
                                 <SelectValue placeholder="Select debit account" />
                               </SelectTrigger>
                               <SelectContent>
-                         {bankAccounts.map((account) => (
-                  <SelectItem key={account.value} value={account.value} className="text-base pl-4">
-                   {account.name}
-                  </SelectItem>
-                    ))}
-              </SelectContent>
+                                {Object.entries(groupedAccounts).map(([category, accounts]) => (
+                                  <div key={category}>
+                                    <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
+                                      {category}
+                                    </div>
+                                    {accounts.map((account) => (
+                                      <SelectItem key={account.value} value={account.value} className="text-base pl-4">
+                                        {account.name}
+                                      </SelectItem>
+                                    ))}
+                                  </div>
+                                ))}
+                              </SelectContent>
                             </Select>
                             <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
                               (DR)
@@ -953,20 +960,13 @@ export default function BankReceiptVoucher() {
                               >
                                 <SelectValue placeholder="Select credit account" />
                               </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                  <div key={category}>
-                                    <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
-                                      {category}
-                                    </div>
-                                    {accounts.map((account) => (
-                                      <SelectItem key={account.value} value={account.value} className="text-base pl-4">
-                                        {account.name}
-                                      </SelectItem>
-                                    ))}
-                                  </div>
-                                ))}
-                              </SelectContent>
+                           <SelectContent>
+  {bankAccounts.map((account) => (
+    <SelectItem key={account.value} value={account.value} className="text-base pl-4">
+      {account.name}
+    </SelectItem>
+  ))}
+</SelectContent>
                             </Select>
                             <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
                               (CR)
