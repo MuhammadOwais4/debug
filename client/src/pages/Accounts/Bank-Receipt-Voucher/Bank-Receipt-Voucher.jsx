@@ -116,9 +116,6 @@ export default function BankReceiptVoucher() {
       ]
 
 
-const bankAccounts = accountOptions.filter(
-  (account) => account.type === "BANK ACCOUNT"
-)
 
 
 
@@ -220,6 +217,12 @@ const bankAccounts = accountOptions.filter(
       setDeleting(false)
     }
   }
+
+
+const bankAccounts = accountOptions.filter(
+  (account) => account.type === "BANK ACCOUNT"
+)
+
 
   const saveVoucher = async () => {
     if (entries.length === 0) {
