@@ -115,10 +115,6 @@ export default function BankReceiptVoucher() {
         })),
       ]
 
-
-
-
-
       allAccounts.sort((a, b) => a.code.localeCompare(b.code))
       setAccountOptions(allAccounts)
     } catch (error) {
@@ -217,12 +213,6 @@ export default function BankReceiptVoucher() {
       setDeleting(false)
     }
   }
-
-
-const bankAccounts = accountOptions.filter(
-  (account) => account.type === "BANK ACCOUNT"
-)
-
 
   const saveVoucher = async () => {
     if (entries.length === 0) {
@@ -452,7 +442,9 @@ const bankAccounts = accountOptions.filter(
     if (!isFinite(num)) return "0"
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num)
   }
-
+const bankAccounts = accountOptions.filter(
+  (account) => account.type === "BANK ACCOUNT"
+)
   const groupedAccounts = accountOptions.reduce((groups, account) => {
     const category = account.category
     if (!groups[category]) {
@@ -885,7 +877,7 @@ const bankAccounts = accountOptions.filter(
                               >
                                 <SelectValue placeholder="Select debit account" />
                               </SelectTrigger>
-                              <SelectContent>
+                             <SelectContent>
   {bankAccounts.map((account) => (
     <SelectItem key={account.value} value={account.value} className="text-base pl-4">
       {account.name}
