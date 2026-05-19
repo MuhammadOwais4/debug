@@ -210,7 +210,7 @@ function ProfitLoss() {
       )}
 
       <h2 style={{ color: "#2c5ca9", textAlign: "center", marginBottom: "8px", fontSize: "28px", fontWeight: "bold" }}>
-        Testing<br />Income Statement
+        demo<br />Income Statement
       </h2>
       <p style={{ textAlign: "center", fontWeight: "500", fontSize: "14px", color: "#6c757d", marginBottom: "40px" }}>
         {fmtRange() || "Please select date range"}

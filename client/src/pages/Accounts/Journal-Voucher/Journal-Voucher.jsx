@@ -487,7 +487,7 @@ export default function JournalVoucher() {
                   )}
                 </div>
               </div>
-              <div className="text-lg font-semibold mb-3 opacity-90">testing</div>
+              <div className="text-lg font-semibold mb-3 opacity-90">demo</div>
               <CardTitle className="text-3xl font-bold tracking-wide">
                 Journal Voucher GL {isEditMode && <span className="text-sm">(Editing)</span>}
               </CardTitle>
@@ -1031,7 +1031,7 @@ export default function JournalVoucher() {
         <div className="print-area px-10 py-12">
           <div className="max-w-4xl mx-auto">
             <header className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-black">testing</h1>
+              <h1 className="text-2xl font-bold text-black">demo</h1>
               <p className="text-base text-gray-700 mt-1">Journal Voucher (GL)</p>
             </header>
 
