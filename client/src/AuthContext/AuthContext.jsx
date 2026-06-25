@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     let response;
     try {
-      response = await fetch("https://debug-nxby.vercel.app/api/auth/login", {
+      response = await fetch("http://187.127.154.82:5000/api/auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ username, password }),
