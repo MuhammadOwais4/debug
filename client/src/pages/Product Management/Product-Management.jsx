@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Package, AlertCircle, Calendar, Filter, X, ChevronDown, Loader, RefreshCw, AlertTriangle, Receipt } from 'lucide-react';
 
-const API_BASE_URL = 'http://187.127.154.82:5000/api';
+const API_BASE_URL = 'https://debug-nxby.vercel.app/api';
 
 const apiClient = {
   get: async (url) => {

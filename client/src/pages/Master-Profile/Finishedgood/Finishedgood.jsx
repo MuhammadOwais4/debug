@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-const API = "http://187.127.154.82:5000/api/finished-goods";
+const API = "https://debug-nxby.vercel.app/api/finished-goods";
 
 const EMPTY_FORM = { suitName: "", qty: "", size: "", colour: "", barcode: "" };
 
