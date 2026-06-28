@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     let response;
     try {
-      response = await fetch("https://everyday-medline-somerset-timber.trycloudflare.com/api/auth/login", {
+      response = await fetch("https://debug-nxby.vercel.app/api/auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ username, password }),

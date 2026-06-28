@@ -18,7 +18,7 @@ const TEMPLATE_HEADERS = [
 ]
 
 // ── Base URL — same as what handleImport uses ────────────────────────────────
-const BASE_URL = "https://everyday-medline-somerset-timber.trycloudflare.com/api"
+const BASE_URL = "https://debug-nxby.vercel.app/api"
 
 // ── Auth token helper ────────────────────────────────────────────────────────
 const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("authToken") : null)

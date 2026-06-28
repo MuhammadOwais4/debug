@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 
 const COLORS = ["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"]
-const API_BASE_URL = "https://everyday-medline-somerset-timber.trycloudflare.com/api"
+const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 
 const apiClient = {
   get: async (url) => {

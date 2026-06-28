@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react"
 import { Calendar, RefreshCw } from "lucide-react"
 
-const API = "https://everyday-medline-somerset-timber.trycloudflare.com/api"
+const API = "https://debug-nxby.vercel.app/api"
 
 function ProfitLoss() {
   const [startDate, setStartDate] = useState("")
